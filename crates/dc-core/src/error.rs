@@ -10,4 +10,10 @@ pub enum CoreError {
         /// The rejected input, exactly as given.
         value: String,
     },
+    /// A stored tree breaks an invariant (bad ids, bad parents, or a newer schema).
+    #[error("invalid tree: {reason}")]
+    InvalidTree {
+        /// What is wrong with it.
+        reason: String,
+    },
 }

@@ -1,12 +1,22 @@
 [package]
 name = "dc-winmeta"
-description = "Windows metadata: installed apps, known folders, version info and signatures."
+description = "Windows metadata: file probe for the scanner now; installed apps, known folders, version info and signatures later."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+
+[dependencies]
+dc-core = { path = "../dc-core" }
+dc-scan = { path = "../dc-scan" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -8,5 +8,14 @@ repository.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[dependencies]
+dc-core = { path = "../dc-core" }
+rayon.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+fixture-gen = { path = "../../tools/fixture-gen" }
+tempfile.workspace = true
+
 [lints]
 workspace = true

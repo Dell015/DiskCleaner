@@ -4,7 +4,7 @@ An open-source, Windows-first disk analyzer and cleanup advisor: fast scanning, 
 **which app owns which files and why**, detection of leftovers from uninstalled apps, and an
 optional metadata-only AI explanation layer.
 
-> **Status: early development (Phase B0, backend only).** There is nothing to run for end users yet.
+> **Status: early development (Phase B1, backend only).** A read-only command-line scanner exists; there is no UI yet.
 > The tool is **read-only**: it never deletes, moves or modifies anything until a later,
 > clearly separated phase, and that phase will be off by default. See [SAFETY.md](SAFETY.md).
 
@@ -15,6 +15,13 @@ optional metadata-only AI explanation layer.
 
 ## Layout
 See [docs/architecture.md](docs/architecture.md) and [ROADMAP.md](ROADMAP.md).
+
+## Try it (read-only)
+```
+cargo run -p dc-cli -- scan <folder> --out scan.json
+cargo run -p dc-cli -- top scan.json --dirs
+```
+The scan file must not exist yet; nothing in the scanned folder is ever changed.
 
 ## Developing
 You need Rust (via [rustup](https://rustup.rs)); on Windows also the Visual Studio C++ Build Tools.
