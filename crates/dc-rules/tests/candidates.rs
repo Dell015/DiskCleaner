@@ -155,3 +155,48 @@ fn verify_moves_candidates_behind_links_or_failures_to_blocked() {
         1
     );
 }
+
+/// The answer must not depend on how the work is divided between threads (D68).
+#[test]
+fn splitting_the_work_never_changes_the_answer() {
+    let mut files: Vec<F> = Vec::new();
+    // Names must outlive the call; leak a few static strings built from a small grid.
+    for user in ["alice", "bob", "carol"] {
+        for k in 0..6 {
+            let leak = |s: String| -> &'static str { Box::leak(s.into_boxed_str()) };
+            files.push(f(
+                leak(format!(r"Users\{user}\AppData\Local\Temp\t{k}.tmp")),
+                100 + k,
+                if k % 2 == 0 { 40 } else { 1 },
+            ));
+            files.push(f(
+                leak(format!(r"Users\{user}\AppData\Local\D3DSCache\d{k}\x.bin")),
+                1000 * (k + 1),
+                1,
+            ));
+            files.push(f(
+                leak(format!(r"Users\{user}\Documents\proj{k}\keep{k}.txt")),
+                77,
+                500,
+            ));
+            files.push(f(
+                leak(format!(
+                    r"Users\{user}\AppData\Local\Pub\Cache\hosted\p{k}\a.dart"
+                )),
+                10,
+                5,
+            ));
+        }
+    }
+    let scan = scan(&files);
+    let classifier = Classifier::builtin();
+    let resolver = FakeResolver::new();
+    let one_thread =
+        dc_rules::find_candidates_split(&scan, &classifier, &resolver, NOW, usize::MAX).unwrap();
+    assert!(!one_thread.items.is_empty());
+    for split in [1usize, 2, 3, 5, 8, 50] {
+        let divided =
+            dc_rules::find_candidates_split(&scan, &classifier, &resolver, NOW, split).unwrap();
+        assert_eq!(divided, one_thread, "split at {split}");
+    }
+}

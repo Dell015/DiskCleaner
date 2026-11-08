@@ -34,3 +34,11 @@ missing_docs = "warn"
 dbg_macro = "deny"
 todo = "deny"
 unimplemented = "deny"
+
+# Speed for everyday `cargo run` / `cargo test` (N48). Overflow checks and debug
+# assertions stay ON, so tests still catch mistakes; only the optimizer is switched on.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

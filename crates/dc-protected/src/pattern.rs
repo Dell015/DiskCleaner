@@ -166,15 +166,19 @@ impl Pattern {
     }
 }
 
-/// Iterative wildcard match (`*` only), without recursion.
+/// Iterative wildcard match (`*` only), without recursion and without allocating.
+///
+/// It works on bytes. That gives the same answer as working on characters: the pattern is valid
+/// UTF-8, so every literal in it starts with a byte that can never be the middle of a character
+/// in the text; a `*` may swallow half a character, but then the next literal cannot match there.
 pub fn glob_match(pattern: &str, text: &str) -> bool {
-    let pattern: Vec<char> = pattern.chars().collect();
-    let text: Vec<char> = text.chars().collect();
+    let pattern = pattern.as_bytes();
+    let text = text.as_bytes();
     let (mut p, mut t) = (0usize, 0usize);
     let (mut star, mut mark) = (None::<usize>, 0usize);
     while t < text.len() {
         match pattern.get(p) {
-            Some('*') => {
+            Some(b'*') => {
                 star = Some(p);
                 mark = t;
                 p += 1;
@@ -193,7 +197,9 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
             },
         }
     }
-    pattern[p..].iter().all(|c| *c == '*')
+    pattern
+        .get(p..)
+        .is_some_and(|rest| rest.iter().all(|c| *c == b'*'))
 }
 
 #[cfg(test)]
@@ -257,5 +263,70 @@ mod tests {
         assert!(Pattern::parse("nodrive").is_none());
         assert!(Pattern::parse("1:\\x").is_none());
         assert!(Pattern::parse("cc:\\x").is_none());
+    }
+
+    /// The old, character-based matcher, kept as the reference for the byte-based one.
+    fn reference_glob(pattern: &str, text: &str) -> bool {
+        let pattern: Vec<char> = pattern.chars().collect();
+        let text: Vec<char> = text.chars().collect();
+        let (mut p, mut t) = (0usize, 0usize);
+        let (mut star, mut mark) = (None::<usize>, 0usize);
+        while t < text.len() {
+            match pattern.get(p) {
+                Some('*') => {
+                    star = Some(p);
+                    mark = t;
+                    p += 1;
+                }
+                Some(c) if Some(c) == text.get(t) => {
+                    p += 1;
+                    t += 1;
+                }
+                _ => match star {
+                    Some(s) => {
+                        p = s + 1;
+                        mark += 1;
+                        t = mark;
+                    }
+                    None => return false,
+                },
+            }
+        }
+        pattern[p..].iter().all(|c| *c == '*')
+    }
+
+    #[test]
+    fn the_byte_matcher_agrees_with_the_character_matcher() {
+        // Every pattern and text up to length 5 over a small alphabet that includes
+        // multi-byte characters.
+        let alphabet = ['a', 'b', '*', 'é', '€', '.'];
+        let mut words: Vec<String> = vec![String::new()];
+        let mut frontier = words.clone();
+        for _ in 0..5 {
+            let mut next = Vec::new();
+            for w in &frontier {
+                for c in alphabet {
+                    let mut x = w.clone();
+                    x.push(c);
+                    next.push(x);
+                }
+            }
+            words.extend(next.iter().cloned());
+            frontier = next;
+        }
+        let texts: Vec<&String> = words
+            .iter()
+            .filter(|w| !w.contains('*') && w.chars().count() <= 4)
+            .collect();
+        let patterns: Vec<&String> = words.iter().filter(|w| w.chars().count() <= 4).collect();
+        for pattern in &patterns {
+            for text in &texts {
+                assert_eq!(
+                    glob_match(pattern, text),
+                    reference_glob(pattern, text),
+                    "pattern {pattern:?} text {text:?}"
+                );
+            }
+        }
     }
 }

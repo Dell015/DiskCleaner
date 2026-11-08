@@ -80,36 +80,56 @@ pub fn explain(
     result: &AttribResult,
     path: &str,
 ) -> Result<Option<Explanation>, CoreError> {
+    Ok(explain_many(scan, result, &[path])?
+        .into_iter()
+        .next()
+        .flatten())
+}
+
+/// Explain several paths at once. The scan is indexed only once, so this is much faster than
+/// calling [`explain`] in a loop on a big scan. The answers come in the order of `paths`.
+pub fn explain_many(
+    scan: &ScanResult,
+    result: &AttribResult,
+    paths: &[&str],
+) -> Result<Vec<Option<Explanation>>, CoreError> {
     let tree = scan.tree()?;
     let index = index::Index::new(&tree, &scan.root);
-    let Some(mut node) = index.find(path) else {
-        return Ok(None);
-    };
     let by_node: std::collections::HashMap<NodeId, &Assignment> =
         result.assignments.iter().map(|a| (a.node, a)).collect();
-    let start = node;
-    loop {
-        if let Some(assignment) = by_node.get(&node) {
-            return Ok(Some(Explanation {
-                path: index.display(start),
-                assigned_node: Some(node),
-                inherited: node != start,
-                assignment: Some((*assignment).clone()),
-                assigned_path: Some(index.display(node)),
-            }));
+    let mut answers = Vec::with_capacity(paths.len());
+    for path in paths {
+        let Some(mut node) = index.find(path) else {
+            answers.push(None);
+            continue;
+        };
+        let start = node;
+        let mut found = None;
+        loop {
+            if let Some(assignment) = by_node.get(&node) {
+                found = Some(Explanation {
+                    path: index.display(start),
+                    assigned_node: Some(node),
+                    inherited: node != start,
+                    assignment: Some((*assignment).clone()),
+                    assigned_path: Some(index.display(node)),
+                });
+                break;
+            }
+            match tree.get(node).and_then(|n| n.parent) {
+                Some(parent) => node = parent,
+                None => break,
+            }
         }
-        match tree.get(node).and_then(|n| n.parent) {
-            Some(parent) => node = parent,
-            None => break,
-        }
+        answers.push(Some(found.unwrap_or_else(|| Explanation {
+            path: index.display(start),
+            assigned_node: None,
+            inherited: false,
+            assignment: None,
+            assigned_path: None,
+        })));
     }
-    Ok(Some(Explanation {
-        path: index.display(start),
-        assigned_node: None,
-        inherited: false,
-        assignment: None,
-        assigned_path: None,
-    }))
+    Ok(answers)
 }
 
 /// Is the path protected by the built-in list? (Lexical check only.)

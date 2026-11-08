@@ -105,6 +105,9 @@ enum Command {
         /// Explain the classification of one path that is in the scan.
         #[arg(long, value_name = "PATH")]
         explain: Option<String>,
+        /// Print how long each step took (to standard error).
+        #[arg(long)]
+        timing: bool,
     },
     /// Show or check cleanup rule packs (read-only).
     #[command(group(ArgGroup::new("what").required(true).args(["list", "check"])))]
@@ -198,12 +201,14 @@ fn run() -> Result<ExitCode> {
             risk,
             limit,
             explain,
+            timing,
         } => classify_cmd::run(&classify_cmd::ClassifyArgs {
             scan,
             apps,
             risk,
             limit,
             explain,
+            timing,
         }),
         Command::Rules { list, check } => rules_cmd::run(list, check.as_deref()),
         Command::Protected { paths, list } => protected_cmd::run(&paths, list),

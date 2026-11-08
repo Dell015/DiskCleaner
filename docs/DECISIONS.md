@@ -88,6 +88,7 @@ Format: **ID - decision** / why / where it is enforced.
 - Shortcuts without a stored local target (Store apps, network targets) are ignored in B2 (D21).
 - Hidden/duplicate registry entries are kept, not merged (D28).
 - `dc` has no Ctrl+C handler yet (library cancel token only).
+- **D68** Performance rule (from the project owner): speed is pursued, but never by giving up correctness or safety. A speed-up must give the same answers as before, and must be proven with a test that compares the new code with the old behaviour (example: the byte-based `glob_match` is tested against the old character-based version over every short pattern and text). Never skip a safety check to be faster; skip work only when the result is provably unchanged.
 
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.

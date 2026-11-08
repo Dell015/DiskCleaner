@@ -61,3 +61,34 @@ Status: `open` = needs action, `watch` = keep an eye on it, `done` = resolved.
 | N44 | open | B4b | The built-in pack is a first, conservative draft written without a security review. Every Safe/ProbablySafe rule must be reviewed in the final QA pass. | Final QA |
 | N45 | open | B4b | `cargo deny` was not run on the new `toml` dependency tree in my environment. | Run `cargo deny check` / watch CI |
 
+
+## N46 — classify speed (measured on the real profile scan)
+- `cargo run` without `--release` is a debug build; `classify` on 1.46 M entries took 4m38s that way. Always use `cargo run --release -q -p dc-cli -- ...` for big scans.
+- A synthetic 1 M-node scan takes about 6 s in a release build (`cargo test -p dc-rules --release --test perf -- --ignored --nocapture`). No algorithm change needed for now.
+- The "refused" list now shows only the outermost refused folder per rule (the uv cache gave 3133 lines before).
+
+## N47 — real-profile review of B4b (first run)
+- Offered: Safe 4.62 GiB (44 items), ProbablySafe 9.30 GiB (768 items). Biggest: .nuget\packages, npm-cache, .gradle\caches, Unity\cache, Brave/Edge caches, Riot/Discord/Code caches. Nothing unexpected.
+- uv cache: archive folders are hardlinked, correctly refused; only the non-linked files are offered.
+
+## N48 — dev build speed
+- Added `[profile.dev] opt-level = 1` and `[profile.dev.package."*"] opt-level = 3` to the workspace Cargo.toml. Overflow checks and debug assertions stay on.
+- Synthetic 1 M-node scan: debug 34.7 s -> 8.7 s (release 6.7 s). End users get release builds anyway.
+- Trade-off: the first build after this change recompiles everything once; debugger stepping is a little less exact.
+
+## N49 — owner lookup in `classify` (real run: 102 s -> expected ~20 s)
+- Cause: `dc_attrib::explain` indexed the whole scan (1.46 M entries) once per listed item. Added `dc_attrib::explain_many`, which indexes once. `classify` now uses it. Without `--apps`, a 1 M-node scan takes about 12 s in the dev profile.
+- Still to do if needed: `scan.tree()` is built three times (candidates, attribution, owner lookup); a shared tree would save a few more seconds.
+
+## N50 — protected-check speed
+- `glob_match` allocated two vectors per call and was the main cost of `ProtectedList::check` (7.7 µs -> 2.4 µs per call). Now allocation-free and byte-based, with a test against the old matcher (D68). On a 1 M-node scan, candidate search went from 9.7 s to 2.8 s; loading the 253 MB JSON (2.7 s) is now the largest part.
+- Possible later: faster scan-file format than JSON (binary), a shared tree for the three phases.
+
+## N51 — `dc classify --timing`
+- Prints one line per step (read file, protected list, candidates, disk check, attribution, owner lookup) to standard error, so the normal output is unchanged. Meant for finding slow steps on real scans; paste it when something feels slow.
+
+## N52 — parallel candidate search
+- Real run (1.46 M entries): classifying items one by one took 9.6 s of the 12 s "find candidates". `find_candidates` now divides the tree into thousands of subtrees (breadth first, first 4096 items on one thread) and searches them with rayon. The answer is sorted and merging is order-independent; the test `splitting_the_work_never_changes_the_answer` compares a single-thread walk with several split points (D68). On 2 cores: 2.65 s -> 1.58 s on the synthetic scan; identical output.
+- One deliberate tightening: when the files of one old-file group are labelled with different risks by different overlapping rules, the group takes the more cautious label (before, it took the first file's label, which depended on walk order).
+- `find_candidates` now needs `&(dyn PathResolver + Sync)`.
+- Remaining (real run): read scan file ~6 s (600 MB JSON), attribution ~2.3 s, owner lookup ~1.6 s (rebuilds the index). Ideas: binary scan format, one shared tree/index for all steps.

@@ -30,17 +30,39 @@ pub struct ClassifyArgs {
     pub risk: RiskFilter,
     pub limit: usize,
     pub explain: Option<String>,
+    pub timing: bool,
 }
 
 const REMINDER: &str =
     "These are suggestions from rules. Nothing has been or will be deleted by this command.";
 
+/// Prints "step: time" lines to standard error when `--timing` is given.
+struct Stopwatch {
+    on: bool,
+    last: std::time::Instant,
+}
+
+impl Stopwatch {
+    fn lap(&mut self, step: &str) {
+        if self.on {
+            eprintln!("timing    {step:<22} {:.2?}", self.last.elapsed());
+        }
+        self.last = std::time::Instant::now();
+    }
+}
+
 pub fn run(args: &ClassifyArgs) -> Result<ExitCode> {
+    let mut watch = Stopwatch {
+        on: args.timing,
+        last: std::time::Instant::now(),
+    };
     let reader = BufReader::new(
         File::open(&args.scan).with_context(|| format!("cannot open {}", args.scan.display()))?,
     );
     let scan: ScanResult = serde_json::from_reader(reader).context("not a valid scan file")?;
+    watch.lap("read scan file");
     let classifier = Classifier::builtin_with(crate::protected_cmd::build_list());
+    watch.lap("build protected list");
     // Ages are measured as of the end of the scan, the moment the data describes.
     let now = scan.finished_unix;
 
@@ -50,9 +72,24 @@ pub fn run(args: &ClassifyArgs) -> Result<ExitCode> {
 
     let found = dc_rules::find_candidates(&scan, &classifier, &FakeResolver::new(), now)
         .context("the scan file is damaged")?;
+    watch.lap("find candidates");
+    if args.timing {
+        let w = found.work;
+        eprintln!(
+            "timing      classify one by one  {} items, {:.2}s",
+            w.classified,
+            w.classify_micros as f64 / 1e6
+        );
+        eprintln!(
+            "timing      look inside folders  {} items, {:.2}s",
+            w.inspected,
+            w.inspect_micros as f64 / 1e6
+        );
+    }
     // Second look at the real file system: links above a candidate, failures, protected targets.
     let found = dc_rules::verify(found, &classifier, &FsResolver);
 
+    watch.lap("check against disk");
     let owners = match &args.apps {
         Some(file) => {
             let snapshot = apps_cmd::load(file)?;
@@ -63,6 +100,7 @@ pub fn run(args: &ClassifyArgs) -> Result<ExitCode> {
         None => None,
     };
 
+    watch.lap("attribution (apps)");
     println!("scan      {}", scan.root);
     println!(
         "safe      {:>12}  in {} items (regenerate by themselves)",
@@ -91,10 +129,18 @@ pub fn run(args: &ClassifyArgs) -> Result<ExitCode> {
         RiskFilter::Safe => i.risk == Risk::Safe,
         RiskFilter::Probable => i.risk == Risk::ProbablySafe,
     });
-    for item in shown.take(args.limit) {
-        let owner = owners
-            .as_ref()
-            .and_then(|a| dc_attrib::explain(&scan, a, &item.path).ok().flatten())
+    let shown: Vec<&dc_rules::Candidate> = shown.take(args.limit).collect();
+    // Index the scan once for all the owner lookups (doing it per item is very slow).
+    let paths: Vec<&str> = shown.iter().map(|i| i.path.as_str()).collect();
+    let explained = match &owners {
+        Some(a) => dc_attrib::explain_many(&scan, a, &paths).unwrap_or_default(),
+        None => Vec::new(),
+    };
+    for (n, item) in shown.into_iter().enumerate() {
+        let owner = explained
+            .get(n)
+            .cloned()
+            .flatten()
             .and_then(|e| e.assignment)
             .and_then(|a| a.owner)
             .and_then(|id| {
@@ -119,6 +165,7 @@ pub fn run(args: &ClassifyArgs) -> Result<ExitCode> {
             println!("{:>12}  {:<13} {:<22} owner: {owner}", "", "", "");
         }
     }
+    watch.lap("owner lookup + print");
     for blocked in found.blocked.iter().take(args.limit) {
         println!(
             "refused   {}  [{}]  because of {}",

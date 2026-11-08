@@ -447,7 +447,9 @@ dependencies = [
  "dc-core",
  "dc-protected",
  "proptest",
+ "rayon",
  "serde",
+ "serde_json",
  "toml",
 ]
 

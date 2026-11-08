@@ -16,7 +16,8 @@ mod pack;
 mod validate;
 
 pub use candidates::{
-    explain, find_candidates, verify, Blocked, Candidate, Candidates, Explanation, Sizes,
+    explain, find_candidates, find_candidates_split, verify, Blocked, Candidate, Candidates,
+    Explanation, Sizes, Work,
 };
 pub use classify::{Classification, Classifier, NodeFacts};
 pub use pack::{parse as parse_pack, CompiledRule, Problem, Rule, RulePack, RuleScope};
