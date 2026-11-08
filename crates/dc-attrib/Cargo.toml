@@ -1,0 +1,12 @@
+[package]
+name = "dc-attrib"
+description = "Owner attribution: maps folders and files to apps and builds the app, executable, folder, file graph."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

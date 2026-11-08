@@ -1,0 +1,12 @@
+[package]
+name = "dc-api"
+description = "API facade for the future frontend: typed requests, events and JSON-RPC."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

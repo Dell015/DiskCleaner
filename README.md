@@ -1,0 +1,38 @@
+# DiskCleaner
+
+An open-source, Windows-first disk analyzer and cleanup advisor: fast scanning, a map of
+**which app owns which files and why**, detection of leftovers from uninstalled apps, and an
+optional metadata-only AI explanation layer.
+
+> **Status: early development (Phase B0, backend only).** There is nothing to run for end users yet.
+> The tool is **read-only**: it never deletes, moves or modifies anything until a later,
+> clearly separated phase, and that phase will be off by default. See [SAFETY.md](SAFETY.md).
+
+## Goals
+1. Free disk space.
+2. Find leftovers from uninstalled apps.
+3. Show what is using space, and why (app → executables → folders → files).
+
+## Layout
+See [docs/architecture.md](docs/architecture.md) and [ROADMAP.md](ROADMAP.md).
+
+## Developing
+You need Rust (via [rustup](https://rustup.rs)); on Windows also the Visual Studio C++ Build Tools.
+
+```
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+### Dummy test data
+Tests and experiments must never touch real files. Generate a deterministic fake tree:
+
+```
+cargo run -p fixture-gen -- --out fixtures\sample
+```
+
+The output directory must be new or empty. The generator only creates files; it never deletes.
+
+## License
+MIT. See [LICENSE](LICENSE).

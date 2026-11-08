@@ -1,0 +1,12 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+# Safety rule 2: destructive std APIs are banned workspace-wide.
+# Only dc-quarantine (Phase B9) may locally #[allow(clippy::disallowed_methods)].
+disallowed-methods = [
+  { path = "std::fs::remove_file", reason = "destructive; only dc-quarantine (B9)" },
+  { path = "std::fs::remove_dir", reason = "destructive; only dc-quarantine (B9)" },
+  { path = "std::fs::remove_dir_all", reason = "destructive; only dc-quarantine (B9)" },
+  { path = "std::fs::rename", reason = "destructive; only dc-quarantine (B9)" },
+]

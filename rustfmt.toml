@@ -1,0 +1,6 @@
+# Stable rustfmt options only.
+edition = "2021"
+max_width = 100
+use_field_init_shorthand = true
+use_try_shorthand = true
+# newline_style is left at "Auto" so Windows checkouts with core.autocrlf pass `fmt --check`.

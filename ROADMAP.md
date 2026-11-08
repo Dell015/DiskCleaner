@@ -1,17 +1,18 @@
-# DiskCleaner: Backend Roadmap for Kiro
+# DiskCleaner: Backend Roadmap
 
 Repo location: `E:\CodeShi\DiskCleaner`
 Scope: **backend only** (Rust). No UI code. The frontend (Tauri + React + R3F) comes later and will consume the API crate defined here.
 
 ---
 
-## 0. How to use this document (3 steps)
+## 0. How to use this document
 
-1. Copy `.kiro/steering/*.md` (the 4 files delivered with this roadmap) into `E:\CodeShi\DiskCleaner\.kiro\steering\`. Kiro loads them on every request, so the safety rules are always in context.
-2. Put this file at the repo root as `ROADMAP.md`.
-3. In Kiro, create **one spec per phase** (Section 6). For each phase, paste the "Kiro prompt" from that phase. Kiro generates `requirements.md`, `design.md`, `tasks.md`. **Review them before clicking "execute"**; you are reviewing plans, not syntax.
+Work through the phases in order (Section 6). Each phase has a goal, tasks, and an acceptance check.
+Per-phase requirements and design notes live in `docs/phases/<phase>/`. Project rules for the
+coding assistant live in `CLAUDE.md`; the safety rules in `SAFETY.md` always apply.
 
-Rule of thumb: you approve requirements and design; Kiro executes tasks; you run the acceptance check at the end of each phase.
+Rule of thumb: you approve the requirements and design; Claude implements and tests; you run the
+acceptance check at the end of each phase.
 
 ---
 
@@ -24,7 +25,7 @@ Rule of thumb: you approve requirements and design; Kiro executes tasks; you run
 | License | MIT (you can switch; it's one file) |
 | Telemetry | None, ever. Stated in README. |
 | Default scan | Parallel directory walk, **no admin required** |
-| Fast scan | Optional NTFS fast path via an **elevated helper process**, only on user request (Phase B6) |
+| Fast scan | Optional NTFS fast path via an **elevated helper process**, only on user request (Phase B7) |
 | Sizes | Record both logical size and size on disk |
 | Links | Never follow junctions/symlinks. Dedupe hardlinks. Flag cloud placeholders. |
 | Storage | In-memory tree + SQLite (`rusqlite`, bundled) for saved scans and diffs |
@@ -37,7 +38,7 @@ Rule of thumb: you approve requirements and design; Kiro executes tasks; you run
 
 ## 2. Division of labor
 
-### Kiro does (nearly everything)
+### Claude does (nearly everything)
 - Workspace scaffolding, CI, lint config, `deny.toml`, `rustfmt.toml`, `clippy` config
 - All crates in Section 4, with unit, integration, and property tests
 - Fixture generator (dummy data trees) and test harnesses
@@ -53,32 +54,26 @@ Rule of thumb: you approve requirements and design; Kiro executes tasks; you run
 ### You do (needs a human or real hardware)
 - Approve each spec's requirements/design
 - Run each phase's **Acceptance Check** on your real machine (read-only commands only)
-- Confirm UAC/elevation behavior and MFT correctness against WizTree numbers (Phase B6)
+- Confirm UAC/elevation behavior and MFT correctness against WizTree numbers (Phase B7)
 - Judge rule quality: "is this really safe to delete?" decisions
 - Real-world app coverage: test against your own installs (Steam, Chrome, Brave, HoYoverse)
 - Final security review of the elevated helper and the quarantine engine
 - Create a restore point/backup before first run on real data
 - README polish, screenshots, release (with me later)
 
-### Future-me (Claude) does later
-- QA review of Kiro's code, especially safety-critical crates
+### Later
 - Frontend (Tauri shell, 2D treemap, R3F 3D graph)
 - Polish, performance tuning, release engineering
+- Independent review of the safety-critical crates (`dc-protected`, `dc-rules`, `dc-advisor`, `dc-quarantine`, the elevated MFT helper)
 
 ---
 
-## 3. Kiro setup (do once, ~10 minutes)
+## 3. Working setup
 
-1. **Open the folder** `E:\CodeShi\DiskCleaner` in Kiro.
-2. **Supervised mode ON.** Kiro runs shell commands on your real machine. Keep command execution supervised, and only trust: `cargo build/test/clippy/fmt/deny/bench`, `git status/diff/add/commit`. Never trust `del`, `rmdir`, `Remove-Item`, `rm`, `robocopy /mir`, `format`, or anything with `/s /q`.
-3. **Steering files** (provided): `product.md`, `tech.md`, `structure.md`, `safety.md`.
-4. **Hooks** (Kiro agent hooks, create in the Hooks panel):
-   - *On save of `*.rs`*: run `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings`.
-   - *On save of any file under `crates/dc-rules/`, `crates/dc-protected/`, or `crates/dc-advisor/`*: re-run their tests, and remind: "Safety-critical code; confirm no weakening of protections."
-   - *Pre-commit*: `cargo test --workspace`. Fail the commit if tests fail.
-   - *On creating a file containing `remove_file`, `remove_dir`, `DeleteFile`, `fs::rename` outside `dc-quarantine`*: flag it for review. (Safety tripwire.)
-5. **MCP (optional, later):** a per-project memory server (`mcp-data-diskcleaner` volume, junction mounted at `/project`) in `.kiro/settings/mcp.json`. Reuse your working `memory-mcp-1file` config from Claude Code and change only the volume name and mount. Do this after Phase B0; it isn't needed for Kiro to work.
-6. **Git:** `git init`, first commit = steering + ROADMAP. Commit after every completed spec task (Kiro can do it; review diffs).
+1. **Rust:** install via rustup (plus Visual Studio C++ Build Tools on Windows) to build and test locally. CI also builds on Windows and Linux.
+2. **Safe commands only:** build, test, clippy, fmt and git status/diff/commit are fine. Never run `del`, `rmdir`, `Remove-Item`, `rm`, `robocopy /mir`, `format`, or anything with `/s /q` against real data.
+3. **Safety tripwire:** `clippy.toml` bans `remove_file`, `remove_dir`, `remove_dir_all` and `fs::rename` workspace-wide. Only `dc-quarantine` (Phase B9) may opt out, explicitly.
+4. **Git:** commit after every completed unit of work and review the diffs.
 
 ---
 
@@ -88,7 +83,7 @@ Rule of thumb: you approve requirements and design; Kiro executes tasks; you run
 DiskCleaner/
   Cargo.toml                 (workspace)
   deny.toml  rustfmt.toml  clippy.toml  .gitignore  LICENSE  README.md  SAFETY.md  ROADMAP.md
-  .kiro/steering/*.md
+  CLAUDE.md
   .github/workflows/ci.yml
   docs/                      (architecture.md, threat-model.md, rules-guide.md, api.md)
   rules/                     (TOML rule packs, shipped with the app)
@@ -102,7 +97,7 @@ DiskCleaner/
     dc-core/        shared types: NodeId, Node, Tree, Size, Timestamps, Risk, errors, serde schemas
     dc-protected/   protected-path engine (path canonicalization + deny list). SAFETY-CRITICAL
     dc-scan/        directory walker, aggregation, progress/cancel, reparse/hardlink/cloud handling
-    dc-mft/         NTFS fast path (USN/MFT enumeration) + elevated helper protocol (Phase B6)
+    dc-mft/         NTFS fast path (USN/MFT enumeration) + elevated helper protocol (Phase B7)
     dc-winmeta/     Windows metadata: registry uninstall entries, App Paths, shortcuts, known folders, version info, Authenticode
     dc-attrib/      owner attribution: maps nodes to apps, builds the app -> exe -> folder -> file graph
     dc-rules/       TOML rule schema, loader, validator, evaluator -> Risk + reason codes. SAFETY-CRITICAL
@@ -120,7 +115,7 @@ Suggested crates: `walkdir`/`jwalk` or custom `rayon` walker, `rayon`, `crossbea
 
 ---
 
-## 5. Global rules for every phase (put in `safety.md`; repeated here)
+## 5. Global rules for every phase (see SAFETY.md and CLAUDE.md)
 
 1. **No deletion, move, rename, or write** to scanned paths in any phase before B9. Scanner opens with read-only access. A test enforces that no scan changes any fixture file (hash fixture tree before/after).
 2. **Default-deny:** unknown path => `DontTouch`.
@@ -137,11 +132,11 @@ Suggested crates: `walkdir`/`jwalk` or custom `rayon` walker, `rayon`, `crossbea
 
 ## 6. Phases
 
-Each phase = one Kiro spec. Credits are rough guesses in Section 8.
+Each phase has its own requirements and design in `docs/phases/`.
 
 ### Phase B0: Foundations
 **Goal:** a green, empty workspace with CI and guardrails.
-**Tasks for Kiro**
+**Tasks**
 - Cargo workspace with all crate stubs in Section 4 (empty but compiling)
 - `rustfmt.toml`, `clippy.toml`, `deny.toml` (licenses, advisories), `.gitignore` (target, fixtures, *.db)
 - GitHub Actions: build + test on `windows-latest` and `ubuntu-latest`, clippy, fmt, `cargo deny`
@@ -149,8 +144,6 @@ Each phase = one Kiro spec. Credits are rough guesses in Section 8.
 - `tools/fixture-gen`: generates a deterministic dummy tree: fake "Steam", "Chrome", "Brave", "HoYoverse" app dirs with game files; fake AppData caches; temp junk; an "uninstalled app leftover" folder; a protected-looking fake `Windows\System32`; deep nesting; huge file count dir; zero-byte files; unicode and long-path names; a junction, a symlink, a hardlink pair; sparse files. Seeded RNG so it is reproducible.
 - `dc-core` basic types and the `Risk` enum (`Safe < ProbablySafe < DontTouch`) with `max()` semantics + tests
 **Acceptance check (you):** `cargo test --workspace` passes; `cargo run -p fixture-gen -- --out fixtures\sample` creates a tree under `E:\CodeShi\DiskCleaner\fixtures\sample`; CI is green on GitHub.
-**Kiro prompt:**
-> Read ROADMAP.md Phase B0 and the steering files. Create a spec for B0. Requirements must include the fixture generator contents listed. Do not write scanner logic yet.
 
 ### Phase B1: Scanner v1 (the smallest useful version)
 **Goal:** read-only scan of one folder tree -> JSON tree with sizes.
@@ -185,7 +178,7 @@ Each phase = one Kiro spec. Credits are rough guesses in Section 8.
 - Last-used signal: file atime if available, Prefetch name presence (read-only), shortcut/jump list (optional), else `unknown`
 - Output a graph JSON; `dc graph <scan.json> --apps`, `--app steam`
 - Tests on fixture: Steam fixture yields app -> games -> files with expected sizes
-**Acceptance (you):** `dc graph` on a real scan of `C:\Program Files` + AppData shows Chrome/Brave/Steam correctly grouped. List mistakes; give them to Kiro as rule fixes.
+**Acceptance (you):** `dc graph` on a real scan of `C:\Program Files` + AppData shows Chrome/Brave/Steam correctly grouped. List mistakes; give them to Claude as rule fixes.
 
 ### Phase B4: Protected paths and rules engine (`dc-protected`, `dc-rules`)
 **Tasks**
@@ -195,7 +188,7 @@ Each phase = one Kiro spec. Credits are rough guesses in Section 8.
 - Initial rule packs (your own wording; study BleachBit winapp2 for format and ideas only, no verbatim copying, check its license): temp dirs, browser caches (Chrome, Edge, Brave, Firefox), shader caches (NVIDIA, AMD, DirectX), Windows Update download cache, crash dumps, thumbnails cache, npm/pip/cargo/gradle/NuGet caches, Docker/WSL notes (flag as DontTouch/ProbablySafe with big warning), Steam shader cache, `Downloads` installers (ProbablySafe by age), logs
 - Property tests: protected path can never classify below `DontTouch`; classification is deterministic
 - `dc classify <scan.json>` outputs risk per node with reasons
-**Acceptance (you):** Read every shipped rule; reject or edit ones you wouldn't trust. Classify a real scan; review the top 50 "Safe" results by size; if any makes you nervous, tell Kiro to add a rule or demote.
+**Acceptance (you):** Read every shipped rule; reject or edit ones you wouldn't trust. Classify a real scan; review the top 50 "Safe" results by size; if any makes you nervous, tell Claude to add a rule or demote.
 
 ### Phase B5: Leftover detection (`dc-leftovers`)
 **Tasks**
@@ -218,7 +211,7 @@ Each phase = one Kiro spec. Credits are rough guesses in Section 8.
 ### Phase B7: NTFS fast scan + elevated helper (`dc-mft`)
 **This is the riskiest phase; budget extra review.**
 **Tasks**
-- Research doc first (`docs/mft-design.md`): compare (a) raw `$MFT` parsing via volume handle vs (b) `FSCTL_ENUM_USN_DATA` enumeration + `FSCTL_GET_NTFS_FILE_RECORD`/file-ID resolution for sizes. Recommend one. Kiro must justify with Microsoft documentation.
+- Research doc first (`docs/mft-design.md`): compare (a) raw `$MFT` parsing via volume handle vs (b) `FSCTL_ENUM_USN_DATA` enumeration + `FSCTL_GET_NTFS_FILE_RECORD`/file-ID resolution for sizes. Recommend one. Claude must justify with Microsoft documentation.
 - Separate binary `dc-helper.exe`, elevated via UAC **on demand only**. Main app never runs as admin.
 - IPC: named pipe with a locked-down ACL (current user SID only), versioned protocol, **read-only commands only** (enumerate volume, return records). No command in the protocol can modify the filesystem. Test that the protocol enum contains no write-capable variants.
 - Handle: path reconstruction from parent references, hardlinks, deleted records, alternate data streams (decide and document), compressed/sparse sizes, resident data
@@ -281,37 +274,9 @@ Risk   Safe < ProbablySafe < DontTouch      (Unknown => DontTouch)
 
 ---
 
-## 8. Credit plan (1000 credits)
+## 8. Your QA loop per phase (10-20 minutes)
 
-I don't know Kiro's exact credit cost per task, so do this: **after Phase B0 and B1, check how many credits were used and extrapolate.** Rough relative weights:
-
-| Phase | Relative effort | Suggested cap |
-|---|---|---|
-| B0 | small | ~40 |
-| B1 | medium | ~100 |
-| B2 | medium | ~90 |
-| B3 | large | ~140 |
-| B4 | large | ~140 |
-| B5 | medium | ~80 |
-| B6 | medium | ~90 |
-| B7 | large + risky | ~120 |
-| B8 | large | ~100 |
-| B9 | large | ~60 |
-| B10 | medium | ~40 (reserve) |
-
-Total is about 1000, so it's tight if specs are verbose. To save credits:
-- Don't let Kiro regenerate whole specs when you want a small change; edit the spec text yourself or ask for a targeted task.
-- Prefer one task at a time on safety-critical crates; batch the boring ones (stubs, docs).
-- Put "don't re-explain, don't add features not in the task" in the prompt.
-- If you run low, drop in this order: B10 extras (fuzzing, SBOM) -> B9 (quarantine can wait; the tool is already useful as a report-only tool) -> B7 (MFT fast path; the walker works).
-
-Verdict: 1000 credits should cover B0-B8 comfortably and probably B9-B10 if you stay disciplined. Don't ask Kiro for the frontend with these credits.
-
----
-
-## 9. Your QA loop per phase (10-20 minutes)
-
-1. `git pull`/review the diff summary Kiro gives you (don't read all code).
+1. `git pull`/review the diff summary (don't read all code).
 2. `cargo test --workspace`
 3. Run the Acceptance Check commands.
 4. Look for these red flags: any `remove_*`/`rename` outside `dc-quarantine`; any `unwrap` in safety crates; network calls outside `dc-advisor`; new dependencies you don't recognize; weakened tests (deleted or `#[ignore]`d).
@@ -319,7 +284,7 @@ Verdict: 1000 credits should cover B0-B8 comfortably and probably B9-B10 if you 
 
 ---
 
-## 10. Out of scope for Kiro (future)
+## 9. Out of scope for now (future)
 
 - Tauri shell, React UI, 2D treemap, R3F 3D graph, node visuals, onboarding, settings screens
 - Installer/signing, winget manifest

@@ -1,0 +1,9 @@
+---
+source: crates/dc-core/tests/risk_serde.rs
+expression: "Risk::ALL"
+---
+[
+  "Safe",
+  "ProbablySafe",
+  "DontTouch"
+]
