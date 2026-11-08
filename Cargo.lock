@@ -449,6 +449,7 @@ version = "0.0.0"
 dependencies = [
  "dc-core",
  "dc-scan",
+ "fixture-gen",
  "tempfile",
  "windows-sys",
 ]

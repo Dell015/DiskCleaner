@@ -16,6 +16,7 @@ dc-scan = { path = "../dc-scan" }
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+fixture-gen = { path = "../../tools/fixture-gen" }
 tempfile.workspace = true
 
 [lints]

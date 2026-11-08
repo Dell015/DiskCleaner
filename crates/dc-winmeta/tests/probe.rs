@@ -26,7 +26,7 @@ fn identity_link_count_and_allocation_are_reported() {
     assert_eq!(pa.link_count, 2);
     let allocated = pa.size_on_disk.unwrap();
     assert!(
-        allocated >= 10_000 && allocated % 512 == 0,
+        allocated >= 10_000 && allocated.is_multiple_of(512),
         "allocated {allocated}"
     );
 }

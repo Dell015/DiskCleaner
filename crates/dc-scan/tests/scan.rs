@@ -53,6 +53,8 @@ fn listing(root: &Path) -> Vec<(String, u64, Option<std::time::SystemTime>)> {
     out
 }
 
+// Needs file identity: on Windows this runs in dc-winmeta's tests, which have the real probe.
+#[cfg(unix)]
 #[test]
 fn totals_match_the_fixture_manifest() {
     let (_guard, tree, m) = fixture(300);
@@ -154,6 +156,8 @@ fn a_root_that_is_a_link_is_refused() {
     assert!(matches!(err, ScanError::RootIsLink(_)));
 }
 
+// Needs file identity: on Windows this runs in dc-winmeta's tests, which have the real probe.
+#[cfg(unix)]
 #[test]
 fn hardlinks_are_counted_once_and_the_first_name_wins() {
     let dir = tmp();
