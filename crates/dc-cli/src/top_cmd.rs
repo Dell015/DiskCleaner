@@ -51,7 +51,7 @@ fn print_nodes(tree: &Tree, root: &Path, ids: &[NodeId], dirs: bool) {
             "{:>12}  {:>12}  {}",
             format_bytes(logical),
             format_bytes(disk),
-            root.join(tree.relative_path(id)).display()
+            display_path(root, &tree.relative_path(id))
         );
     }
 }
@@ -71,4 +71,11 @@ fn print_stats(stats: &[query::TypeStat], limit: usize, label: &str) {
             stat.files
         );
     }
+}
+
+/// Root plus a `/`-separated relative path, joined with the platform's own separator.
+fn display_path(root: &Path, relative: &str) -> String {
+    let mut path = root.to_path_buf();
+    path.extend(relative.split('/').filter(|part| !part.is_empty()));
+    path.display().to_string()
 }

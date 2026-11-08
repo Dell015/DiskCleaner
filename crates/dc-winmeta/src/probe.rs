@@ -69,7 +69,8 @@ impl FileProbe for WindowsProbe {
         };
         // If this second query fails the allocation size stays unknown; the scanner then
         // falls back to an estimate. The identity above is still valid.
-        let size_on_disk = (ok != 0).then(|| u64::try_from(standard.AllocationSize).unwrap_or(0));
+        let size_on_disk = (ok != 0)
+            .then(|| normalize_allocation(u64::try_from(standard.AllocationSize).unwrap_or(0)));
 
         let file_index = (u128::from(info.nFileIndexHigh) << 32) | u128::from(info.nFileIndexLow);
         Ok(Probe {
@@ -81,6 +82,17 @@ impl FileProbe for WindowsProbe {
             size_on_disk,
             flags: flags_from_windows_attributes(info.dwFileAttributes),
         })
+    }
+}
+
+/// Real disk allocations are whole sectors (multiples of 512 bytes). NTFS reports a smaller,
+/// unaligned number for tiny files stored inside the master file table (no clusters of their
+/// own). Explorer counts those as 0 bytes on disk, so we do too.
+fn normalize_allocation(allocation: u64) -> u64 {
+    if allocation.is_multiple_of(512) {
+        allocation
+    } else {
+        0
     }
 }
 
@@ -117,6 +129,15 @@ mod tests {
 
     fn text(wide: &[u16]) -> String {
         String::from_utf16_lossy(&wide[..wide.len() - 1])
+    }
+
+    #[test]
+    fn mft_resident_files_count_as_zero_on_disk() {
+        assert_eq!(normalize_allocation(672), 0);
+        assert_eq!(normalize_allocation(0), 0);
+        assert_eq!(normalize_allocation(4096), 4096);
+        assert_eq!(normalize_allocation(8192), 8192);
+        assert_eq!(normalize_allocation(1024), 1024);
     }
 
     #[test]
