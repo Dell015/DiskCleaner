@@ -18,7 +18,7 @@ mod tree;
 
 pub use error::CoreError;
 pub use node::{Aggregate, Category, Flags, Kind, Node, NodeId, Timestamp};
-pub use result::{ScanErrorRecord, ScanResult, ScanStatus, StoredOptions, Totals};
+pub use result::{AppLabel, ScanErrorRecord, ScanResult, ScanStatus, StoredOptions, Totals};
 pub use risk::Risk;
 pub use tree::Tree;
 

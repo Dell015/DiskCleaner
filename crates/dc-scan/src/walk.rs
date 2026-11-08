@@ -206,6 +206,7 @@ pub fn scan(
         totals,
         errors,
         nodes: stored.into_nodes(),
+        app_labels: Vec::new(),
     })
 }
 

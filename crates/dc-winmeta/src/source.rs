@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::model::{KnownFolder, Problem, RawUninstallEntry};
+use crate::model::{KnownFolder, Problem, RawUninstallEntry, Shortcut, VersionInfo};
 use crate::parse::path_key;
 
 /// Data plus the non-fatal problems met while collecting it.
@@ -21,6 +21,10 @@ pub trait SystemInfoSource {
     fn known_folders(&self) -> Vec<KnownFolder>;
     /// All uninstall entries, from every registry location.
     fn uninstall_entries(&self) -> SourceReport<Vec<RawUninstallEntry>>;
+    /// Start Menu and Desktop shortcuts that could be read.
+    fn shortcuts(&self) -> SourceReport<Vec<Shortcut>>;
+    /// The version resource of a program file, if it has one. Must not run the program.
+    fn version_info(&self, exe: &str) -> Option<VersionInfo>;
     /// Whether a file or folder exists. Must not follow links or touch contents.
     fn path_exists(&self, path: &str) -> bool;
     /// The value of an environment variable (case-insensitive on Windows).
@@ -36,6 +40,10 @@ pub struct FakeSource {
     pub entries: Vec<RawUninstallEntry>,
     /// Problems to report along with the entries.
     pub problems: Vec<Problem>,
+    /// Shortcuts to report.
+    pub shortcuts: Vec<Shortcut>,
+    /// Version info by program path (compared case-insensitively).
+    pub versions: BTreeMap<String, VersionInfo>,
     /// Environment variables (names are matched case-insensitively).
     pub env: BTreeMap<String, String>,
     existing: BTreeSet<String>,
@@ -64,6 +72,21 @@ impl SystemInfoSource for FakeSource {
             items: self.entries.clone(),
             problems: self.problems.clone(),
         }
+    }
+
+    fn shortcuts(&self) -> SourceReport<Vec<Shortcut>> {
+        SourceReport {
+            items: self.shortcuts.clone(),
+            problems: Vec::new(),
+        }
+    }
+
+    fn version_info(&self, exe: &str) -> Option<VersionInfo> {
+        let wanted = path_key(exe);
+        self.versions
+            .iter()
+            .find(|(path, _)| path_key(path) == wanted)
+            .map(|(_, info)| info.clone())
     }
 
     fn path_exists(&self, path: &str) -> bool {

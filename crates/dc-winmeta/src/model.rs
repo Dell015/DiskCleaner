@@ -28,6 +28,8 @@ pub enum FolderOrigin {
     DisplayIcon,
     /// The folder of the program named in `UninstallString`.
     UninstallString,
+    /// The folder of the target of a Start Menu or Desktop shortcut with the app's name.
+    Shortcut,
 }
 
 /// One uninstall entry exactly as read from the registry (untrusted text).
@@ -80,6 +82,35 @@ pub struct AppFlags {
     pub no_install_folder: bool,
 }
 
+/// A Start Menu or Desktop shortcut (`.lnk`), as far as it could be read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Shortcut {
+    /// Full path of the `.lnk` file.
+    pub lnk: String,
+    /// File name without `.lnk`; this is what the user sees.
+    pub name: String,
+    /// What it points to (absolute path), when the shortcut stores one.
+    pub target: Option<String>,
+    /// Command-line arguments, as text only.
+    pub arguments: Option<String>,
+    /// Working directory.
+    pub working_dir: Option<String>,
+}
+
+/// What a program file says about itself (its version resource). All parts are optional and
+/// are plain text written by the program's author, so they can be wrong or faked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VersionInfo {
+    /// `CompanyName`.
+    pub company: Option<String>,
+    /// `ProductName`.
+    pub product: Option<String>,
+    /// `FileDescription`.
+    pub description: Option<String>,
+    /// `FileVersion`.
+    pub file_version: Option<String>,
+}
+
 /// An installed classic program.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstalledApp {
@@ -107,6 +138,15 @@ pub struct InstalledApp {
     pub install_date: Option<String>,
     /// Properties.
     pub flags: AppFlags,
+    /// The app's main program, when one could be identified inside its install folder.
+    #[serde(default)]
+    pub main_exe: Option<String>,
+    /// Version resource of `main_exe`.
+    #[serde(default)]
+    pub version_info: Option<VersionInfo>,
+    /// Shortcuts (paths of `.lnk` files) that point into the install folder.
+    #[serde(default)]
+    pub shortcuts: Vec<String>,
 }
 
 /// A Windows known folder.

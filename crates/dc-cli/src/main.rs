@@ -48,6 +48,10 @@ enum Command {
         /// Allow scanning a whole drive (e.g. C:\).
         #[arg(long)]
         i_know: bool,
+        /// Label folders that are installed apps. Give a snapshot from `dc apps --out`, or
+        /// leave the value out to read the Windows registry (Windows only).
+        #[arg(long, num_args = 0..=1, value_name = "SNAPSHOT")]
+        apps: Option<Option<PathBuf>>,
     },
     /// List installed programs (reads the Windows registry; read-only).
     Apps {
@@ -95,12 +99,14 @@ fn run() -> Result<ExitCode> {
             max_depth,
             min_size,
             i_know,
+            apps,
         } => scan_cmd::run(scan_cmd::ScanArgs {
             path,
             out,
             max_depth,
             min_size,
             i_know,
+            apps,
         }),
         Command::Apps {
             out,

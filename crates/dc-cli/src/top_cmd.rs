@@ -26,9 +26,15 @@ pub fn run(file: &Path, report: &Report, limit: usize) -> Result<()> {
     let root = PathBuf::from(&scan.root);
 
     match report {
-        Report::Files => print_nodes(&tree, &root, &query::top_files(&tree, limit), false),
-        Report::Dirs => print_nodes(&tree, &root, &query::top_dirs(&tree, limit), true),
-        Report::Oldest => print_nodes(&tree, &root, &query::oldest_files(&tree, limit), false),
+        Report::Files => print_nodes(&tree, &root, &query::top_files(&tree, limit), false, &scan),
+        Report::Dirs => print_nodes(&tree, &root, &query::top_dirs(&tree, limit), true, &scan),
+        Report::Oldest => print_nodes(
+            &tree,
+            &root,
+            &query::oldest_files(&tree, limit),
+            false,
+            &scan,
+        ),
         Report::Ext => print_stats(&query::by_extension(&tree), limit, "extension"),
         Report::Category => print_stats(&query::by_category(&tree), limit, "category"),
     }
@@ -38,7 +44,7 @@ pub fn run(file: &Path, report: &Report, limit: usize) -> Result<()> {
     Ok(())
 }
 
-fn print_nodes(tree: &Tree, root: &Path, ids: &[NodeId], dirs: bool) {
+fn print_nodes(tree: &Tree, root: &Path, ids: &[NodeId], dirs: bool, scan: &ScanResult) {
     println!("{:>12}  {:>12}  path", "size", "on disk");
     for &id in ids {
         let Some(node) = tree.get(id) else { continue };
@@ -47,8 +53,19 @@ fn print_nodes(tree: &Tree, root: &Path, ids: &[NodeId], dirs: bool) {
         } else {
             (node.logical_size, node.size_on_disk)
         };
+        let apps: Vec<&str> = scan
+            .app_labels
+            .iter()
+            .filter(|label| label.node == id)
+            .map(|label| label.app.as_str())
+            .collect();
+        let tag = if apps.is_empty() {
+            String::new()
+        } else {
+            format!("  [{}]", apps.join(", "))
+        };
         println!(
-            "{:>12}  {:>12}  {}",
+            "{:>12}  {:>12}  {}{tag}",
             format_bytes(logical),
             format_bytes(disk),
             display_path(root, &tree.relative_path(id))

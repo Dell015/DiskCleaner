@@ -3,8 +3,12 @@
 
 mod folders;
 mod registry;
+mod version;
 
-use crate::model::{KnownFolder, RawUninstallEntry, RegistrySource};
+use std::path::PathBuf;
+
+use crate::lnk::collect_shortcuts;
+use crate::model::{KnownFolder, RawUninstallEntry, RegistrySource, Shortcut, VersionInfo};
 use crate::source::{SourceReport, SystemInfoSource};
 
 use windows_sys::Win32::System::Registry::{
@@ -48,6 +52,21 @@ impl SystemInfoSource for WindowsSource {
             all.problems.extend(part.problems);
         }
         all
+    }
+
+    fn shortcuts(&self) -> SourceReport<Vec<Shortcut>> {
+        let wanted = ["StartMenu", "CommonStartMenu", "Desktop"];
+        let dirs: Vec<PathBuf> = self
+            .known_folders()
+            .into_iter()
+            .filter(|folder| wanted.contains(&folder.name.as_str()))
+            .filter_map(|folder| folder.path.map(PathBuf::from))
+            .collect();
+        collect_shortcuts(&dirs)
+    }
+
+    fn version_info(&self, exe: &str) -> Option<VersionInfo> {
+        version::read_version_info(exe)
     }
 
     fn path_exists(&self, path: &str) -> bool {

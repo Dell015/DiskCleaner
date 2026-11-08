@@ -36,10 +36,15 @@ Format: **ID - decision** / why / where it is enforced.
 | D27 | App list is saved as a JSON snapshot (`schema_version`) | Tests and later phases do not need the registry | R7 |
 | D28 | Registry opened read-only; uninstall strings stored as text and never executed; entries are never merged in B2 | Registry data is untrusted; merging belongs to B3 | R8, tripwire test |
 | D29 | Windows-only code is verified on the user's machine and in Windows CI; all logic is tested with `FakeSource` | The build container is Linux | R9 |
+| D30 | Installer caches (`ProgramData\Package Cache`, `InstallShield Installation Information`) are never an app's install folder | They hold setup files, not the app; showing them as the app's home would mislead | `parse::is_too_broad` + test |
+| D31 | An app with no registry folder may take the folder of a shortcut whose name equals the app name exactly, marked `folder_origin: shortcut`; the folder must exist and not be too broad | Finds real homes without guessing from loose name matches | `apps.rs` + tests |
+| D32 | `scan --apps` labels only directories equal to an app's install folder (plus the scan root if it lies inside one). Labels are additive (`app_labels`, optional in the file, schema version unchanged) and never change sizes | Useful now, graph is B3; old scan files still load | `label.rs`, `dc-core::AppLabel` |
+| D33 | Shortcut files are read in safe Rust (bounded size, depth and count; links not followed); version info via `GetFileVersionInfoW` (reads the file as data, never runs it) | No COM, small unsafe surface | `lnk.rs`, `windows/version.rs` |
 
 ## Known limitations (accepted on purpose)
 - Catalog-signed Windows files may report `unknown` signature in B2 (D24).
 - Volumes mounted on folders may use the wrong cluster size; falls back to the 512-byte rule (D10).
+- Shortcuts without a stored local target (Store apps, network targets) are ignored in B2 (D21).
 - Hidden/duplicate registry entries are kept, not merged (D28).
 - `dc` has no Ctrl+C handler yet (library cancel token only).
 

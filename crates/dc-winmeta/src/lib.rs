@@ -13,6 +13,8 @@
 #![deny(unsafe_code)]
 
 mod apps;
+mod label;
+mod lnk;
 mod model;
 mod parse;
 mod source;
@@ -25,9 +27,11 @@ mod probe;
 mod windows;
 
 pub use apps::build_snapshot;
+pub use label::app_labels;
+pub use lnk::{collect_shortcuts, parse_lnk, ParsedLink};
 pub use model::{
     AppFlags, AppSnapshot, FolderOrigin, InstalledApp, KnownFolder, Problem, RawUninstallEntry,
-    RegistrySource, SNAPSHOT_SCHEMA_VERSION,
+    RegistrySource, Shortcut, VersionInfo, SNAPSHOT_SCHEMA_VERSION,
 };
 pub use parse::{
     derive_install_folder, expand_env, is_absolute, is_too_broad, normalize_folder, parent_folder,

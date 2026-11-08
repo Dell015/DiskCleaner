@@ -60,3 +60,49 @@ fn a_snapshot_of_this_machine_is_consistent() {
     let text = serde_json::to_string(&snapshot).unwrap();
     assert!(serde_json::from_str::<dc_winmeta::AppSnapshot>(&text).is_ok());
 }
+
+#[test]
+fn version_info_of_a_windows_program_names_microsoft() {
+    let system = WindowsSource
+        .known_folders()
+        .into_iter()
+        .find(|f| f.name == "System")
+        .and_then(|f| f.path)
+        .unwrap();
+    let info = WindowsSource
+        .version_info(&format!(r"{system}\notepad.exe"))
+        .or_else(|| WindowsSource.version_info(&format!(r"{system}\cmd.exe")))
+        .expect("version info of a Windows program");
+    assert!(
+        info.company
+            .as_deref()
+            .is_some_and(|c| c.contains("Microsoft")),
+        "{info:?}"
+    );
+    assert_eq!(
+        WindowsSource.version_info(r"C:\this\does\not\exist.exe"),
+        None
+    );
+}
+
+#[test]
+fn shortcuts_can_be_read_and_apps_get_main_programs() {
+    let report = WindowsSource.shortcuts();
+    assert!(!report.items.is_empty(), "no Start Menu shortcuts found");
+    assert!(report.items.iter().any(|s| s.target.is_some()));
+
+    let snapshot = build_snapshot(&WindowsSource);
+    assert!(
+        snapshot.apps.iter().any(|a| a.main_exe.is_some()),
+        "no app got a main program"
+    );
+    for app in &snapshot.apps {
+        if let (Some(exe), Some(folder)) = (&app.main_exe, &app.install_folder) {
+            assert!(
+                dc_winmeta::path_key(exe).starts_with(&dc_winmeta::path_key(folder)),
+                "{}: {exe} is not inside {folder}",
+                app.key
+            );
+        }
+    }
+}

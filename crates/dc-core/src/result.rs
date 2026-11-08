@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
-use crate::node::Node;
+use crate::node::{Node, NodeId};
 use crate::tree::Tree;
 use crate::SCHEMA_VERSION;
 
@@ -60,6 +60,18 @@ pub struct Totals {
     pub errors: u64,
 }
 
+/// Says that a directory in the scan is the install folder of an installed app. Added by
+/// `dc scan --apps`; it only labels, it never changes any size.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppLabel {
+    /// The directory node.
+    pub node: NodeId,
+    /// The app's display name.
+    pub app: String,
+    /// The app's registry key name (to tell apart apps with the same name).
+    pub key: String,
+}
+
 /// A finished scan, ready to save as JSON.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScanResult {
@@ -83,6 +95,10 @@ pub struct ScanResult {
     pub errors: Vec<ScanErrorRecord>,
     /// The stored nodes, root first.
     pub nodes: Vec<Node>,
+    /// Directories identified as install folders of apps (empty unless `--apps` was used).
+    /// Optional in the file, so scans written before this field existed still load.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub app_labels: Vec<AppLabel>,
 }
 
 impl ScanResult {

@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use dc_core::ScanStatus;
 use dc_scan::{scan, ScanOptions};
 
+use crate::apps_cmd;
 use crate::size::format_bytes;
 
 pub struct ScanArgs {
@@ -18,6 +19,8 @@ pub struct ScanArgs {
     pub max_depth: Option<u32>,
     pub min_size: Option<u64>,
     pub i_know: bool,
+    /// `None`: no labelling. `Some(None)`: read the registry. `Some(Some(file))`: use a snapshot.
+    pub apps: Option<Option<PathBuf>>,
 }
 
 #[cfg(windows)]
@@ -49,7 +52,19 @@ pub fn run(args: ScanArgs) -> Result<ExitCode> {
         ..ScanOptions::default()
     };
 
-    let result = scan(&args.path, probe().as_ref(), &options)?;
+    // Read the app list first, so a bad snapshot fails before a long scan.
+    let snapshot = match &args.apps {
+        None => None,
+        Some(Some(file)) => Some(apps_cmd::load(file)?),
+        Some(None) => Some(apps_cmd::read_system()?),
+    };
+
+    let mut result = scan(&args.path, probe().as_ref(), &options)?;
+    if let Some(snapshot) = &snapshot {
+        let tree = result.tree().context("the scan produced an invalid tree")?;
+        let root = std::path::absolute(&args.path).unwrap_or_else(|_| args.path.clone());
+        result.app_labels = dc_winmeta::app_labels(&tree, &root, snapshot);
+    }
     if show_progress {
         eprintln!();
     }
@@ -86,6 +101,9 @@ pub fn run(args: ScanArgs) -> Result<ExitCode> {
             "hardlinks {} extra paths, counted once",
             t.hardlink_extra_paths
         );
+    }
+    if snapshot.is_some() {
+        println!("apps      {} app folders found", result.app_labels.len());
     }
     println!(
         "stored    {} entries -> {}",

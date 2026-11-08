@@ -16,16 +16,16 @@ pub struct AppsArgs {
 }
 
 #[cfg(windows)]
-fn read_system() -> Result<AppSnapshot> {
+pub fn read_system() -> Result<AppSnapshot> {
     Ok(dc_winmeta::build_snapshot(&dc_winmeta::WindowsSource))
 }
 
 #[cfg(not(windows))]
-fn read_system() -> Result<AppSnapshot> {
+pub fn read_system() -> Result<AppSnapshot> {
     bail!("`dc apps` reads the Windows registry and only works on Windows; use --from FILE to show a saved snapshot")
 }
 
-fn load(path: &Path) -> Result<AppSnapshot> {
+pub fn load(path: &Path) -> Result<AppSnapshot> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
     let snapshot: AppSnapshot = serde_json::from_str(&text)

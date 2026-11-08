@@ -138,11 +138,14 @@ pub fn normalize_folder(text: &str) -> Option<String> {
     is_absolute(&folder).then_some(folder)
 }
 
-/// A folder is too broad to belong to one app: a drive root, a known folder itself, or
-/// anything inside the Windows or System folders.
+/// Folder names that hold installer leftovers (cached setup files), never the app itself.
+const INSTALLER_CACHES: [&str; 2] = ["package cache", "installshield installation information"];
+
+/// A folder is too broad (or too generic) to be one app's install folder: a drive root, a known
+/// folder itself, anything inside the Windows or System folders, or an installer cache.
 pub fn is_too_broad(folder: &str, known: &[KnownFolder]) -> bool {
     let key = path_key(folder);
-    if key.len() <= 3 {
+    if key.len() <= 3 || key.split('\\').any(|part| INSTALLER_CACHES.contains(&part)) {
         return true;
     }
     for entry in known {
@@ -316,6 +319,11 @@ mod tests {
         assert!(is_too_broad(r"C:\", &known));
         assert!(is_too_broad(r"c:\program files", &known));
         assert!(is_too_broad(r"C:\Windows\Installer\{ABC}", &known));
+        assert!(is_too_broad(r"C:\ProgramData\Package Cache\{GUID}", &known));
+        assert!(is_too_broad(
+            r"C:\Program Files (x86)\InstallShield Installation Information\{G}",
+            &known
+        ));
         assert!(!is_too_broad(r"C:\Program Files\App", &known));
     }
 

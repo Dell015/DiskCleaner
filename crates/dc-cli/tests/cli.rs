@@ -199,3 +199,47 @@ fn apps_without_a_file_explains_it_needs_windows() {
     assert_eq!(out.status.code(), Some(1));
     assert!(text(&out.stderr).contains("only works on Windows"));
 }
+
+#[test]
+fn scan_with_an_apps_snapshot_labels_the_app_folder() {
+    use dc_winmeta::{build_snapshot, FakeSource, RawUninstallEntry, RegistrySource};
+
+    let (dir, tree, _manifest) = fixture();
+    // Pick a real directory inside the fixture and pretend an app is installed there.
+    let app_dir = std::fs::read_dir(&tree)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.is_dir())
+        .unwrap();
+    let app_dir = std::path::absolute(app_dir).unwrap();
+
+    // Only Windows paths are recognised as install folders when reading registry text, so set
+    // the folder directly: this test is about labelling, not about registry parsing.
+    let mut fake = FakeSource::new();
+    fake.entries = vec![RawUninstallEntry {
+        key: "demo".into(),
+        source: Some(RegistrySource::User),
+        display_name: Some("Demo App".into()),
+        ..RawUninstallEntry::default()
+    }];
+    let mut apps = build_snapshot(&fake);
+    apps.apps[0].install_folder = Some(app_dir.display().to_string());
+    let snapshot = dir.path().join("apps.json");
+    std::fs::write(&snapshot, serde_json::to_string(&apps).unwrap()).unwrap();
+
+    let out = dir.path().join("scan.json");
+    let result = dc(&[
+        "scan",
+        tree.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--apps",
+        snapshot.to_str().unwrap(),
+    ]);
+    let shown = text(&result.stdout);
+    assert!(result.status.success(), "{shown}{}", text(&result.stderr));
+    assert!(shown.contains("apps      1 app folders found"), "{shown}");
+
+    let top = text(&dc(&["top", out.to_str().unwrap(), "--dirs", "--limit", "500"]).stdout);
+    assert!(top.contains("[Demo App]"), "{top}");
+}

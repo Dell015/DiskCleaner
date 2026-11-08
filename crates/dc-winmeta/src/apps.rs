@@ -2,10 +2,17 @@
 //! through the trait, so it is tested with [`crate::FakeSource`] on every platform.
 
 use crate::model::{
-    AppFlags, AppSnapshot, InstalledApp, RawUninstallEntry, RegistrySource, SNAPSHOT_SCHEMA_VERSION,
+    AppFlags, AppSnapshot, FolderOrigin, InstalledApp, RawUninstallEntry, RegistrySource, Shortcut,
+    VersionInfo, SNAPSHOT_SCHEMA_VERSION,
 };
-use crate::parse::derive_install_folder;
+use crate::parse::{
+    derive_install_folder, expand_env, is_absolute, is_too_broad, normalize_folder, parent_folder,
+    path_from_command, path_key,
+};
 use crate::source::SystemInfoSource;
+
+/// At most this many shortcuts are listed per app.
+const MAX_SHORTCUTS_PER_APP: usize = 10;
 
 /// `ReleaseType` values that mark updates rather than apps.
 const UPDATE_RELEASE_TYPES: [&str; 6] = [
@@ -37,19 +44,117 @@ fn is_update(entry: &RawUninstallEntry) -> bool {
     has_parent || release
 }
 
-/// Read known folders and uninstall entries from `source` and turn them into a snapshot.
-/// Entries are never merged or dropped; apps are sorted by name.
+/// Shortcuts after the one-time work of normalizing their targets.
+struct PreparedShortcut<'a> {
+    shortcut: &'a Shortcut,
+    /// Comparison key of the target path.
+    target_key: String,
+    /// The target path, when it is an absolute path.
+    target: String,
+}
+
+fn prepare_shortcuts<'a>(
+    shortcuts: &'a [Shortcut],
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Vec<PreparedShortcut<'a>> {
+    shortcuts
+        .iter()
+        .filter_map(|shortcut| {
+            let target = expand_env(shortcut.target.as_deref()?, env);
+            is_absolute(&target).then(|| PreparedShortcut {
+                shortcut,
+                target_key: path_key(&target),
+                target,
+            })
+        })
+        .collect()
+}
+
+fn is_uninstaller(path: &str) -> bool {
+    let name = path
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or_default()
+        .to_lowercase();
+    name.contains("unins") || name.contains("uninstall") || name.contains("setup")
+}
+
+fn inside(path_key_text: &str, folder_key: &str) -> bool {
+    path_key_text.starts_with(&format!("{folder_key}\\"))
+}
+
+/// Read known folders, uninstall entries and shortcuts from `source` and turn them into a
+/// snapshot. Entries are never merged or dropped; apps are sorted by name.
+///
+/// Install folders come from the registry first. An app with no registry folder may take the
+/// folder of the target of a shortcut with exactly its name (marked as such). Shortcuts that
+/// point into an app's folder are attached to it, and the first plausible program in the
+/// folder becomes its `main_exe`, whose version resource is then read.
 pub fn build_snapshot(source: &dyn SystemInfoSource) -> AppSnapshot {
     let known_folders = source.known_folders();
     let report = source.uninstall_entries();
+    let shortcut_report = source.shortcuts();
     let env = |name: &str| source.env_var(name);
+    let prepared = prepare_shortcuts(&shortcut_report.items, &env);
 
     let mut apps: Vec<InstalledApp> = report
         .items
         .iter()
         .map(|entry| {
             let name = non_empty(&entry.display_name);
-            let derived = derive_install_folder(entry, &known_folders, &env);
+            let mut derived = derive_install_folder(entry, &known_folders, &env);
+
+            // Fall back to a shortcut named exactly like the app.
+            if derived.is_none() {
+                if let Some(wanted) = name.as_deref().map(str::to_lowercase) {
+                    derived = prepared
+                        .iter()
+                        .filter(|p| {
+                            p.shortcut.name.to_lowercase() == wanted && !is_uninstaller(&p.target)
+                        })
+                        .filter_map(|p| parent_folder(&p.target).and_then(|f| normalize_folder(&f)))
+                        .find(|folder| {
+                            !is_too_broad(folder, &known_folders) && source.path_exists(folder)
+                        })
+                        .map(|folder| (folder, FolderOrigin::Shortcut));
+                }
+            }
+
+            let folder_key = derived.as_ref().map(|(folder, _)| path_key(folder));
+            let attached: Vec<&PreparedShortcut<'_>> = folder_key
+                .as_deref()
+                .map(|key| {
+                    prepared
+                        .iter()
+                        .filter(|p| inside(&p.target_key, key))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            // The main program: the icon's file, else the first shortcut target that is a program.
+            let is_exe = |path: &str| path.to_ascii_lowercase().ends_with(".exe");
+            let from_icon = entry
+                .display_icon
+                .as_deref()
+                .and_then(path_from_command)
+                .map(|icon| expand_env(&icon, &env))
+                .filter(|icon| is_absolute(icon) && is_exe(icon) && !is_uninstaller(icon));
+            let main_exe = from_icon
+                .into_iter()
+                .chain(attached.iter().map(|p| p.target.clone()))
+                .find(|exe| {
+                    is_exe(exe)
+                        && !is_uninstaller(exe)
+                        && folder_key
+                            .as_deref()
+                            .is_some_and(|key| inside(&path_key(exe), key))
+                        && source.path_exists(exe)
+                });
+            let version_info = main_exe
+                .as_deref()
+                .and_then(|exe| source.version_info(exe))
+                .filter(|info| *info != VersionInfo::default());
+
             let stale = derived
                 .as_ref()
                 .is_some_and(|(folder, _)| !source.path_exists(folder));
@@ -73,6 +178,13 @@ pub fn build_snapshot(source: &dyn SystemInfoSource) -> AppSnapshot {
                     stale_registration: stale,
                     no_install_folder: derived.is_none(),
                 },
+                main_exe,
+                version_info,
+                shortcuts: attached
+                    .iter()
+                    .map(|p| p.shortcut.lnk.clone())
+                    .take(MAX_SHORTCUTS_PER_APP)
+                    .collect(),
             }
         })
         .collect();
@@ -85,19 +197,21 @@ pub fn build_snapshot(source: &dyn SystemInfoSource) -> AppSnapshot {
         ))
     });
 
+    let mut problems = report.problems;
+    problems.extend(shortcut_report.problems);
     AppSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         created_by: format!("dc-winmeta {}", env!("CARGO_PKG_VERSION")),
         known_folders,
         apps,
-        problems: report.problems,
+        problems,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{FolderOrigin, KnownFolder, Problem};
+    use crate::model::{KnownFolder, Problem};
     use crate::FakeSource;
 
     fn folder(name: &str, path: &str) -> KnownFolder {
@@ -228,5 +342,73 @@ mod tests {
         let back: AppSnapshot = serde_json::from_str(&text).unwrap();
         assert_eq!(back, snap);
         assert!(text.contains("\"stale_registration\":true"));
+    }
+
+    #[test]
+    fn shortcuts_are_attached_find_folders_and_name_the_main_program() {
+        let mut fake = FakeSource::new()
+            .with_existing(r"C:\Program Files\Good")
+            .with_existing(r"C:\Program Files\Good\good.exe")
+            .with_existing(r"D:\Games\Fun")
+            .with_existing(r"D:\Games\Fun\fun.exe");
+        fake.folders = vec![folder("ProgramFiles", r"C:\Program Files")];
+        let mut good = entry("Good", Some("Good App"));
+        good.install_location = Some(r"C:\Program Files\Good".into());
+        let lonely = entry("Fun", Some("Fun Game"));
+        fake.entries = vec![good, lonely];
+        let link = |name: &str, target: &str| Shortcut {
+            lnk: format!(r"C:\Start\{name}.lnk"),
+            name: name.into(),
+            target: Some(target.into()),
+            arguments: None,
+            working_dir: None,
+        };
+        fake.shortcuts = vec![
+            link("Good App", r"C:\Program Files\Good\good.exe"),
+            link("Uninstall Good", r"C:\Program Files\Good\unins000.exe"),
+            link("Fun Game", r"D:\Games\Fun\fun.exe"),
+        ];
+        fake.versions.insert(
+            r"C:\Program Files\Good\good.exe".into(),
+            VersionInfo {
+                company: Some("Good Inc".into()),
+                ..VersionInfo::default()
+            },
+        );
+
+        let snap = build_snapshot(&fake);
+        let good = app(&snap, "Good");
+        assert_eq!(good.shortcuts.len(), 2);
+        assert_eq!(
+            good.main_exe.as_deref(),
+            Some(r"C:\Program Files\Good\good.exe")
+        );
+        assert_eq!(
+            good.version_info
+                .as_ref()
+                .and_then(|v| v.company.as_deref()),
+            Some("Good Inc")
+        );
+
+        let fun = app(&snap, "Fun");
+        assert_eq!(fun.install_folder.as_deref(), Some(r"D:\Games\Fun"));
+        assert_eq!(fun.folder_origin, Some(FolderOrigin::Shortcut));
+        assert!(!fun.flags.no_install_folder && !fun.flags.stale_registration);
+        assert_eq!(fun.main_exe.as_deref(), Some(r"D:\Games\Fun\fun.exe"));
+    }
+
+    #[test]
+    fn a_shortcut_with_another_name_does_not_invent_a_folder() {
+        let mut fake = FakeSource::new().with_existing(r"D:\Tools\x");
+        fake.entries = vec![entry("A", Some("Some App"))];
+        fake.shortcuts = vec![Shortcut {
+            lnk: r"C:\Start\Other.lnk".into(),
+            name: "Other".into(),
+            target: Some(r"D:\Tools\x\x.exe".into()),
+            arguments: None,
+            working_dir: None,
+        }];
+        let snap = build_snapshot(&fake);
+        assert!(app(&snap, "A").flags.no_install_folder);
     }
 }
