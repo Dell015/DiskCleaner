@@ -7,7 +7,13 @@ use fixture_gen::{generate, Manifest, Options};
 
 /// A fresh, unique, empty-to-be output directory under `CARGO_TARGET_TMPDIR`.
 pub fn out_dir(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("fg-{name}-{}", std::process::id()))
+    // Process ids are reused by Windows, so a leftover folder from an old run could collide;
+    // the clock makes the name unique.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("fg-{name}-{}-{nanos}", std::process::id()))
 }
 
 pub fn run(name: &str, seed: u64, file_count: u32) -> (PathBuf, Manifest) {

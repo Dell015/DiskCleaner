@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+### Phase B3 - Attribution (slice 1)
+- `dc-attrib`: who owns which folder, with evidence and confidence. Install folder, main-program folder, Windows areas, exact-name data folders, publisher (vendor) folders; ties are ambiguous. Every byte lands in one bucket (owner / shared / unattributed).
+- `dc-cli`: `dc attrib scan.json --apps apps.json [--out] [--limit] [--explain PATH]`.
 ### Phase B4a - Protected paths
 - `dc-protected`: path normalization (text only), built-in protected list as data, check against both the typed path and the OS-resolved path (links, junctions, 8.3 names), fail closed on anything odd, runtime additions that can only add protection. `Verdict` has no "safe" value.
 - `dc-cli`: `dc protected <path>...` and `dc protected --list`.

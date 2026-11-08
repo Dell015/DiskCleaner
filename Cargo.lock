@@ -381,6 +381,14 @@ version = "0.0.0"
 [[package]]
 name = "dc-attrib"
 version = "0.0.0"
+dependencies = [
+ "dc-core",
+ "dc-protected",
+ "dc-winmeta",
+ "proptest",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "dc-cli"
@@ -388,6 +396,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dc-attrib",
  "dc-core",
  "dc-protected",
  "dc-scan",

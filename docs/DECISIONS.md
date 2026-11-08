@@ -65,6 +65,15 @@ Format: **ID - decision** / why / where it is enforced.
 - **D53** `\\?\` and `\??\` paths: `.` and `..` are refused (Windows does not resolve them there, so our reading could differ from the file system's). `\Device\...`, `GLOBALROOT`, volume-GUID paths and rootless `\dir` paths are invalid and therefore protected.
 - **D54** `$WINDOWS.~BT`, `$WINDOWS.~WS` and other `$*` root folders stay protected for now (fail closed). They are legitimate cleanup targets after a Windows upgrade; that will be done as an explicit, narrow rule exception in B4b, not by loosening protection.
 
+## Phase B3 (attribution)
+- **D55** Q1-Q9 all taken at the recommended defaults: pure library function; name matches are exact after normalization (no substrings); vendor folders get an owner of their own with members keeping theirs; ties are `ambiguous` with no owner; Windows areas belong to the built-in owner "Windows".
+- **D56** Each byte of the scan is counted in exactly one bucket (an owner, `shared`, or `unattributed`); `footprint` is shown separately and is not additive. Property-tested.
+- **D57** Names shorter than 4 normalized characters never match by name (only by registered install folder). Why: `Go`, `Git`-like names would claim too much.
+- **D58** Ambiguity margin: claims within fewer than 10 strength points of the best are treated as a tie.
+- **D59** First slice of B3 delivered: install-folder, main-program-folder, Windows-area, name-match and publisher-folder evidence, totals, `dc attrib` and `--explain`. Executable discovery (N15) and MSI publisher matching are the next slice (N30, N31).
+- **D60** Slice 2: programs inside folders are identified from their version resource (read-only, never run). Budget: 3 programs per folder, depth 4, 3000 in total. An app with a folder gets a `ProgramIdentity` finding when product/description matches its name. Apps with no folder (MSI): one match gives the app (low confidence); several components of one publisher give the *publisher* (low confidence); anything else stays unowned. Company name alone never creates an owner.
+- **D61** `dc attrib` reads version info on Windows by default; on other systems it is skipped.
+
 ## Known limitations (accepted on purpose)
 - Catalog-signed Windows files report `no_embedded_signature` in B2 (D24, D35).
 - Volumes mounted on folders may use the wrong cluster size; falls back to the 512-byte rule (D10).

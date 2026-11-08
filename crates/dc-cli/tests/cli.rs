@@ -317,3 +317,74 @@ fn protected_fails_closed_on_odd_paths_and_lists_the_table() {
     assert!(text(&out.stdout).contains("windows_dir"));
     assert!(!dc(&["protected"]).status.success());
 }
+
+#[test]
+fn attrib_reports_owners_and_explains_a_path() {
+    use dc_winmeta::{build_snapshot, FakeSource, RawUninstallEntry, RegistrySource};
+
+    let (dir, tree, _manifest) = fixture();
+    let app_dir = std::fs::read_dir(&tree)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.is_dir())
+        .unwrap();
+    let app_dir = std::path::absolute(app_dir).unwrap();
+    let mut fake = FakeSource::new();
+    fake.entries = vec![RawUninstallEntry {
+        key: "demo".into(),
+        source: Some(RegistrySource::User),
+        display_name: Some("Demo App".into()),
+        ..RawUninstallEntry::default()
+    }];
+    let mut apps = build_snapshot(&fake);
+    apps.apps[0].install_folder = Some(app_dir.display().to_string());
+    let snapshot = dir.path().join("apps.json");
+    std::fs::write(&snapshot, serde_json::to_string(&apps).unwrap()).unwrap();
+    let scan = dir.path().join("scan.json");
+    let made = dc(&[
+        "scan",
+        tree.to_str().unwrap(),
+        "--out",
+        scan.to_str().unwrap(),
+    ]);
+    assert!(made.status.success());
+
+    let out = dc(&[
+        "attrib",
+        scan.to_str().unwrap(),
+        "--apps",
+        snapshot.to_str().unwrap(),
+    ]);
+    let shown = text(&out.stdout);
+    assert!(out.status.success(), "{shown}{}", text(&out.stderr));
+    assert!(
+        shown.contains("Demo App") && shown.contains("not permission"),
+        "{shown}"
+    );
+
+    let saved = dir.path().join("attrib.json");
+    let args = [
+        "attrib",
+        scan.to_str().unwrap(),
+        "--apps",
+        snapshot.to_str().unwrap(),
+        "--out",
+        saved.to_str().unwrap(),
+    ];
+    assert!(dc(&args).status.success());
+    assert!(!dc(&args).status.success(), "must not overwrite");
+
+    let explained = dc(&[
+        "attrib",
+        scan.to_str().unwrap(),
+        "--apps",
+        snapshot.to_str().unwrap(),
+        "--explain",
+        &app_dir.display().to_string(),
+    ]);
+    let shown = text(&explained.stdout);
+    assert!(
+        shown.contains("owner     Demo App") && shown.contains("registered install folder"),
+        "{shown}"
+    );
+}

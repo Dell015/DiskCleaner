@@ -1,7 +1,7 @@
 //! The `dc` command-line tool.
 //!
 //! Commands: `dc scan` (read-only scan of a folder to a JSON file), `dc top` (reports from a
-//! saved scan), `dc protected` (is this path protected?) and `dc apps` (installed programs, Windows only). Nothing here deletes, moves or modifies scanned files.
+//! saved scan), `dc attrib` (who owns which folders), `dc protected` (is this path protected?) and `dc apps` (installed programs, Windows only). Nothing here deletes, moves or modifies scanned files.
 //!
 //! Exit codes: 0 = ok, 1 = error, 2 = the scan finished but was partial (unreadable entries
 //! or cancelled).
@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 mod apps_cmd;
+mod attrib_cmd;
 mod protected_cmd;
 mod scan_cmd;
 mod size;
@@ -68,6 +69,23 @@ enum Command {
         /// Check the digital signature of each app's main program (offline, slower).
         #[arg(long, conflicts_with = "from")]
         verify_signatures: bool,
+    },
+    /// Work out which app owns which folders in a saved scan (read-only).
+    Attrib {
+        /// A JSON file written by `dc scan`.
+        scan: PathBuf,
+        /// A snapshot written by `dc apps --out`.
+        #[arg(long)]
+        apps: PathBuf,
+        /// Also save the full result as JSON. Must not exist yet (it is never overwritten).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// How many rows to show.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        /// Explain the ownership of one path that is in the scan.
+        #[arg(long, value_name = "PATH")]
+        explain: Option<String>,
     },
     /// Check whether paths are protected (read-only). "Not protected" does not mean safe.
     #[command(group(ArgGroup::new("what").required(true).args(["paths", "list"])))]
@@ -131,6 +149,19 @@ fn run() -> Result<ExitCode> {
             from,
             include_hidden,
             verify_signatures,
+        }),
+        Command::Attrib {
+            scan,
+            apps,
+            out,
+            limit,
+            explain,
+        } => attrib_cmd::run(&attrib_cmd::AttribArgs {
+            scan,
+            apps,
+            out,
+            limit,
+            explain,
         }),
         Command::Protected { paths, list } => protected_cmd::run(&paths, list),
         Command::Top {

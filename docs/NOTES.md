@@ -44,3 +44,15 @@ Status: `open` = needs action, `watch` = keep an eye on it, `done` = resolved.
 - Does every code path that reads untrusted text (registry, shortcut bytes, version strings) avoid panics and path tricks?
 - Is there any place where an unknown owner or missing data could lead to a "safe" classification?
 - Are all Windows-only `unsafe` blocks justified and closed correctly (registry handles, COM-allocated strings, version blocks)?
+| N30 | partly done | B3 slice 1 | Executable discovery inside install folders (the N15 fix) and its `ExeInfoSource` are not built yet. `main_exe` still comes only from icons and shortcuts. | B3 slice 2 |
+| N31 | partly done | B3 slice 1 | MSI apps without an install folder are not matched yet (no `publisher_match` rule). | B3 slice 2 |
+| N32 | open | B3 slice 1 | Apps whose name is under 4 letters (Git, Go, 7-Zip -> "zip") get no data-folder name matches. Their install folder is still labelled. | Revisit with publisher agreement |
+| N33 | open | B3 slice 1 | A folder named like a publisher becomes a vendor owner even when it holds only one app; the design said two or more. Harmless but may add noise. | Review on the real run |
+| N34 | open | B3 slice 1 | Name matching compares every candidate folder with every app (folders x apps). Fine for hundreds of each; measure on a big scan. | Benchmark before B5 |
+| N35 | open | B3 real run | On `C:\Program Files` (23.55 GiB): 47 app folders owned; 5.25 GiB had no owner, mostly `dotnet` (2.2 GiB, MSI components with no folder: N31), `WSL` (Store package), `ReasonLabs`, `Common Files`. Slice 2 should cover dotnet via MSI/publisher info and add a small, reviewed table of well-known shared folders. | B3 slice 2 |
+| N36 | open | B3 real run | `LGHUB.old` (206 MiB) sits next to Logitech G HUB with no owner: a typical leftover. | B5 leftovers: `*.old` siblings of owned folders |
+| N37 | open | B3 real run | An app registration can point inside another app's data (Google Drive's web-app entry lives in Chrome's `User Data`). The folder is attributed to that entry. Correct by evidence, but B5 must not treat it as a normal app. | B5 |
+| N38 | open | B3 slice 2 | Programs are probed only in direct children of Program Files, Common Files and ProgramData, and in folders of apps without a known main program. AppData programs (Discord, Figma) rely on the registry install folder. Signatures of discovered programs are not checked yet. | Decide after the real run |
+| N39 | fixed | B3 slice 2 run | fixture-gen tests named their folders by process id only; Windows reuses ids, so a leftover folder from an old run made 4 tests fail with OutDirNotEmpty. Names now include the clock. Old `target\tmp\fg-*` folders can be deleted. | none |
+| N40 | open | B3 slice 2 run | After slice 2, only 141 MiB of Program Files has no owner (was 5.25 GiB), but the big gain went to the publisher "Microsoft" (2.87 GiB, low confidence). Review with `--explain` that dotnet and Reference Assemblies belong there; consider a separate ".NET" group owner. | Review |
+
