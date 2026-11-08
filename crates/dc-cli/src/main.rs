@@ -10,7 +10,9 @@
 
 mod apps_cmd;
 mod attrib_cmd;
+mod classify_cmd;
 mod protected_cmd;
+mod rules_cmd;
 mod scan_cmd;
 mod size;
 mod top_cmd;
@@ -86,6 +88,33 @@ enum Command {
         /// Explain the ownership of one path that is in the scan.
         #[arg(long, value_name = "PATH")]
         explain: Option<String>,
+    },
+    /// Suggest what could be cleaned up in a saved scan, by rule (read-only; deletes nothing).
+    Classify {
+        /// A JSON file written by `dc scan`.
+        scan: PathBuf,
+        /// A snapshot written by `dc apps --out`; adds the owner of each folder to the list.
+        #[arg(long)]
+        apps: Option<PathBuf>,
+        /// Which candidates to show.
+        #[arg(long, value_enum, default_value = "all")]
+        risk: classify_cmd::RiskFilter,
+        /// How many rows to show.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        /// Explain the classification of one path that is in the scan.
+        #[arg(long, value_name = "PATH")]
+        explain: Option<String>,
+    },
+    /// Show or check cleanup rule packs (read-only).
+    #[command(group(ArgGroup::new("what").required(true).args(["list", "check"])))]
+    Rules {
+        /// Print the built-in rule pack.
+        #[arg(long)]
+        list: bool,
+        /// Check a rule pack file and report every problem.
+        #[arg(long, value_name = "FILE")]
+        check: Option<PathBuf>,
     },
     /// Check whether paths are protected (read-only). "Not protected" does not mean safe.
     #[command(group(ArgGroup::new("what").required(true).args(["paths", "list"])))]
@@ -163,6 +192,20 @@ fn run() -> Result<ExitCode> {
             limit,
             explain,
         }),
+        Command::Classify {
+            scan,
+            apps,
+            risk,
+            limit,
+            explain,
+        } => classify_cmd::run(&classify_cmd::ClassifyArgs {
+            scan,
+            apps,
+            risk,
+            limit,
+            explain,
+        }),
+        Command::Rules { list, check } => rules_cmd::run(list, check.as_deref()),
         Command::Protected { paths, list } => protected_cmd::run(&paths, list),
         Command::Top {
             file,

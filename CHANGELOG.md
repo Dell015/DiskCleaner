@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+### Phase B4b - Rules and classification
+- `dc-rules`: TOML rule packs (validated on load, examples required), built-in pack v1 (about 45 rules), classifier (protected list first, highest risk wins, unknown = DontTouch), candidate finder with folder checks and a second check against the real file system.
+- `dc-protected`: `$WINDOWS.~BT` / `$WINDOWS.~WS` are no longer protected (decision D63); `Pattern` is public.
+- `dc-cli`: `dc classify scan.json [--apps] [--risk] [--limit] [--explain PATH]`, `dc rules --list|--check FILE`.
 ### Phase B3 - Attribution (slice 1)
 - `dc-attrib`: who owns which folder, with evidence and confidence. Install folder, main-program folder, Windows areas, exact-name data folders, publisher (vendor) folders; ties are ambiguous. Every byte lands in one bucket (owner / shared / unattributed).
 - `dc-cli`: `dc attrib scan.json --apps apps.json [--out] [--limit] [--explain PATH]`.

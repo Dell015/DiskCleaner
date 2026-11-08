@@ -55,4 +55,9 @@ Status: `open` = needs action, `watch` = keep an eye on it, `done` = resolved.
 | N38 | open | B3 slice 2 | Programs are probed only in direct children of Program Files, Common Files and ProgramData, and in folders of apps without a known main program. AppData programs (Discord, Figma) rely on the registry install folder. Signatures of discovered programs are not checked yet. | Decide after the real run |
 | N39 | fixed | B3 slice 2 run | fixture-gen tests named their folders by process id only; Windows reuses ids, so a leftover folder from an old run made 4 tests fail with OutDirNotEmpty. Names now include the clock. Old `target\tmp\fg-*` folders can be deleted. | none |
 | N40 | open | B3 slice 2 run | After slice 2, only 141 MiB of Program Files has no owner (was 5.25 GiB), but the big gain went to the publisher "Microsoft" (2.87 GiB, low confidence). Review with `--explain` that dotnet and Reference Assemblies belong there; consider a separate ".NET" group owner. | Review |
+| N41 | open | B4b | `classify` walks every node and runs the protected check plus about 45 rules on each; fine on test scans, not yet measured on a whole-drive scan (millions of nodes). Possible speed-up: skip the descent into folders that are protected as a whole. | Measure on the real machine |
+| N42 | open | B4b | No rule for `__pycache__`, `node_modules\.cache`, `target` folders of build tools (need a pattern for "anywhere under"). | Later: any-depth rules with extra guards |
+| N43 | open | B4b | Rules use only paths and ages. A cache is not checked for being in use right now (running browser). | B9 quarantine must check open files |
+| N44 | open | B4b | The built-in pack is a first, conservative draft written without a security review. Every Safe/ProbablySafe rule must be reviewed in the final QA pass. | Final QA |
+| N45 | open | B4b | `cargo deny` was not run on the new `toml` dependency tree in my environment. | Run `cargo deny check` / watch CI |
 

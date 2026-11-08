@@ -388,3 +388,69 @@ fn attrib_reports_owners_and_explains_a_path() {
         "{shown}"
     );
 }
+
+#[test]
+fn rules_list_and_check_work() {
+    let listed = text(&dc(&["rules", "--list"]).stdout);
+    assert!(
+        listed.contains("chromium-cache") && listed.contains("never"),
+        "{listed}"
+    );
+
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let good = dir.path().join("good.toml");
+    std::fs::write(
+        &good,
+        "schema = 1\n[[rule]]\nid = \"demo-cache\"\nrisk = \"Safe\"\nreason = \"demo\"\nsummary = \"Demo\"\npath = '*:\\Users\\*\\AppData\\Local\\Demo\\Cache'\nexamples_match = ['C:\\Users\\bob\\AppData\\Local\\Demo\\Cache\\a']\nexamples_no_match = ['C:\\Users\\bob\\AppData\\Local\\Demo\\Data\\a']\n",
+    )
+    .unwrap();
+    let ok = dc(&["rules", "--check", good.to_str().unwrap()]);
+    assert!(ok.status.success(), "{}", text(&ok.stdout));
+    assert!(text(&ok.stdout).contains("ok: 1 rules"));
+
+    let bad = dir.path().join("bad.toml");
+    std::fs::write(&bad, "schema = 1\n[[rule]]\nid = \"x\"\nrisk = \"Safe\"\nreason = \"r\"\nsummary = \"s\"\npath = '*:\\*'\n").unwrap();
+    let out = dc(&["rules", "--check", bad.to_str().unwrap()]);
+    assert!(!out.status.success());
+    assert!(
+        text(&out.stdout).contains("too broad"),
+        "{}",
+        text(&out.stdout)
+    );
+}
+
+#[test]
+fn classify_runs_on_a_scan_and_never_offers_unknown_things() {
+    let (dir, tree, _manifest) = fixture();
+    let scan = dir.path().join("scan.json");
+    assert!(dc(&[
+        "scan",
+        tree.to_str().unwrap(),
+        "--out",
+        scan.to_str().unwrap()
+    ])
+    .status
+    .success());
+    let out = dc(&["classify", scan.to_str().unwrap()]);
+    let shown = text(&out.stdout);
+    assert!(out.status.success(), "{shown}{}", text(&out.stderr));
+    assert!(
+        shown.contains("Nothing has been or will be deleted"),
+        "{shown}"
+    );
+    // Generated fixture files match no rule, so nothing is offered.
+    assert!(
+        shown.contains("safe      ") && shown.contains("0 items"),
+        "{shown}"
+    );
+    let explained = text(
+        &dc(&[
+            "classify",
+            scan.to_str().unwrap(),
+            "--explain",
+            &tree.display().to_string(),
+        ])
+        .stdout,
+    );
+    assert!(explained.contains("risk      DontTouch"), "{explained}");
+}

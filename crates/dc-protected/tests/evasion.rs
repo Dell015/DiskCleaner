@@ -40,7 +40,9 @@ fn plain_protected_paths() {
         r"C:\pagefile.sys",
         r"C:\hiberfil.sys",
         r"C:\$Mft",
-        r"C:\$WINDOWS.~BT\Sources",
+        r"C:\$Boot",
+        r"C:\$SysReset\x",
+        r"C:\$Extend\$RmMetadata",
         r"C:\",
         r"C:\Users",
         r"C:\Users\bob",
@@ -159,4 +161,27 @@ fn extras_only_add_protection() {
     assert!(more.check(r"C:\Windows", &FakeResolver::new()).protected);
     let bad = more.with_extra("relative", "x", "y");
     assert_eq!(bad.skipped_extras(), ["relative"]);
+}
+
+#[test]
+fn upgrade_leftovers_are_not_protected_but_other_dollar_names_are() {
+    for p in [
+        r"C:\$WINDOWS.~BT",
+        r"C:\$WINDOWS.~BT\Sources\a",
+        r"D:\$Windows.~WS\x",
+        r"C:\$windows.~bt.\x",
+    ] {
+        assert!(!protected(p), "should be left to the rules: {p}");
+    }
+    for p in [
+        r"C:\$MFT",
+        r"C:\$Recycle.Bin",
+        r"C:\$Windows.~BTX",
+        r"C:\$WINDOWS.~BT.old",
+        r"C:\x\$WINDOWS.~BT",
+    ] {
+        // The last two are not the exact leftovers folder names; anything else with `$` stays closed.
+        let expect = !p.ends_with(r"x\$WINDOWS.~BT");
+        assert_eq!(protected(p), expect, "{p}");
+    }
 }

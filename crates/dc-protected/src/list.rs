@@ -289,6 +289,11 @@ pub const BUILTIN: &[Row] = &[
     ),
 ];
 
+/// Drive-root folders that start with `$` but are left over from a Windows upgrade. They are
+/// not protected by the `$*` entry so that the rules engine can classify them (decision D54).
+/// Every other `$` name stays protected.
+pub const UPGRADE_LEFTOVERS: [&str; 2] = ["$windows.~bt", "$windows.~ws"];
+
 #[derive(Debug, Clone)]
 pub(crate) struct Entry {
     pub pattern: Pattern,
@@ -353,6 +358,14 @@ impl ProtectedList {
     pub(crate) fn matches(&self, path: &NormalPath) -> Vec<Reason> {
         let mut found = Vec::new();
         for entry in &self.entries {
+            if entry.reason.id == "system_metadata"
+                && path
+                    .parts
+                    .first()
+                    .is_some_and(|p| UPGRADE_LEFTOVERS.contains(&p.as_str()))
+            {
+                continue;
+            }
             let hit = match entry.scope {
                 Scope::Subtree => entry.pattern.matches_subtree(path),
                 Scope::SelfOnly => entry.pattern.matches_exactly(path),

@@ -1,0 +1,378 @@
+# DiskCleaner built-in rule pack v1.
+# Every rule needs examples. "Safe" means "regenerates by itself"; it never means "deleted".
+# The protected list (dc-protected) always wins over anything here.
+schema = 1
+
+# ---------------------------------------------------------------- Safe: temporary files and caches
+
+[[rule]]
+id = "user-temp-files"
+risk = "Safe"
+reason = "temp_files"
+summary = "Temporary files in your user Temp folder, older than 7 days"
+path = '*:\Users\*\AppData\Local\Temp'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\Temp\old.tmp', 'D:\Users\amy\AppData\Local\Temp\x\y.bin']
+examples_no_match = ['C:\Users\bob\AppData\Local\Tempo\x', 'C:\Users\bob\Documents\Temp\x']
+
+[[rule]]
+id = "crash-dumps"
+risk = "Safe"
+reason = "crash_dumps"
+summary = "Crash dump files of programs, older than 7 days"
+path = '*:\Users\*\AppData\Local\CrashDumps'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\CrashDumps\app.exe.1234.dmp']
+examples_no_match = ['C:\Users\bob\AppData\Local\CrashDumpsX\a.dmp']
+
+[[rule]]
+id = "error-reports"
+risk = "Safe"
+reason = "error_reports"
+summary = "Windows Error Reporting archives of your user, older than 7 days"
+path = '*:\Users\*\AppData\Local\Microsoft\Windows\WER\ReportArchive'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\WER\ReportArchive\Kernel_1\Report.wer']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\WER\Other\a']
+
+[[rule]]
+id = "thumbnail-cache"
+risk = "Safe"
+reason = "thumbnail_cache"
+summary = "Explorer thumbnail cache; Windows rebuilds it"
+path = '*:\Users\*\AppData\Local\Microsoft\Windows\Explorer\thumbcache_*.db'
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\Explorer\thumbcache_256.db']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\Explorer\settings.ini']
+
+[[rule]]
+id = "icon-cache"
+risk = "Safe"
+reason = "thumbnail_cache"
+summary = "Explorer icon cache; Windows rebuilds it"
+path = '*:\Users\*\AppData\Local\Microsoft\Windows\Explorer\iconcache_*.db'
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\Explorer\iconcache_48.db']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\Explorer\other.db']
+
+[[rule]]
+id = "inet-cache"
+risk = "Safe"
+reason = "web_cache"
+summary = "Windows web content cache, older than 7 days"
+path = '*:\Users\*\AppData\Local\Microsoft\Windows\INetCache'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\INetCache\IE\a.gif']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\Windows\History\a']
+
+[[rule]]
+id = "d3d-shader-cache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "DirectX shader cache; rebuilt by games and apps"
+path = '*:\Users\*\AppData\Local\D3DSCache'
+examples_match = ['C:\Users\bob\AppData\Local\D3DSCache\abc\def.idx']
+examples_no_match = ['C:\Users\bob\AppData\Local\D3DSCacheOld\a']
+
+[[rule]]
+id = "nvidia-dx-cache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "NVIDIA DirectX shader cache; rebuilt automatically"
+path = '*:\Users\*\AppData\Local\NVIDIA\DXCache'
+examples_match = ['C:\Users\bob\AppData\Local\NVIDIA\DXCache\a.bin']
+examples_no_match = ['C:\Users\bob\AppData\Local\NVIDIA\NvBackend\a']
+
+[[rule]]
+id = "nvidia-gl-cache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "NVIDIA OpenGL shader cache; rebuilt automatically"
+path = '*:\Users\*\AppData\Local\NVIDIA\GLCache'
+examples_match = ['C:\Users\bob\AppData\Local\NVIDIA\GLCache\a\b.bin']
+examples_no_match = ['C:\Users\bob\AppData\Local\NVIDIA\Other\a']
+
+[[rule]]
+id = "amd-dx-cache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "AMD shader cache; rebuilt automatically"
+path = '*:\Users\*\AppData\Local\AMD\DxCache'
+examples_match = ['C:\Users\bob\AppData\Local\AMD\DxCache\a.bin']
+examples_no_match = ['C:\Users\bob\AppData\Local\AMD\Settings\a']
+
+[[rule]]
+id = "chromium-cache"
+risk = "Safe"
+reason = "browser_cache"
+summary = "Chromium browser cache (Chrome, Edge, Brave and others); the browser rebuilds it"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Cache\Cache_Data\f_000001', 'C:\Users\bob\AppData\Local\BraveSoftware\Brave-Browser\User Data\Profile 1\Cache\x']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Login Data', 'C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Bookmarks']
+
+[[rule]]
+id = "chromium-code-cache"
+risk = "Safe"
+reason = "browser_cache"
+summary = "Chromium compiled-code cache; the browser rebuilds it"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\Code Cache'
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\Edge\User Data\Default\Code Cache\js\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\Edge\User Data\Default\Cookies']
+
+[[rule]]
+id = "chromium-gpu-cache"
+risk = "Safe"
+reason = "browser_cache"
+summary = "Chromium GPU shader cache; the browser rebuilds it"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\GPUCache'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\GPUCache\data_0']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Preferences']
+
+[[rule]]
+id = "firefox-cache"
+risk = "Safe"
+reason = "browser_cache"
+summary = "Firefox disk cache; Firefox rebuilds it"
+path = '*:\Users\*\AppData\Local\Mozilla\Firefox\Profiles\*\cache2'
+examples_match = ['C:\Users\bob\AppData\Local\Mozilla\Firefox\Profiles\abc.default\cache2\entries\A1']
+examples_no_match = ['C:\Users\bob\AppData\Local\Mozilla\Firefox\Profiles\abc.default\places.sqlite']
+
+[[rule]]
+id = "pip-cache"
+risk = "Safe"
+reason = "package_cache"
+summary = "pip download cache; pip downloads again when needed"
+path = '*:\Users\*\AppData\Local\pip\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\pip\Cache\http\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\pip\config.ini']
+
+[[rule]]
+id = "npm-cache"
+risk = "Safe"
+reason = "package_cache"
+summary = "npm download cache; npm downloads again when needed"
+path = '*:\Users\*\AppData\Local\npm-cache'
+examples_match = ['C:\Users\bob\AppData\Local\npm-cache\_cacache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\npm\node_modules\a']
+
+[[rule]]
+id = "yarn-cache"
+risk = "Safe"
+reason = "package_cache"
+summary = "Yarn download cache; Yarn downloads again when needed"
+path = '*:\Users\*\AppData\Local\Yarn\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\Yarn\Cache\v6\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\Yarn\Data\a']
+
+# ---------------------------------------------------------------- ProbablySafe: look first
+
+[[rule]]
+id = "windows-old"
+risk = "ProbablySafe"
+reason = "windows_upgrade_leftover"
+summary = "Previous Windows installation kept for rolling back; removing it ends the ability to roll back"
+path = '*:\Windows.old'
+examples_match = ['C:\Windows.old\Windows\System32\x.dll', 'C:\Windows.old']
+examples_no_match = ['C:\Windows\a', 'C:\Windows.oldest\a']
+
+[[rule]]
+id = "windows-upgrade-bt"
+risk = "ProbablySafe"
+reason = "windows_upgrade_leftover"
+summary = "Windows upgrade staging files (the installer normally removes them itself)"
+path = '*:\$WINDOWS.~BT'
+examples_match = ['C:\$WINDOWS.~BT\Sources\a.dll']
+examples_no_match = ['C:\$WINDOWS.~BTX\a']
+
+[[rule]]
+id = "windows-upgrade-ws"
+risk = "ProbablySafe"
+reason = "windows_upgrade_leftover"
+summary = "Windows upgrade download files (the installer normally removes them itself)"
+path = '*:\$WINDOWS.~WS'
+examples_match = ['C:\$WINDOWS.~WS\Sources\a.esd']
+examples_no_match = ['C:\$WINDOWS.~WSX\a']
+
+[[rule]]
+id = "nuget-packages"
+risk = "ProbablySafe"
+reason = "package_cache"
+summary = "NuGet package cache; projects download the packages again, which takes time"
+path = '*:\Users\*\.nuget\packages'
+examples_match = ['C:\Users\bob\.nuget\packages\newtonsoft.json\13.0.1\a.dll']
+examples_no_match = ['C:\Users\bob\.nuget\NuGet.Config']
+
+[[rule]]
+id = "gradle-caches"
+risk = "ProbablySafe"
+reason = "package_cache"
+summary = "Gradle dependency cache; Gradle downloads again, which takes time"
+path = '*:\Users\*\.gradle\caches'
+examples_match = ['C:\Users\bob\.gradle\caches\modules-2\a']
+examples_no_match = ['C:\Users\bob\.gradle\gradle.properties']
+
+[[rule]]
+id = "cargo-registry-cache"
+risk = "ProbablySafe"
+reason = "package_cache"
+summary = "Cargo downloaded crate archives; Cargo downloads them again when needed"
+path = '*:\Users\*\.cargo\registry\cache'
+examples_match = ['C:\Users\bob\.cargo\registry\cache\index.crates.io-1\serde-1.0.0.crate']
+examples_no_match = ['C:\Users\bob\.cargo\config.toml']
+
+[[rule]]
+id = "electron-app-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Cache folder of an app; usually rebuilt by the app, but check which app it is"
+path = '*:\Users\*\AppData\Roaming\*\Cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\discord\Cache\Cache_Data\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\discord\Local Storage\a']
+
+[[rule]]
+id = "electron-app-code-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Compiled-code cache of an app; usually rebuilt by the app"
+path = '*:\Users\*\AppData\Roaming\*\Code Cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\discord\Code Cache\js\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\discord\Preferences']
+
+[[rule]]
+id = "electron-app-gpu-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "GPU cache of an app; usually rebuilt by the app"
+path = '*:\Users\*\AppData\Roaming\*\GPUCache'
+examples_match = ['C:\Users\bob\AppData\Roaming\discord\GPUCache\data_0']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\discord\settings.json']
+
+[[rule]]
+id = "local-app-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Cache folder of an app; usually rebuilt by the app, but check which app it is"
+path = '*:\Users\*\AppData\Local\*\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\SomeApp\Cache\a.bin']
+examples_no_match = ['C:\Users\bob\AppData\Local\SomeApp\Data\a.bin']
+
+[[rule]]
+id = "local-app-logs"
+risk = "ProbablySafe"
+reason = "old_logs"
+summary = "Log files of an app, older than 30 days"
+path = '*:\Users\*\AppData\Local\*\Logs'
+min_age_days = 30
+examples_match = ['C:\Users\bob\AppData\Local\SomeApp\Logs\2024-01-01.log']
+examples_no_match = ['C:\Users\bob\AppData\Local\SomeApp\Settings\a.log']
+
+[[rule]]
+id = "old-installers-exe"
+risk = "ProbablySafe"
+reason = "old_installers"
+summary = "Downloaded installer, older than 90 days; the program is probably installed already"
+path = '*:\Users\*\Downloads\*.exe'
+min_age_days = 90
+examples_match = ['C:\Users\bob\Downloads\setup.exe']
+examples_no_match = ['C:\Users\bob\Downloads\notes.txt', 'C:\Users\bob\Desktop\setup.exe']
+
+[[rule]]
+id = "old-installers-msi"
+risk = "ProbablySafe"
+reason = "old_installers"
+summary = "Downloaded installer, older than 90 days; the program is probably installed already"
+path = '*:\Users\*\Downloads\*.msi'
+min_age_days = 90
+examples_match = ['C:\Users\bob\Downloads\tool.msi']
+examples_no_match = ['C:\Users\bob\Downloads\tool.zip']
+
+# ---------------------------------------------------------------- DontTouch: say it out loud
+# These win over the broad cache rules above (the highest risk always wins).
+
+[[rule]]
+id = "browser-logins"
+risk = "DontTouch"
+reason = "browser_profile_data"
+summary = "Saved logins in a browser profile"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\Login Data*'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Login Data']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Cache\a']
+
+[[rule]]
+id = "browser-cookies"
+risk = "DontTouch"
+reason = "browser_profile_data"
+summary = "Cookies of a browser profile (deleting them signs you out everywhere)"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\Cookies*'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Cookies']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\GPUCache\a']
+
+[[rule]]
+id = "browser-web-data"
+risk = "DontTouch"
+reason = "browser_profile_data"
+summary = "Autofill and payment data of a browser profile"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\Web Data*'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Web Data']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Code Cache\a']
+
+[[rule]]
+id = "browser-local-storage"
+risk = "DontTouch"
+reason = "browser_profile_data"
+summary = "Site data of a browser profile (Local Storage, IndexedDB)"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\Local Storage'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Local Storage\leveldb\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Cache\a']
+
+[[rule]]
+id = "browser-indexeddb"
+risk = "DontTouch"
+reason = "browser_profile_data"
+summary = "Site data of a browser profile (Local Storage, IndexedDB)"
+path = '*:\Users\*\AppData\Local\*\*\User Data\*\IndexedDB'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\IndexedDB\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\GPUCache\a']
+
+[[rule]]
+id = "crypto-wallets"
+risk = "DontTouch"
+reason = "wallet_or_vault"
+summary = "Cryptocurrency wallet data; losing it can mean losing money for good"
+path = '*:\Users\*\AppData\Roaming\Exodus'
+examples_match = ['C:\Users\bob\AppData\Roaming\Exodus\exodus.wallet\seed.seco']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\ExodusX\a']
+
+[[rule]]
+id = "electrum-wallets"
+risk = "DontTouch"
+reason = "wallet_or_vault"
+summary = "Cryptocurrency wallet data; losing it can mean losing money for good"
+path = '*:\Users\*\AppData\Roaming\Electrum'
+examples_match = ['C:\Users\bob\AppData\Roaming\Electrum\wallets\default_wallet']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\ElectrumX\a']
+
+[[rule]]
+id = "bitcoin-wallet"
+risk = "DontTouch"
+reason = "wallet_or_vault"
+summary = "Cryptocurrency wallet data; losing it can mean losing money for good"
+path = '*:\Users\*\AppData\Roaming\Bitcoin'
+examples_match = ['C:\Users\bob\AppData\Roaming\Bitcoin\wallet.dat']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\BitcoinX\a']
+
+[[rule]]
+id = "password-manager-keepass"
+risk = "DontTouch"
+reason = "wallet_or_vault"
+summary = "Password manager data"
+path = '*:\Users\*\AppData\Roaming\KeePass'
+examples_match = ['C:\Users\bob\AppData\Roaming\KeePass\KeePass.config.xml']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\KeePassX\a']
+
+[[rule]]
+id = "password-manager-bitwarden"
+risk = "DontTouch"
+reason = "wallet_or_vault"
+summary = "Password manager data (including its cache)"
+path = '*:\Users\*\AppData\Roaming\Bitwarden'
+examples_match = ['C:\Users\bob\AppData\Roaming\Bitwarden\Cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\BitwardenX\a']

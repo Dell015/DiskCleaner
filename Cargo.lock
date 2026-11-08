@@ -399,6 +399,7 @@ dependencies = [
  "dc-attrib",
  "dc-core",
  "dc-protected",
+ "dc-rules",
  "dc-scan",
  "dc-winmeta",
  "fixture-gen",
@@ -442,6 +443,13 @@ version = "0.0.0"
 [[package]]
 name = "dc-rules"
 version = "0.0.0"
+dependencies = [
+ "dc-core",
+ "dc-protected",
+ "proptest",
+ "serde",
+ "toml",
+]
 
 [[package]]
 name = "dc-scan"
@@ -876,6 +884,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_spanned"
+version = "1.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c187e0a369471c550af028cba56d4f4fa2a489ad28151ae95a4d340a2a8b782"
+dependencies = [
+ "serde_core",
+]
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -956,6 +973,19 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "toml"
+version = "1.2.1+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5755c51863cdac711f1956baf8eb9588e060755f7d3c4c979e70ea1e1f32cd7"
+dependencies = [
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_parser",
+ "winnow",
 ]
 
 [[package]]

@@ -18,6 +18,7 @@ clap.workspace = true
 dc-attrib = { path = "../dc-attrib" }
 dc-core = { path = "../dc-core" }
 dc-protected = { path = "../dc-protected" }
+dc-rules = { path = "../dc-rules" }
 dc-scan = { path = "../dc-scan" }
 dc-winmeta = { path = "../dc-winmeta" }
 serde_json.workspace = true

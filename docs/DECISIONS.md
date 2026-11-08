@@ -74,6 +74,14 @@ Format: **ID - decision** / why / where it is enforced.
 - **D60** Slice 2: programs inside folders are identified from their version resource (read-only, never run). Budget: 3 programs per folder, depth 4, 3000 in total. An app with a folder gets a `ProgramIdentity` finding when product/description matches its name. Apps with no folder (MSI): one match gives the app (low confidence); several components of one publisher give the *publisher* (low confidence); anything else stays unowned. Company name alone never creates an owner.
 - **D61** `dc attrib` reads version info on Windows by default; on other systems it is skipped.
 
+## Phase B4b (rules and classification)
+- **D62** Q1-Q11 at the recommended defaults: TOML packs, built-in pack only (no user packs yet), highest risk wins, unknown = DontTouch, protected list first, candidate folders containing anything special are refused, Safe only for self-regenerating things, Windows internals stay protected, upgrade leftovers ProbablySafe, ages as of scan end, `toml` crate pinned.
+- **D63** The D54 change: `$WINDOWS.~BT` and `$WINDOWS.~WS` (exact names, drive root) are exempt from the `$*` protection in `dc-protected`; every other `$` name stays protected. Packs still cannot override the protected list.
+- **D64** A rule that makes something lenient (Safe/ProbablySafe) only applies when the typed path AND the resolved path both match; a DontTouch rule applies if either does. Links, cloud files and hardlinked files are never offered. Failed resolution = DontTouch.
+- **D65** Rule paths with wildcards need at least 3 named components; a path without wildcards is allowed at any depth (it names one place). Examples are mandatory and are checked on load.
+- **D66** `dc classify` measures ages as of the end of the scan (not "now") and double-checks candidates against the real file system (`verify`): links above a candidate, unresolvable or protected real locations move it to "refused".
+- **D67** Folder candidates that are refused can still leave ordinary files inside as "partial" candidates (the blocked parts are never included).
+
 ## Known limitations (accepted on purpose)
 - Catalog-signed Windows files report `no_embedded_signature` in B2 (D24, D35).
 - Volumes mounted on folders may use the wrong cluster size; falls back to the 512-byte rule (D10).

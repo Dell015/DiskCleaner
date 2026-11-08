@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use anyhow::Result;
 use dc_protected::{FsResolver, ProtectedList, BUILTIN};
 
-fn build_list() -> ProtectedList {
+pub fn build_list() -> ProtectedList {
     let list = ProtectedList::builtin();
     #[cfg(windows)]
     let list = {

@@ -61,6 +61,53 @@ impl Pattern {
         Some(Pattern { drive, segments })
     }
 
+    /// Number of components below the drive.
+    pub fn len(&self) -> usize {
+        self.segments.len()
+    }
+
+    /// True for a pattern with no components (the drive root).
+    pub fn is_empty(&self) -> bool {
+        self.segments.is_empty()
+    }
+
+    /// How many components are plain text (no wildcard).
+    pub fn literal_count(&self) -> usize {
+        self.segments
+            .iter()
+            .filter(|s| matches!(s, Segment::Literal(_)))
+            .count()
+    }
+
+    /// How many components name something: plain text, or a wildcard pattern with letters or
+    /// digits in it such as `*.exe` or `thumbcache_*.db`.
+    pub fn named_count(&self) -> usize {
+        self.segments
+            .iter()
+            .filter(|s| match s {
+                Segment::Literal(_) => true,
+                Segment::Glob(text) => text.chars().any(char::is_alphanumeric),
+                Segment::AnyOne => false,
+            })
+            .count()
+    }
+
+    /// True if any component (the drive does not count) contains a wildcard.
+    pub fn has_wildcard_segments(&self) -> bool {
+        self.segments
+            .iter()
+            .any(|s| !matches!(s, Segment::Literal(_)))
+    }
+
+    /// True if the last component is plain text or contains letters besides wildcards.
+    pub fn last_is_named(&self) -> bool {
+        match self.segments.last() {
+            Some(Segment::Literal(_)) => true,
+            Some(Segment::Glob(text)) => text.chars().any(char::is_alphanumeric),
+            _ => false,
+        }
+    }
+
     /// A pattern that matches one component name at any depth, on any drive (`.git`, `*.vhdx`).
     pub fn any_component(text: &str) -> Pattern {
         Pattern {

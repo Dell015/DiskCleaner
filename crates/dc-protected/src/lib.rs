@@ -15,7 +15,8 @@ mod pattern;
 mod resolve;
 mod verdict;
 
-pub use list::{ProtectedList, Row, Scope, BUILTIN};
+pub use list::{ProtectedList, Row, Scope, BUILTIN, UPGRADE_LEFTOVERS};
 pub use normalize::{normalize, Invalid, NormalPath};
+pub use pattern::Pattern;
 pub use resolve::{FakeResolver, FsResolver, PathResolver, Resolution};
 pub use verdict::{Reason, Verdict};
