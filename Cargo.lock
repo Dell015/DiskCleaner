@@ -450,6 +450,9 @@ dependencies = [
  "dc-core",
  "dc-scan",
  "fixture-gen",
+ "proptest",
+ "serde",
+ "serde_json",
  "tempfile",
  "windows-sys",
 ]

@@ -1,13 +1,14 @@
 //! The `dc` command-line tool.
 //!
-//! Phase B1 commands: `dc scan` (read-only scan of a folder to a JSON file) and `dc top`
-//! (reports from a saved scan). Nothing here deletes, moves or modifies scanned files.
+//! Commands: `dc scan` (read-only scan of a folder to a JSON file), `dc top` (reports from a
+//! saved scan) and `dc apps` (installed programs, Windows only). Nothing here deletes, moves or modifies scanned files.
 //!
 //! Exit codes: 0 = ok, 1 = error, 2 = the scan finished but was partial (unreadable entries
 //! or cancelled).
 
 #![forbid(unsafe_code)]
 
+mod apps_cmd;
 mod scan_cmd;
 mod size;
 mod top_cmd;
@@ -47,6 +48,18 @@ enum Command {
         /// Allow scanning a whole drive (e.g. C:\).
         #[arg(long)]
         i_know: bool,
+    },
+    /// List installed programs (reads the Windows registry; read-only).
+    Apps {
+        /// Also save the list as a JSON snapshot. Must not exist yet (it is never overwritten).
+        #[arg(long, conflicts_with = "from")]
+        out: Option<PathBuf>,
+        /// Show a saved snapshot instead of reading the registry (works on any system).
+        #[arg(long)]
+        from: Option<PathBuf>,
+        /// Also show updates, patches and entries without a name.
+        #[arg(long)]
+        include_hidden: bool,
     },
     /// Show a report from a saved scan.
     #[command(group(ArgGroup::new("report").required(true).args(["files", "dirs", "ext", "category", "oldest"])))]
@@ -88,6 +101,15 @@ fn run() -> Result<ExitCode> {
             max_depth,
             min_size,
             i_know,
+        }),
+        Command::Apps {
+            out,
+            from,
+            include_hidden,
+        } => apps_cmd::run(apps_cmd::AppsArgs {
+            out,
+            from,
+            include_hidden,
         }),
         Command::Top {
             file,

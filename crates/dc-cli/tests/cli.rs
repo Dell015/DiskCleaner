@@ -125,3 +125,77 @@ fn top_needs_a_report_flag_and_a_valid_file() {
         Some(1)
     );
 }
+
+fn sample_snapshot_file(dir: &std::path::Path) -> PathBuf {
+    use dc_winmeta::{build_snapshot, FakeSource, KnownFolder, RawUninstallEntry, RegistrySource};
+
+    let mut fake = FakeSource::new().with_existing(r"C:\Program Files\Good");
+    fake.folders = vec![KnownFolder {
+        name: "ProgramFiles".into(),
+        path: Some(r"C:\Program Files".into()),
+    }];
+    let entry = |key: &str, name: &str| RawUninstallEntry {
+        key: key.into(),
+        source: Some(RegistrySource::User),
+        display_name: Some(name.into()),
+        ..RawUninstallEntry::default()
+    };
+    let mut good = entry("Good", "Good App");
+    good.install_location = Some(r"C:\Program Files\Good".into());
+    good.publisher = Some("Good Inc".into());
+    let mut gone = entry("Gone", "Gone App");
+    gone.install_location = Some(r"C:\Program Files\Gone".into());
+    let mut patch = entry("KB1", "Patch For Good");
+    patch.parent_key_name = Some("Good".into());
+    fake.entries = vec![good, gone, patch];
+
+    let path = dir.join("apps.json");
+    std::fs::write(
+        &path,
+        serde_json::to_string(&build_snapshot(&fake)).unwrap(),
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn apps_shows_a_saved_snapshot_and_hides_updates_by_default() {
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let file = sample_snapshot_file(dir.path());
+    let file = file.to_str().unwrap();
+
+    let out = dc(&["apps", "--from", file]);
+    let shown = text(&out.stdout);
+    assert!(out.status.success(), "{shown}");
+    assert!(
+        shown.contains("Good App") && shown.contains("Good Inc"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Gone App") && shown.contains("STALE"),
+        "{shown}"
+    );
+    assert!(!shown.contains("Patch For Good"), "{shown}");
+    assert!(shown.contains("2 apps shown, 1 hidden"), "{shown}");
+
+    let all = text(&dc(&["apps", "--from", file, "--include-hidden"]).stdout);
+    assert!(all.contains("Patch For Good"), "{all}");
+}
+
+#[test]
+fn apps_rejects_a_file_that_is_not_a_snapshot() {
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let bad = dir.path().join("bad.json");
+    std::fs::write(&bad, "{\"nope\": 1}").unwrap();
+    let out = dc(&["apps", "--from", bad.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(text(&out.stderr).contains("not a DiskCleaner apps snapshot"));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn apps_without_a_file_explains_it_needs_windows() {
+    let out = dc(&["apps"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(text(&out.stderr).contains("only works on Windows"));
+}
