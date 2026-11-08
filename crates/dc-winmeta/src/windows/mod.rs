@@ -21,7 +21,7 @@ impl SystemInfoSource for WindowsSource {
     }
 
     fn uninstall_entries(&self) -> SourceReport<Vec<RawUninstallEntry>> {
-        let mut all = SourceReport::default();
+        let mut all = SourceReport::<Vec<RawUninstallEntry>>::default();
         let locations = [
             (
                 HKEY_LOCAL_MACHINE,

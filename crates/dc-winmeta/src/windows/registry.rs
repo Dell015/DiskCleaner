@@ -131,9 +131,10 @@ fn read_string(key: &Key, name: &str) -> Option<String> {
     if kind != REG_SZ && kind != REG_EXPAND_SZ {
         return None;
     }
-    let units: Vec<u16> = data
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+    let (pairs, _) = data.as_chunks::<2>();
+    let units: Vec<u16> = pairs
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
         .take_while(|unit| *unit != 0)
         .collect();
     let mut text = String::from_utf16_lossy(&units);
