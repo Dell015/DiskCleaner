@@ -44,6 +44,27 @@ Format: **ID - decision** / why / where it is enforced.
 | D35 | Signature results use `no_embedded_signature` instead of "unsigned" | A file with no embedded signature may be signed through a Windows catalog (most system files). Calling it "unsigned" would be wrong and could mislead trust decisions | `signature.rs` |
 | D36 | Signature checks use `WinVerifyTrust` with no revocation checks and cache-only URL retrieval, and only run on each app's `main_exe` | Offline, fast, no network | `windows/signature.rs` |
 
+## Phase B4a (protected paths)
+| ID | Decision | Why | Enforced by |
+|---|---|---|---|
+| D40 | `dc-protected` answers only `Protected` / `NotProtected`; there is no "safe" result. `NotProtected` never means safe | Only rules (B4b) can say Safe; unknown stays DontTouch | `verdict.rs`, API docs, QA brief |
+| D41 | `*:\Windows` protected (subtree) on every drive; `Windows.old` left to rules | Second or old installs are as dangerous as the live one; `Windows.old` is a legitimate cleanup target | `list.rs` |
+| D42 | Program Files roots protected as folders only, not contents | Apps inside are judged by app/signature/rules | `list.rs` |
+| D43 | Documents, Desktop, Pictures, Music, Videos, OneDrive: whole subtree protected forever; Downloads is not | No rule may ever call user documents safe; Downloads is a classic cleanup target | `list.rs`, pinned tests |
+| D44 | UNC/network and device paths are protected outright in v1 | A cleaner must not touch shares or raw disks | `normalize.rs` |
+| D45 | `.git` anywhere, `System Volume Information`, `$Recycle.Bin`, pagefile/hiberfil/swapfile and `$`-system files are protected | Data loss or system damage | `list.rs` |
+| D46 | Fail closed: unresolvable or odd paths are protected | SAFETY.md rule 9 | `check.rs` |
+| D47 | Keys and credentials (`.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, Windows credential stores) are protected | Hard to recover, tiny to keep | `list.rs` |
+| D48 | Both the typed path and the OS-resolved path are checked; protected if either is | Escalate-only applied to links and short names | `check.rs` |
+| D49 | Runtime extras can only add protection | Protection cannot be weakened | `ProtectedList::with_extra` |
+
+### Added after web research (B4a)
+- **D50** Added to the built-in list: `ProgramData\Package Cache`, `Config.Msi`, `$PatchCache$` (installer rollback/repair data), `Program Files\WindowsApps`, `Common Files` (both Program Files), `\Windows\Installer` (already inside `\Windows`, documented). Why: deleting them breaks uninstall/repair of other programs, and Windows cannot rebuild them.
+- **D51** Virtual disks (`*.vhd`, `*.vhdx`, `*.vmdk`, `*.vdi`, `*.qcow2`) and Docker data folders are protected at any depth. Why: one file can be an entire WSL distro, VM or Docker store; deleting one is the biggest single-file loss possible. Cleaning them is a deliberate, separate future feature, never a rule.
+- **D52** A folder that *contains* a protected location is itself protected (`contains_protected`), so deleting a parent can never remove a protected child. Why: a recursive delete of `C:\Users\bob\AppData\Roaming` would otherwise hit `Microsoft\Protect`.
+- **D53** `\\?\` and `\??\` paths: `.` and `..` are refused (Windows does not resolve them there, so our reading could differ from the file system's). `\Device\...`, `GLOBALROOT`, volume-GUID paths and rootless `\dir` paths are invalid and therefore protected.
+- **D54** `$WINDOWS.~BT`, `$WINDOWS.~WS` and other `$*` root folders stay protected for now (fail closed). They are legitimate cleanup targets after a Windows upgrade; that will be done as an explicit, narrow rule exception in B4b, not by loosening protection.
+
 ## Known limitations (accepted on purpose)
 - Catalog-signed Windows files report `no_embedded_signature` in B2 (D24, D35).
 - Volumes mounted on folders may use the wrong cluster size; falls back to the 512-byte rule (D10).

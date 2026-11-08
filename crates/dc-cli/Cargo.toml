@@ -16,6 +16,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 clap.workspace = true
 dc-core = { path = "../dc-core" }
+dc-protected = { path = "../dc-protected" }
 dc-scan = { path = "../dc-scan" }
 dc-winmeta = { path = "../dc-winmeta" }
 serde_json.workspace = true

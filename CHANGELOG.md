@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+### Phase B4a - Protected paths
+- `dc-protected`: path normalization (text only), built-in protected list as data, check against both the typed path and the OS-resolved path (links, junctions, 8.3 names), fail closed on anything odd, runtime additions that can only add protection. `Verdict` has no "safe" value.
+- `dc-cli`: `dc protected <path>...` and `dc protected --list`.
 ### Phase B1 - Scanner v1
 - `dc-core`: `Node`, `Kind`, `Flags`, `Category`, arena `Tree` with bottom-up aggregation and pruning, top-N / by-extension / by-category / oldest queries, `ScanResult` (stored form), property tests, 1M-node criterion benchmark.
 - `dc-scan`: read-only parallel walker (rayon). Links never followed, hardlinks counted once (deterministic: first name wins), errors collected without aborting, cancel token, throttled progress, `--max-depth` / `--min-size` filters that keep totals exact, drive roots need explicit permission. `FileProbe` trait keeps the crate free of `unsafe`.

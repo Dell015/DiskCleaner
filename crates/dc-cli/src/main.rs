@@ -1,7 +1,7 @@
 //! The `dc` command-line tool.
 //!
 //! Commands: `dc scan` (read-only scan of a folder to a JSON file), `dc top` (reports from a
-//! saved scan) and `dc apps` (installed programs, Windows only). Nothing here deletes, moves or modifies scanned files.
+//! saved scan), `dc protected` (is this path protected?) and `dc apps` (installed programs, Windows only). Nothing here deletes, moves or modifies scanned files.
 //!
 //! Exit codes: 0 = ok, 1 = error, 2 = the scan finished but was partial (unreadable entries
 //! or cancelled).
@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 mod apps_cmd;
+mod protected_cmd;
 mod scan_cmd;
 mod size;
 mod top_cmd;
@@ -68,6 +69,15 @@ enum Command {
         #[arg(long, conflicts_with = "from")]
         verify_signatures: bool,
     },
+    /// Check whether paths are protected (read-only). "Not protected" does not mean safe.
+    #[command(group(ArgGroup::new("what").required(true).args(["paths", "list"])))]
+    Protected {
+        /// Paths to check.
+        paths: Vec<String>,
+        /// Print the built-in protected list instead.
+        #[arg(long)]
+        list: bool,
+    },
     /// Show a report from a saved scan.
     #[command(group(ArgGroup::new("report").required(true).args(["files", "dirs", "ext", "category", "oldest"])))]
     Top {
@@ -122,6 +132,7 @@ fn run() -> Result<ExitCode> {
             include_hidden,
             verify_signatures,
         }),
+        Command::Protected { paths, list } => protected_cmd::run(&paths, list),
         Command::Top {
             file,
             files,

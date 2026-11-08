@@ -289,3 +289,31 @@ fn apps_shows_signatures_when_the_snapshot_has_them() {
     );
     assert!(shown.contains("1 signed"), "{shown}");
 }
+
+#[test]
+fn protected_reports_protected_and_unprotected_paths() {
+    let out = dc(&[
+        "protected",
+        r"C:\Windows\System32",
+        r"C:\Users\bob\Downloads\x",
+    ]);
+    assert!(out.status.success());
+    let shown = text(&out.stdout);
+    assert!(
+        shown.contains("PROTECTED") && shown.contains("windows_dir"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("not protected") && shown.contains("does NOT mean safe"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn protected_fails_closed_on_odd_paths_and_lists_the_table() {
+    let out = dc(&["protected", "relative/path"]);
+    assert!(text(&out.stdout).contains("PROTECTED"));
+    let out = dc(&["protected", "--list"]);
+    assert!(text(&out.stdout).contains("windows_dir"));
+    assert!(!dc(&["protected"]).status.success());
+}

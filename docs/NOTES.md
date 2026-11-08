@@ -29,6 +29,9 @@ Status: `open` = needs action, `watch` = keep an eye on it, `done` = resolved.
 ## Watch list
 | ID | Status | What |
 |---|---|---|
+| N17 | open | B4a research | NTFS can mark a folder case-sensitive (WSL), so `Windows` and `windows` could be different folders. We compare case-insensitively, which only over-protects. Fine; never switch to case-sensitive matching. | none |
+| N18 | open | B4a research | Hardlinks: files in WinSxS are hardlinked elsewhere; deleting the other name frees nothing and the scanner counts once. Protection is by path, so a hardlink outside `\Windows` to a system file is not caught. | B5: treat link_count>1 files as DontTouch unless proven otherwise. |
+| N19 | open | B4a research | Browser profiles ("User Data"), password managers, crypto wallets, game saves, databases live under AppData. Only credentials and virtual disks are hard-protected; the rest is left to default-deny and B4b rules (only caches inside a profile may ever be Safe). | B4b |
 | N20 | watch | Size on disk matches Explorer exactly on a normal volume (verified). Volumes mounted on folders, network paths and non-NTFS volumes may use the fallback 512-byte rule or the wrong cluster size (D10). |
 | N21 | watch | On 32-bit Windows the 64-bit and 32-bit registry views are the same; entries could appear twice. Rare; not handled. |
 | N22 | watch | Registry apps that are really browser web apps (installed from a browser) can have an install folder inside a browser profile. They are labelled as apps; B3 should recognise and treat them as part of the browser. |
