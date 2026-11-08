@@ -3,12 +3,14 @@
 
 mod folders;
 mod registry;
+mod signature;
 mod version;
 
 use std::path::PathBuf;
 
 use crate::lnk::collect_shortcuts;
 use crate::model::{KnownFolder, RawUninstallEntry, RegistrySource, Shortcut, VersionInfo};
+use crate::signature::SignatureStatus;
 use crate::source::{SourceReport, SystemInfoSource};
 
 use windows_sys::Win32::System::Registry::{
@@ -67,6 +69,10 @@ impl SystemInfoSource for WindowsSource {
 
     fn version_info(&self, exe: &str) -> Option<VersionInfo> {
         version::read_version_info(exe)
+    }
+
+    fn signature(&self, exe: &str) -> SignatureStatus {
+        signature::verify_signature(exe)
     }
 
     fn path_exists(&self, path: &str) -> bool {

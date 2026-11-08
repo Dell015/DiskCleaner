@@ -106,3 +106,39 @@ fn shortcuts_can_be_read_and_apps_get_main_programs() {
         }
     }
 }
+
+#[test]
+fn signatures_of_known_programs_are_sensible() {
+    use dc_winmeta::SignatureStatus;
+
+    // A file with no signature (an empty file named like a program) must never be reported
+    // as signed. The temp file removes itself when dropped.
+    let temp = tempfile::Builder::new().suffix(".exe").tempfile().unwrap();
+    let status = WindowsSource.signature(temp.path().to_str().unwrap());
+    assert!(
+        !matches!(status, SignatureStatus::Signed { .. }),
+        "{status:?}"
+    );
+
+    // A missing file is unknown or invalid, never signed.
+    let missing = WindowsSource.signature(r"C:\this\does\not\exist.exe");
+    assert!(
+        !matches!(missing, SignatureStatus::Signed { .. }),
+        "{missing:?}"
+    );
+
+    // At least one installed app with a main program should be signed by someone.
+    let snapshot = dc_winmeta::build_snapshot_with(
+        &WindowsSource,
+        &dc_winmeta::BuildOptions {
+            verify_signatures: true,
+        },
+    );
+    assert!(
+        snapshot
+            .apps
+            .iter()
+            .any(|a| matches!(a.signature, Some(SignatureStatus::Signed { .. }))),
+        "no app has a valid signature"
+    );
+}

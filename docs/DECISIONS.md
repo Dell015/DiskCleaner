@@ -40,9 +40,12 @@ Format: **ID - decision** / why / where it is enforced.
 | D31 | An app with no registry folder may take the folder of a shortcut whose name equals the app name exactly, marked `folder_origin: shortcut`; the folder must exist and not be too broad | Finds real homes without guessing from loose name matches | `apps.rs` + tests |
 | D32 | `scan --apps` labels only directories equal to an app's install folder (plus the scan root if it lies inside one). Labels are additive (`app_labels`, optional in the file, schema version unchanged) and never change sizes | Useful now, graph is B3; old scan files still load | `label.rs`, `dc-core::AppLabel` |
 | D33 | Shortcut files are read in safe Rust (bounded size, depth and count; links not followed); version info via `GetFileVersionInfoW` (reads the file as data, never runs it) | No COM, small unsafe surface | `lnk.rs`, `windows/version.rs` |
+| D34 | Order of work: B2c (signatures), then the protected-path engine (B4a), then attribution (B3), then rules and the rest of B4 | Safety-critical protection should exist before anything starts classifying or suggesting; B3 can then use it | `ROADMAP.md`, `NOTES.md` N1 |
+| D35 | Signature results use `no_embedded_signature` instead of "unsigned" | A file with no embedded signature may be signed through a Windows catalog (most system files). Calling it "unsigned" would be wrong and could mislead trust decisions | `signature.rs` |
+| D36 | Signature checks use `WinVerifyTrust` with no revocation checks and cache-only URL retrieval, and only run on each app's `main_exe` | Offline, fast, no network | `windows/signature.rs` |
 
 ## Known limitations (accepted on purpose)
-- Catalog-signed Windows files may report `unknown` signature in B2 (D24).
+- Catalog-signed Windows files report `no_embedded_signature` in B2 (D24, D35).
 - Volumes mounted on folders may use the wrong cluster size; falls back to the 512-byte rule (D10).
 - Shortcuts without a stored local target (Store apps, network targets) are ignored in B2 (D21).
 - Hidden/duplicate registry entries are kept, not merged (D28).

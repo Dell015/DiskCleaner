@@ -56,7 +56,7 @@ pub fn run(args: ScanArgs) -> Result<ExitCode> {
     let snapshot = match &args.apps {
         None => None,
         Some(Some(file)) => Some(apps_cmd::load(file)?),
-        Some(None) => Some(apps_cmd::read_system()?),
+        Some(None) => Some(apps_cmd::read_system(false)?),
     };
 
     let mut result = scan(&args.path, probe().as_ref(), &options)?;

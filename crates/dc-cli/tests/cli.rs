@@ -243,3 +243,49 @@ fn scan_with_an_apps_snapshot_labels_the_app_folder() {
     let top = text(&dc(&["top", out.to_str().unwrap(), "--dirs", "--limit", "500"]).stdout);
     assert!(top.contains("[Demo App]"), "{top}");
 }
+
+#[test]
+fn apps_shows_signatures_when_the_snapshot_has_them() {
+    use dc_winmeta::{
+        build_snapshot_with, BuildOptions, FakeSource, KnownFolder, RawUninstallEntry,
+        RegistrySource, SignatureStatus,
+    };
+
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let mut fake = FakeSource::new()
+        .with_existing(r"C:\Program Files\Good")
+        .with_existing(r"C:\Program Files\Good\good.exe");
+    fake.folders = vec![KnownFolder {
+        name: "ProgramFiles".into(),
+        path: Some(r"C:\Program Files".into()),
+    }];
+    fake.entries = vec![RawUninstallEntry {
+        key: "Good".into(),
+        source: Some(RegistrySource::User),
+        display_name: Some("Good App".into()),
+        install_location: Some(r"C:\Program Files\Good".into()),
+        display_icon: Some(r"C:\Program Files\Good\good.exe,0".into()),
+        ..RawUninstallEntry::default()
+    }];
+    fake.signatures.insert(
+        r"C:\Program Files\Good\good.exe".into(),
+        SignatureStatus::Signed {
+            signer: Some("Good Inc".into()),
+        },
+    );
+    let snapshot = build_snapshot_with(
+        &fake,
+        &BuildOptions {
+            verify_signatures: true,
+        },
+    );
+    let file = dir.path().join("apps.json");
+    std::fs::write(&file, serde_json::to_string(&snapshot).unwrap()).unwrap();
+
+    let shown = text(&dc(&["apps", "--from", file.to_str().unwrap()]).stdout);
+    assert!(
+        shown.contains("SIGNATURE") && shown.contains("signed: Good Inc"),
+        "{shown}"
+    );
+    assert!(shown.contains("1 signed"), "{shown}");
+}

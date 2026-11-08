@@ -1,3 +1,10 @@
 /target
 /fixtures
 *.db
+
+# Private output of dc (lists what is on your machine). Never commit.
+/apps*.json
+/scan*.json
+/proj.json
+/pf.json
+/sample.json

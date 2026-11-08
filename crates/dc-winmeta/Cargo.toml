@@ -1,6 +1,6 @@
 [package]
 name = "dc-winmeta"
-description = "Windows metadata: file probe for the scanner now; installed apps and known folders now; version info and signatures later."
+description = "Windows metadata: file probe for the scanner now; installed apps, known folders, shortcuts, version info and signatures."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ dc-scan = { path = "../dc-scan" }
 serde.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Com", "Win32_UI_Shell"] }
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Com", "Win32_UI_Shell", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip"] }
 
 [dev-dependencies]
 serde_json.workspace = true

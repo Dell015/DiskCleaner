@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::signature::SignatureStatus;
+
 /// Version of the [`AppSnapshot`] JSON format.
 pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
@@ -147,6 +149,9 @@ pub struct InstalledApp {
     /// Shortcuts (paths of `.lnk` files) that point into the install folder.
     #[serde(default)]
     pub shortcuts: Vec<String>,
+    /// Signature check of `main_exe`; `None` means it was not requested or there is no program.
+    #[serde(default)]
+    pub signature: Option<SignatureStatus>,
 }
 
 /// A Windows known folder.

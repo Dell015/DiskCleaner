@@ -64,6 +64,9 @@ enum Command {
         /// Also show updates, patches and entries without a name.
         #[arg(long)]
         include_hidden: bool,
+        /// Check the digital signature of each app's main program (offline, slower).
+        #[arg(long, conflicts_with = "from")]
+        verify_signatures: bool,
     },
     /// Show a report from a saved scan.
     #[command(group(ArgGroup::new("report").required(true).args(["files", "dirs", "ext", "category", "oldest"])))]
@@ -112,10 +115,12 @@ fn run() -> Result<ExitCode> {
             out,
             from,
             include_hidden,
+            verify_signatures,
         } => apps_cmd::run(apps_cmd::AppsArgs {
             out,
             from,
             include_hidden,
+            verify_signatures,
         }),
         Command::Top {
             file,

@@ -7,21 +7,25 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{bail, Context, Result};
-use dc_winmeta::{AppSnapshot, InstalledApp, SNAPSHOT_SCHEMA_VERSION};
+use dc_winmeta::{AppSnapshot, InstalledApp, SignatureStatus, SNAPSHOT_SCHEMA_VERSION};
 
 pub struct AppsArgs {
     pub out: Option<PathBuf>,
     pub from: Option<PathBuf>,
     pub include_hidden: bool,
+    pub verify_signatures: bool,
 }
 
 #[cfg(windows)]
-pub fn read_system() -> Result<AppSnapshot> {
-    Ok(dc_winmeta::build_snapshot(&dc_winmeta::WindowsSource))
+pub fn read_system(verify_signatures: bool) -> Result<AppSnapshot> {
+    Ok(dc_winmeta::build_snapshot_with(
+        &dc_winmeta::WindowsSource,
+        &dc_winmeta::BuildOptions { verify_signatures },
+    ))
 }
 
 #[cfg(not(windows))]
-pub fn read_system() -> Result<AppSnapshot> {
+pub fn read_system(_verify_signatures: bool) -> Result<AppSnapshot> {
     bail!("`dc apps` reads the Windows registry and only works on Windows; use --from FILE to show a saved snapshot")
 }
 
@@ -74,6 +78,18 @@ fn flag_text(app: &InstalledApp) -> String {
     parts.join(",")
 }
 
+fn signature_text(app: &InstalledApp) -> String {
+    match &app.signature {
+        None => "-".to_owned(),
+        Some(SignatureStatus::Signed { signer }) => {
+            format!("signed: {}", signer.as_deref().unwrap_or("?"))
+        }
+        Some(SignatureStatus::NoEmbeddedSignature) => "no-embedded".to_owned(),
+        Some(SignatureStatus::Invalid { code, .. }) => format!("INVALID {code}"),
+        Some(SignatureStatus::Unknown { .. }) => "unknown".to_owned(),
+    }
+}
+
 fn shown(app: &InstalledApp, include_hidden: bool) -> bool {
     include_hidden || !(app.flags.hidden_entry || app.flags.update_or_patch)
 }
@@ -85,10 +101,16 @@ pub fn render(snapshot: &AppSnapshot, include_hidden: bool) -> String {
         .iter()
         .filter(|app| shown(app, include_hidden))
         .collect();
+    let with_signatures = snapshot.apps.iter().any(|app| app.signature.is_some());
     let mut out = String::new();
+    let signature_header = if with_signatures {
+        format!("{:<28} ", "SIGNATURE")
+    } else {
+        String::new()
+    };
     let _ = writeln!(
         out,
-        "{:<34} {:<22} {:<14} {:<18} FOLDER",
+        "{:<34} {:<22} {:<14} {:<18} {signature_header}FOLDER",
         "NAME", "PUBLISHER", "VERSION", "FLAGS"
     );
     for app in &rows {
@@ -97,9 +119,14 @@ pub fn render(snapshot: &AppSnapshot, include_hidden: bool) -> String {
         } else {
             &app.name
         };
+        let signature = if with_signatures {
+            format!("{:<28} ", clip(&signature_text(app), 28))
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             out,
-            "{:<34} {:<22} {:<14} {:<18} {}",
+            "{:<34} {:<22} {:<14} {:<18} {signature}{}",
             clip(name, 34),
             clip(app.publisher.as_deref().unwrap_or("-"), 22),
             clip(app.version.as_deref().unwrap_or("-"), 14),
@@ -120,6 +147,23 @@ pub fn render(snapshot: &AppSnapshot, include_hidden: bool) -> String {
         hidden,
         stale
     );
+    if with_signatures {
+        let count = |wanted: fn(&SignatureStatus) -> bool| {
+            snapshot
+                .apps
+                .iter()
+                .filter(|a| a.signature.as_ref().is_some_and(wanted))
+                .count()
+        };
+        let _ = writeln!(
+            out,
+            "signatures: {} signed, {} no embedded signature (unsigned or catalog-signed), {} invalid, {} unknown",
+            count(|s| matches!(s, SignatureStatus::Signed { .. })),
+            count(|s| matches!(s, SignatureStatus::NoEmbeddedSignature)),
+            count(|s| matches!(s, SignatureStatus::Invalid { .. })),
+            count(|s| matches!(s, SignatureStatus::Unknown { .. })),
+        );
+    }
     for problem in &snapshot.problems {
         let _ = writeln!(out, "WARNING   {}: {}", problem.source, problem.message);
     }
@@ -129,7 +173,7 @@ pub fn render(snapshot: &AppSnapshot, include_hidden: bool) -> String {
 pub fn run(args: AppsArgs) -> Result<ExitCode> {
     let snapshot = match &args.from {
         Some(path) => load(path)?,
-        None => read_system()?,
+        None => read_system(args.verify_signatures)?,
     };
 
     print!("{}", render(&snapshot, args.include_hidden));

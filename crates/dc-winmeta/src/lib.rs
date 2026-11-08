@@ -17,6 +17,7 @@ mod label;
 mod lnk;
 mod model;
 mod parse;
+mod signature;
 mod source;
 
 #[cfg(windows)]
@@ -26,7 +27,7 @@ mod probe;
 #[allow(unsafe_code)]
 mod windows;
 
-pub use apps::build_snapshot;
+pub use apps::{build_snapshot, build_snapshot_with, BuildOptions};
 pub use label::app_labels;
 pub use lnk::{collect_shortcuts, parse_lnk, ParsedLink};
 pub use model::{
@@ -37,6 +38,7 @@ pub use parse::{
     derive_install_folder, expand_env, is_absolute, is_too_broad, normalize_folder, parent_folder,
     path_from_command, path_key,
 };
+pub use signature::{classify_trust_result, SignatureStatus, TRUST_E_NOSIGNATURE};
 pub use source::{FakeSource, SourceReport, SystemInfoSource};
 
 #[cfg(windows)]

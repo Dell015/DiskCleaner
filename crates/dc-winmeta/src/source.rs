@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::{KnownFolder, Problem, RawUninstallEntry, Shortcut, VersionInfo};
 use crate::parse::path_key;
+use crate::signature::SignatureStatus;
 
 /// Data plus the non-fatal problems met while collecting it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -25,6 +26,8 @@ pub trait SystemInfoSource {
     fn shortcuts(&self) -> SourceReport<Vec<Shortcut>>;
     /// The version resource of a program file, if it has one. Must not run the program.
     fn version_info(&self, exe: &str) -> Option<VersionInfo>;
+    /// Check the digital signature of a program file. Offline, read-only, never runs the file.
+    fn signature(&self, exe: &str) -> SignatureStatus;
     /// Whether a file or folder exists. Must not follow links or touch contents.
     fn path_exists(&self, path: &str) -> bool;
     /// The value of an environment variable (case-insensitive on Windows).
@@ -44,6 +47,8 @@ pub struct FakeSource {
     pub shortcuts: Vec<Shortcut>,
     /// Version info by program path (compared case-insensitively).
     pub versions: BTreeMap<String, VersionInfo>,
+    /// Signature results by program path (compared case-insensitively).
+    pub signatures: BTreeMap<String, SignatureStatus>,
     /// Environment variables (names are matched case-insensitively).
     pub env: BTreeMap<String, String>,
     existing: BTreeSet<String>,
@@ -87,6 +92,17 @@ impl SystemInfoSource for FakeSource {
             .iter()
             .find(|(path, _)| path_key(path) == wanted)
             .map(|(_, info)| info.clone())
+    }
+
+    fn signature(&self, exe: &str) -> SignatureStatus {
+        let wanted = path_key(exe);
+        self.signatures
+            .iter()
+            .find(|(path, _)| path_key(path) == wanted)
+            .map(|(_, status)| status.clone())
+            .unwrap_or(SignatureStatus::Unknown {
+                reason: "not in the fake source".into(),
+            })
     }
 
     fn path_exists(&self, path: &str) -> bool {

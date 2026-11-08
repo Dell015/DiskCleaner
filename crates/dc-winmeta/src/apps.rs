@@ -91,6 +91,19 @@ fn inside(path_key_text: &str, folder_key: &str) -> bool {
 /// point into an app's folder are attached to it, and the first plausible program in the
 /// folder becomes its `main_exe`, whose version resource is then read.
 pub fn build_snapshot(source: &dyn SystemInfoSource) -> AppSnapshot {
+    build_snapshot_with(source, &BuildOptions::default())
+}
+
+/// Options for [`build_snapshot_with`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BuildOptions {
+    /// Check the digital signature of each app's main program (offline, read-only). Slower, so
+    /// off by default.
+    pub verify_signatures: bool,
+}
+
+/// Like [`build_snapshot`], with options.
+pub fn build_snapshot_with(source: &dyn SystemInfoSource, options: &BuildOptions) -> AppSnapshot {
     let known_folders = source.known_folders();
     let report = source.uninstall_entries();
     let shortcut_report = source.shortcuts();
@@ -155,6 +168,11 @@ pub fn build_snapshot(source: &dyn SystemInfoSource) -> AppSnapshot {
                 .and_then(|exe| source.version_info(exe))
                 .filter(|info| *info != VersionInfo::default());
 
+            let signature = main_exe
+                .as_deref()
+                .filter(|_| options.verify_signatures)
+                .map(|exe| source.signature(exe));
+
             let stale = derived
                 .as_ref()
                 .is_some_and(|(folder, _)| !source.path_exists(folder));
@@ -185,6 +203,7 @@ pub fn build_snapshot(source: &dyn SystemInfoSource) -> AppSnapshot {
                     .map(|p| p.shortcut.lnk.clone())
                     .take(MAX_SHORTCUTS_PER_APP)
                     .collect(),
+                signature,
             }
         })
         .collect();
@@ -212,6 +231,7 @@ pub fn build_snapshot(source: &dyn SystemInfoSource) -> AppSnapshot {
 mod tests {
     use super::*;
     use crate::model::{KnownFolder, Problem};
+    use crate::signature::SignatureStatus;
     use crate::FakeSource;
 
     fn folder(name: &str, path: &str) -> KnownFolder {
@@ -395,6 +415,42 @@ mod tests {
         assert_eq!(fun.folder_origin, Some(FolderOrigin::Shortcut));
         assert!(!fun.flags.no_install_folder && !fun.flags.stale_registration);
         assert_eq!(fun.main_exe.as_deref(), Some(r"D:\Games\Fun\fun.exe"));
+    }
+
+    #[test]
+    fn signatures_are_only_checked_when_asked_and_only_for_main_programs() {
+        let mut fake = FakeSource::new()
+            .with_existing(r"C:\Program Files\Good")
+            .with_existing(r"C:\Program Files\Good\good.exe");
+        fake.folders = vec![folder("ProgramFiles", r"C:\Program Files")];
+        let mut good = entry("Good", Some("Good App"));
+        good.install_location = Some(r"C:\Program Files\Good".into());
+        good.display_icon = Some(r"C:\Program Files\Good\good.exe,0".into());
+        let nothing = entry("None", Some("No Folder App"));
+        fake.entries = vec![good, nothing];
+        fake.signatures.insert(
+            r"C:\Program Files\Good\good.exe".into(),
+            SignatureStatus::Signed {
+                signer: Some("Good Inc".into()),
+            },
+        );
+
+        let off = build_snapshot(&fake);
+        assert!(off.apps.iter().all(|a| a.signature.is_none()));
+
+        let on = build_snapshot_with(
+            &fake,
+            &BuildOptions {
+                verify_signatures: true,
+            },
+        );
+        assert_eq!(
+            app(&on, "Good").signature,
+            Some(SignatureStatus::Signed {
+                signer: Some("Good Inc".into())
+            })
+        );
+        assert_eq!(app(&on, "None").signature, None);
     }
 
     #[test]
