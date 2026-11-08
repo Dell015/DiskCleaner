@@ -1,19 +1,21 @@
 //! [`WindowsProbe`]: file identity and allocated size, read without touching file contents.
 
+use std::collections::BTreeMap;
 use std::ffi::c_void;
 use std::fs::Metadata;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::Path;
+use std::sync::Mutex;
 
 use dc_scan::{flags_from_windows_attributes, FileId, FileProbe, Probe};
 use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FileStandardInfo, GetFileInformationByHandle, GetFileInformationByHandleEx,
-    BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-    FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO,
-    OPEN_EXISTING,
+    CreateFileW, FileStandardInfo, GetDiskFreeSpaceW, GetFileInformationByHandle,
+    GetFileInformationByHandleEx, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, FILE_STANDARD_INFO, OPEN_EXISTING,
 };
 
 /// Probe backed by the Win32 file APIs.
@@ -69,8 +71,12 @@ impl FileProbe for WindowsProbe {
         };
         // If this second query fails the allocation size stays unknown; the scanner then
         // falls back to an estimate. The identity above is still valid.
-        let size_on_disk = (ok != 0)
-            .then(|| normalize_allocation(u64::try_from(standard.AllocationSize).unwrap_or(0)));
+        let size_on_disk = (ok != 0).then(|| {
+            normalize_allocation(
+                u64::try_from(standard.AllocationSize).unwrap_or(0),
+                cluster_size_for(path),
+            )
+        });
 
         let file_index = (u128::from(info.nFileIndexHigh) << 32) | u128::from(info.nFileIndexLow);
         Ok(Probe {
@@ -85,14 +91,72 @@ impl FileProbe for WindowsProbe {
     }
 }
 
-/// Real disk allocations are whole sectors (multiples of 512 bytes). NTFS reports a smaller,
-/// unaligned number for tiny files stored inside the master file table (no clusters of their
-/// own). Explorer counts those as 0 bytes on disk, so we do too.
-fn normalize_allocation(allocation: u64) -> u64 {
-    if allocation.is_multiple_of(512) {
-        allocation
-    } else {
-        0
+/// Cluster size per volume root (for example `C:\`), looked up once and remembered.
+static CLUSTER_SIZES: Mutex<BTreeMap<String, Option<u64>>> = Mutex::new(BTreeMap::new());
+
+/// The cluster size of the volume holding `path`, or `None` if it cannot be determined
+/// (network paths, volumes mounted on folders, errors). Never fails the scan.
+fn cluster_size_for(path: &Path) -> Option<u64> {
+    let root = volume_root(path)?;
+    let mut cache = CLUSTER_SIZES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(known) = cache.get(&root) {
+        return *known;
+    }
+    let found = query_cluster_size(&root);
+    cache.insert(root, found);
+    found
+}
+
+fn query_cluster_size(root: &str) -> Option<u64> {
+    let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+    let (mut sectors, mut bytes, mut free, mut total) = (0u32, 0u32, 0u32, 0u32);
+    // SAFETY: `wide` is a NUL-terminated UTF-16 buffer that outlives the call and the four
+    // out-pointers refer to writable u32 values on this stack frame.
+    let ok = unsafe {
+        GetDiskFreeSpaceW(
+            wide.as_ptr(),
+            &mut sectors,
+            &mut bytes,
+            &mut free,
+            &mut total,
+        )
+    };
+    if ok == 0 {
+        return None;
+    }
+    let size = u64::from(sectors) * u64::from(bytes);
+    (size > 0).then_some(size)
+}
+
+/// `C:\` for `C:\...` and `\\?\C:\...`; `None` for anything else.
+fn volume_root(path: &Path) -> Option<String> {
+    let text = path.to_str()?;
+    let text = text.strip_prefix(r"\\?\").unwrap_or(text);
+    let mut chars = text.chars();
+    let drive = chars.next().filter(char::is_ascii_alphabetic)?;
+    (chars.next() == Some(':') && chars.next() == Some('\\'))
+        .then(|| format!("{}:\\", drive.to_ascii_uppercase()))
+}
+
+/// Turn the raw allocation into "bytes on disk" the way Explorer does.
+///
+/// Real allocations are whole clusters. NTFS keeps tiny files inside the master file table and
+/// reports a smaller number for them (sometimes unaligned, sometimes a multiple of 512 but less
+/// than one cluster); they use no clusters, so they count as 0. If the cluster size is unknown
+/// the weaker rule "must be a whole number of 512-byte sectors" is used.
+fn normalize_allocation(allocation: u64, cluster: Option<u64>) -> u64 {
+    match cluster {
+        Some(cluster) if cluster > 0 => {
+            if allocation >= cluster && allocation.is_multiple_of(cluster) {
+                allocation
+            } else {
+                0
+            }
+        }
+        _ if allocation.is_multiple_of(512) => allocation,
+        _ => 0,
     }
 }
 
@@ -133,11 +197,33 @@ mod tests {
 
     #[test]
     fn mft_resident_files_count_as_zero_on_disk() {
-        assert_eq!(normalize_allocation(672), 0);
-        assert_eq!(normalize_allocation(0), 0);
-        assert_eq!(normalize_allocation(4096), 4096);
-        assert_eq!(normalize_allocation(8192), 8192);
-        assert_eq!(normalize_allocation(1024), 1024);
+        // Known cluster size: only whole clusters count.
+        assert_eq!(normalize_allocation(672, Some(4096)), 0);
+        assert_eq!(normalize_allocation(512, Some(4096)), 0);
+        assert_eq!(normalize_allocation(0, Some(4096)), 0);
+        assert_eq!(normalize_allocation(4096, Some(4096)), 4096);
+        assert_eq!(normalize_allocation(12288, Some(4096)), 12288);
+        assert_eq!(normalize_allocation(6144, Some(4096)), 0);
+        assert_eq!(normalize_allocation(65536, Some(65536)), 65536);
+        // Unknown cluster size: fall back to whole sectors.
+        assert_eq!(normalize_allocation(672, None), 0);
+        assert_eq!(normalize_allocation(1024, None), 1024);
+    }
+
+    #[test]
+    fn volume_roots_are_found_for_drive_paths_only() {
+        assert_eq!(volume_root(Path::new(r"c:\a\b")).as_deref(), Some(r"C:\"));
+        assert_eq!(volume_root(Path::new(r"\\?\E:\x")).as_deref(), Some(r"E:\"));
+        assert_eq!(volume_root(Path::new(r"\\server\share\x")), None);
+        assert_eq!(volume_root(Path::new(r"rel\x")), None);
+    }
+
+    #[test]
+    fn the_cluster_size_of_the_current_drive_is_sane() {
+        let dir = std::env::current_dir().unwrap();
+        if let Some(size) = cluster_size_for(&dir) {
+            assert!(size.is_power_of_two() && size >= 512, "got {size}");
+        }
     }
 
     #[test]
