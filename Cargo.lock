@@ -398,6 +398,7 @@ dependencies = [
  "clap",
  "dc-attrib",
  "dc-core",
+ "dc-leftovers",
  "dc-protected",
  "dc-rules",
  "dc-scan",
@@ -422,6 +423,17 @@ dependencies = [
 [[package]]
 name = "dc-leftovers"
 version = "0.0.0"
+dependencies = [
+ "dc-attrib",
+ "dc-core",
+ "dc-protected",
+ "dc-rules",
+ "dc-winmeta",
+ "proptest",
+ "serde",
+ "serde_json",
+ "toml",
+]
 
 [[package]]
 name = "dc-mft"

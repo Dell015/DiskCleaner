@@ -454,3 +454,70 @@ fn classify_runs_on_a_scan_and_never_offers_unknown_things() {
     );
     assert!(explained.contains("risk      DontTouch"), "{explained}");
 }
+
+#[test]
+fn leftovers_runs_explains_saves_and_never_overwrites() {
+    use dc_winmeta::{build_snapshot, FakeSource};
+
+    let (dir, tree, _manifest) = fixture();
+    let apps = build_snapshot(&FakeSource::new());
+    let snapshot = dir.path().join("apps.json");
+    std::fs::write(&snapshot, serde_json::to_string(&apps).unwrap()).unwrap();
+    let scan = dir.path().join("scan.json");
+    assert!(dc(&[
+        "scan",
+        tree.to_str().unwrap(),
+        "--out",
+        scan.to_str().unwrap()
+    ])
+    .status
+    .success());
+
+    let saved = dir.path().join("left.json");
+    let out = dc(&[
+        "leftovers",
+        scan.to_str().unwrap(),
+        scan.to_str().unwrap(),
+        "--apps",
+        snapshot.to_str().unwrap(),
+        "--out",
+        saved.to_str().unwrap(),
+        "--timing",
+    ]);
+    let shown = text(&out.stdout);
+    assert!(out.status.success(), "{shown}{}", text(&out.stderr));
+    assert!(
+        shown.contains("Nothing has been or will be deleted"),
+        "{shown}"
+    );
+    assert!(shown.contains("offered"), "{shown}");
+    assert!(text(&out.stderr).contains("find leftovers"));
+    let json: serde_json::Value = serde_json::from_slice(&std::fs::read(&saved).unwrap()).unwrap();
+    assert_eq!(json["schema_version"], 1);
+    // Generated fixture folders show no sign that an app left them, so nothing is found.
+    assert_eq!(json["findings"].as_array().map(Vec::len), Some(0));
+
+    // The output file is never overwritten.
+    let again = dc(&[
+        "leftovers",
+        scan.to_str().unwrap(),
+        "--apps",
+        snapshot.to_str().unwrap(),
+        "--out",
+        saved.to_str().unwrap(),
+    ]);
+    assert!(!again.status.success());
+
+    let explained = text(
+        &dc(&[
+            "leftovers",
+            scan.to_str().unwrap(),
+            "--apps",
+            snapshot.to_str().unwrap(),
+            "--explain",
+            &tree.display().to_string(),
+        ])
+        .stdout,
+    );
+    assert!(explained.contains("state"), "{explained}");
+}

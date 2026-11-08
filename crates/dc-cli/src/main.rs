@@ -11,10 +11,12 @@
 mod apps_cmd;
 mod attrib_cmd;
 mod classify_cmd;
+mod leftovers_cmd;
 mod protected_cmd;
 mod rules_cmd;
 mod scan_cmd;
 mod size;
+mod timing;
 mod top_cmd;
 
 use std::path::PathBuf;
@@ -105,6 +107,28 @@ enum Command {
         /// Explain the classification of one path that is in the scan.
         #[arg(long, value_name = "PATH")]
         explain: Option<String>,
+        /// Print how long each step took (to standard error).
+        #[arg(long)]
+        timing: bool,
+    },
+    /// Find folders that apps left behind after being removed, with the evidence (read-only).
+    Leftovers {
+        /// One or more JSON files written by `dc scan`. To cover Program Files and ProgramData as
+        /// well as your profile, scan each folder and give all the files here.
+        #[arg(required = true, num_args = 1..)]
+        scans: Vec<PathBuf>,
+        /// A snapshot written by `dc apps --out` (needed: it says which apps are installed).
+        #[arg(long)]
+        apps: PathBuf,
+        /// How many findings to show.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        /// Explain what the search says about one path that is in the scan.
+        #[arg(long, value_name = "PATH")]
+        explain: Option<String>,
+        /// Save the full result as JSON (never overwrites an existing file).
+        #[arg(long, value_name = "FILE")]
+        out: Option<PathBuf>,
         /// Print how long each step took (to standard error).
         #[arg(long)]
         timing: bool,
@@ -208,6 +232,21 @@ fn run() -> Result<ExitCode> {
             risk,
             limit,
             explain,
+            timing,
+        }),
+        Command::Leftovers {
+            scans,
+            apps,
+            limit,
+            explain,
+            out,
+            timing,
+        } => leftovers_cmd::run(&leftovers_cmd::LeftoversArgs {
+            scans,
+            apps,
+            limit,
+            explain,
+            out,
             timing,
         }),
         Command::Rules { list, check } => rules_cmd::run(list, check.as_deref()),

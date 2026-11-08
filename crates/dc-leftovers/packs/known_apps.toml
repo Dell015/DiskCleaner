@@ -1,0 +1,286 @@
+# Well-known apps that people install and later remove. A folder that is named exactly like one
+# of these (after normalization) and whose app is not installed any more is evidence of a
+# leftover. This list can only ADD evidence; it never lowers a risk and never overrides the
+# protected list. `report_only = true` marks apps that can hold installed games or other
+# data the person may want (game launchers): those are shown but never offered.
+# Every entry needs examples (checked when the list is loaded).
+schema = 1
+
+[[app]]
+id = "mcafee"
+name = "McAfee"
+names = ["McAfee", "McAfee Security", "McAfee LiveSafe", "McAfee Total Protection", "McAfee WebAdvisor", "McAfee Safe Connect", "McAfee AntiVirus Plus", "McAfee Security Scan Plus"]
+app_prefixes = ["mcafee"]
+report_only = false
+examples_match = ['C:\ProgramData\McAfee']
+examples_no_match = ['C:\ProgramData\McAfee unrelated tools']
+
+[[app]]
+id = "norton"
+name = "Norton"
+names = ["Norton", "Norton Security", "Norton 360", "Norton AntiVirus", "Norton Internet Security", "Norton Security Scan"]
+app_prefixes = ["norton"]
+report_only = false
+examples_match = ['C:\ProgramData\Norton']
+examples_no_match = ['C:\ProgramData\Norton unrelated tools']
+
+[[app]]
+id = "avast"
+name = "Avast"
+names = ["Avast", "Avast Software", "Avast Antivirus", "Avast Free Antivirus"]
+app_prefixes = ["avast"]
+report_only = false
+examples_match = ['C:\ProgramData\Avast']
+examples_no_match = ['C:\ProgramData\Avast unrelated tools']
+
+[[app]]
+id = "avg"
+name = "AVG"
+names = ["AVG Antivirus", "AVG Technologies", "AVG Internet Security", "AVG Protection"]
+app_prefixes = ["avg"]
+report_only = false
+examples_match = ['C:\ProgramData\AVG Antivirus']
+examples_no_match = ['C:\ProgramData\AVG Antivirus unrelated tools']
+
+[[app]]
+id = "kaspersky"
+name = "Kaspersky"
+names = ["Kaspersky", "Kaspersky Lab", "Kaspersky Anti-Virus"]
+app_prefixes = ["kaspersky"]
+report_only = false
+examples_match = ['C:\ProgramData\Kaspersky']
+examples_no_match = ['C:\ProgramData\Kaspersky unrelated tools']
+
+[[app]]
+id = "bitdefender"
+name = "Bitdefender"
+names = ["Bitdefender", "Bitdefender Antivirus", "Bitdefender Total Security"]
+app_prefixes = ["bitdefender"]
+report_only = false
+examples_match = ['C:\ProgramData\Bitdefender']
+examples_no_match = ['C:\ProgramData\Bitdefender unrelated tools']
+
+[[app]]
+id = "malwarebytes"
+name = "Malwarebytes"
+names = ["Malwarebytes", "Malwarebytes Anti-Malware"]
+app_prefixes = ["malwarebytes"]
+report_only = false
+examples_match = ['C:\ProgramData\Malwarebytes']
+examples_no_match = ['C:\ProgramData\Malwarebytes unrelated tools']
+
+[[app]]
+id = "eset"
+name = "ESET"
+names = ["ESET", "ESET NOD32", "ESET Smart Security", "ESET Endpoint Security"]
+app_prefixes = ["eset"]
+report_only = false
+examples_match = ['C:\ProgramData\ESET']
+examples_no_match = ['C:\ProgramData\ESET unrelated tools']
+
+[[app]]
+id = "trend-micro"
+name = "Trend Micro"
+names = ["Trend Micro", "TrendMicro", "Trend Micro Titanium", "Trend Micro Maximum Security"]
+app_prefixes = ["trend micro", "trendmicro"]
+report_only = false
+examples_match = ['C:\ProgramData\Trend Micro']
+examples_no_match = ['C:\ProgramData\Trend Micro unrelated tools']
+
+[[app]]
+id = "avira"
+name = "Avira"
+names = ["Avira", "Avira Antivirus", "Avira Launcher"]
+app_prefixes = ["avira"]
+report_only = false
+examples_match = ['C:\ProgramData\Avira']
+examples_no_match = ['C:\ProgramData\Avira unrelated tools']
+
+[[app]]
+id = "webroot"
+name = "Webroot"
+names = ["Webroot", "Webroot SecureAnywhere"]
+app_prefixes = ["webroot"]
+report_only = false
+examples_match = ['C:\ProgramData\Webroot']
+examples_no_match = ['C:\ProgramData\Webroot unrelated tools']
+
+[[app]]
+id = "valorant"
+name = "VALORANT"
+names = ["VALORANT"]
+app_prefixes = ["valorant"]
+report_only = true
+examples_match = ['C:\ProgramData\VALORANT']
+examples_no_match = ['C:\ProgramData\VALORANT unrelated tools']
+
+[[app]]
+id = "riot-vanguard"
+name = "Riot Vanguard"
+names = ["Riot Vanguard"]
+app_prefixes = ["riot vanguard"]
+report_only = false
+examples_match = ['C:\ProgramData\Riot Vanguard']
+examples_no_match = ['C:\ProgramData\Riot Vanguard unrelated tools']
+
+[[app]]
+id = "league-of-legends"
+name = "League of Legends"
+names = ["League of Legends"]
+app_prefixes = ["league of legends"]
+report_only = true
+examples_match = ['C:\ProgramData\League of Legends']
+examples_no_match = ['C:\ProgramData\League of Legends unrelated tools']
+
+[[app]]
+id = "the-finals"
+name = "THE FINALS"
+names = ["THE FINALS", "Embark Studios", "Embark"]
+app_prefixes = ["the finals", "embark"]
+report_only = true
+examples_match = ['C:\ProgramData\THE FINALS']
+examples_no_match = ['C:\ProgramData\THE FINALS unrelated tools']
+
+[[app]]
+id = "ubisoft"
+name = "Ubisoft Connect"
+names = ["Ubisoft Game Launcher", "Ubisoft Connect", "Uplay", "Ubisoft"]
+app_prefixes = ["ubisoft", "uplay"]
+report_only = true
+examples_match = ['C:\ProgramData\Ubisoft Game Launcher']
+examples_no_match = ['C:\ProgramData\Ubisoft Game Launcher unrelated tools']
+
+[[app]]
+id = "battle-net"
+name = "Battle.net"
+names = ["Battle.net", "Blizzard Entertainment", "Blizzard"]
+app_prefixes = ["battle net", "blizzard"]
+report_only = true
+examples_match = ['C:\ProgramData\Battle.net']
+examples_no_match = ['C:\ProgramData\Battle.net unrelated tools']
+
+[[app]]
+id = "epic-games"
+name = "Epic Games"
+names = ["Epic Games", "Epic Games Launcher"]
+app_prefixes = ["epic games"]
+report_only = true
+examples_match = ['C:\ProgramData\Epic Games']
+examples_no_match = ['C:\ProgramData\Epic Games unrelated tools']
+
+[[app]]
+id = "gog-galaxy"
+name = "GOG Galaxy"
+names = ["GOG Galaxy"]
+app_prefixes = ["gog galaxy"]
+report_only = true
+examples_match = ['C:\ProgramData\GOG Galaxy']
+examples_no_match = ['C:\ProgramData\GOG Galaxy unrelated tools']
+
+[[app]]
+id = "steam"
+name = "Steam"
+names = ["Steam"]
+app_prefixes = ["steam"]
+report_only = true
+examples_match = ['C:\ProgramData\Steam']
+examples_no_match = ['C:\ProgramData\Steam unrelated tools']
+
+[[app]]
+id = "ea-app"
+name = "EA app"
+names = ["EA app", "EA Desktop"]
+app_prefixes = ["ea app", "ea desktop"]
+report_only = true
+examples_match = ['C:\ProgramData\EA app']
+examples_no_match = ['C:\ProgramData\EA app unrelated tools']
+
+[[app]]
+id = "ccleaner"
+name = "CCleaner"
+names = ["CCleaner", "Piriform"]
+app_prefixes = ["ccleaner"]
+report_only = false
+examples_match = ['C:\ProgramData\CCleaner']
+examples_no_match = ['C:\ProgramData\CCleaner unrelated tools']
+
+[[app]]
+id = "utorrent"
+name = "uTorrent"
+names = ["uTorrent", "BitTorrent"]
+app_prefixes = ["utorrent", "bittorrent"]
+report_only = false
+examples_match = ['C:\ProgramData\uTorrent']
+examples_no_match = ['C:\ProgramData\uTorrent unrelated tools']
+
+[[app]]
+id = "teamviewer"
+name = "TeamViewer"
+names = ["TeamViewer"]
+app_prefixes = ["teamviewer"]
+report_only = false
+examples_match = ['C:\ProgramData\TeamViewer']
+examples_no_match = ['C:\ProgramData\TeamViewer unrelated tools']
+
+[[app]]
+id = "anydesk"
+name = "AnyDesk"
+names = ["AnyDesk"]
+app_prefixes = ["anydesk"]
+report_only = false
+examples_match = ['C:\ProgramData\AnyDesk']
+examples_no_match = ['C:\ProgramData\AnyDesk unrelated tools']
+
+[[app]]
+id = "zoom"
+name = "Zoom"
+names = ["Zoom"]
+app_prefixes = ["zoom"]
+report_only = false
+examples_match = ['C:\ProgramData\Zoom']
+examples_no_match = ['C:\ProgramData\Zoom unrelated tools']
+
+[[app]]
+id = "skype"
+name = "Skype"
+names = ["Skype", "Skype for Desktop"]
+app_prefixes = ["skype"]
+report_only = false
+examples_match = ['C:\ProgramData\Skype']
+examples_no_match = ['C:\ProgramData\Skype unrelated tools']
+
+[[app]]
+id = "dropbox"
+name = "Dropbox"
+names = ["Dropbox"]
+app_prefixes = ["dropbox"]
+report_only = false
+examples_match = ['C:\ProgramData\Dropbox']
+examples_no_match = ['C:\ProgramData\Dropbox unrelated tools']
+
+[[app]]
+id = "spotify"
+name = "Spotify"
+names = ["Spotify"]
+app_prefixes = ["spotify"]
+report_only = false
+examples_match = ['C:\ProgramData\Spotify']
+examples_no_match = ['C:\ProgramData\Spotify unrelated tools']
+
+[[app]]
+id = "winrar"
+name = "WinRAR"
+names = ["WinRAR"]
+app_prefixes = ["winrar"]
+report_only = false
+examples_match = ['C:\ProgramData\WinRAR']
+examples_no_match = ['C:\ProgramData\WinRAR unrelated tools']
+
+[[app]]
+id = "obs-studio"
+name = "OBS Studio"
+names = ["OBS Studio"]
+app_prefixes = ["obs studio"]
+report_only = false
+examples_match = ['C:\ProgramData\OBS Studio']
+examples_no_match = ['C:\ProgramData\OBS Studio unrelated tools']

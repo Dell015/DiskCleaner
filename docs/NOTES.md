@@ -92,3 +92,20 @@ Status: `open` = needs action, `watch` = keep an eye on it, `done` = resolved.
 - One deliberate tightening: when the files of one old-file group are labelled with different risks by different overlapping rules, the group takes the more cautious label (before, it took the first file's label, which depended on walk order).
 - `find_candidates` now needs `&(dyn PathResolver + Sync)`.
 - Remaining (real run): read scan file ~6 s (600 MB JSON), attribution ~2.3 s, owner lookup ~1.6 s (rebuilds the index). Ideas: binary scan format, one shared tree/index for all steps.
+
+## B5 planning notes
+| ID | Status | Phase | Note | Next step |
+|---|---|---|---|---|
+| N53 | open | B5 | `dc-attrib` needs a small public function listing container folders (`container_folders`), and `dc-rules` must make `blocker_inside` public. | B5 slice 1 |
+| N54 | open | B5 | Only direct children of containers are examined. A dead app inside a live vendor folder (for example `Roaming\Adobe\OldApp`) is not found. | Later extension, depth 2 under vendor-owned folders |
+| N55 | open | B5 | Shortcuts that point to missing programs are good leftover evidence, but the snapshot only keeps shortcuts of apps. Needs `dc-winmeta` to keep broken shortcuts too. | B5 follow-up or B6 |
+| N56 | open | B5 | No process or service check (D76). A "leftover" could in rare cases belong to a program that is running but not registered. Quarantine (B9) must restore easily. | B9 |
+| N57 | open | B5 | The personal-data check will make many real leftovers `DontTouch` (databases are common in app data). Review on the real run whether the list is too strict. | B5 real run |
+| N58 | open | B5 | A shared `&Tree` for classify, attribution and leftovers would save about 2 s of repeated indexing on a 1.5 M-entry scan (see N52). | Before the UI |
+| N59 | open | B5 | Real-run check list from the owner: McAfee, Valorant (Riot), The Finals (Embark). Riot Client is still installed (its cache is offered in B4b), so only the game and Vanguard parts can be leftovers. Expected places: `ProgramData\\McAfee`, `Program Files\\McAfee`, `AppData\\Local\\McAfee`, `C:\\Riot Games`, Embark data under `AppData\\Local`. | Compare after slice 1 |
+| N60 | open | B5 | The known-apps list starts with 31 entries (antivirus, launchers and games, common utilities). `report_only` marks launchers and games (Steam, Epic, Riot titles, The Finals) because their folders can hold installed games. The folder names for The Finals (Embark) should be checked on the real run. | B5 real run |
+| N61 | open | B5 | The list matches folders by exact normalized name, so "Norton 360" and "Norton" are the same name (digits are dropped). Two entries must never share a normalized name (checked on load). | Keep when extending the list |
+| N62 | open | B5 | N53 is done (`container_kind`, `child_lists`, `folder_blocker` are public). | none |
+
+- N63: `dc leftovers` accepts several scan files (profile, ProgramData, Program Files, Program Files (x86)). Each is analysed on its own, then `dc_leftovers::merge` combines them: same folder kept once, sorted and totalled again, so the order of the files does not matter (tested).
+- N64: Real run over Program Files showed Java, Adobe, Logi, PD, Patriot, PCHealthCheck offered as ProbablySafe on "nobody registered it" + age alone. Portable tools and manually unzipped runtimes look the same, so that evidence alone is now capped at Low (DontTouch). Needs a second kind of evidence (stale registration, backup name, known app) to be offered.

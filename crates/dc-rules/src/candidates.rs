@@ -6,6 +6,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use dc_core::{CoreError, Kind, Node, NodeId, Risk, ScanResult, Tree};
 use dc_protected::{FakeResolver, PathResolver};
@@ -13,7 +14,7 @@ use dc_protected::{FakeResolver, PathResolver};
 use crate::classify::{Classification, Classifier, NodeFacts};
 
 /// Sizes of a set of items.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sizes {
     /// Sum of file lengths.
     pub logical: u64,
@@ -24,7 +25,8 @@ pub struct Sizes {
 }
 
 impl Sizes {
-    fn add(&mut self, other: Sizes) {
+    /// Add another set of sizes (saturating).
+    pub fn add(&mut self, other: Sizes) {
         self.logical = self.logical.saturating_add(other.logical);
         self.on_disk = self.on_disk.saturating_add(other.on_disk);
         self.files = self.files.saturating_add(other.files);
@@ -32,7 +34,7 @@ impl Sizes {
 }
 
 /// Something the rules suggest for cleanup. Not an action.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Candidate {
     /// The folder or file (for old files grouped under a folder, that folder).
     pub node: NodeId,
@@ -161,7 +163,8 @@ fn blocker_inside(
     None
 }
 
-fn child_lists(tree: &Tree) -> Vec<Vec<NodeId>> {
+/// The children of every node, indexed by node id.
+pub fn child_lists(tree: &Tree) -> Vec<Vec<NodeId>> {
     let mut children: Vec<Vec<NodeId>> = vec![Vec::new(); tree.len()];
     for node in tree.nodes() {
         if let Some(slot) = node.parent.and_then(|p| children.get_mut(p as usize)) {
@@ -364,6 +367,19 @@ fn push_children(ctx: &Ctx<'_>, id: NodeId, path: &str, push: &mut dyn FnMut((No
 /// The first few thousand items are walked in one go, breadth first, to get many separate
 /// subtrees; those are then walked in parallel.
 const SPLIT_AT: usize = 4096;
+
+/// What inside `dir` (a folder of the scan, at `dir_path`) makes it unfit to offer: a link, a
+/// cloud placeholder, a file with more than one name, or something protected. `None` if
+/// nothing does. Used by B4b candidates and B5 leftovers, so both apply the same test.
+pub fn folder_blocker(
+    tree: &Tree,
+    children: &[Vec<NodeId>],
+    dir: NodeId,
+    dir_path: &str,
+    classifier: &Classifier,
+) -> Option<String> {
+    blocker_inside(tree, children, dir, dir_path, classifier, &mut 0)
+}
 
 /// Look through a scan. `now` is the current time (seconds since the Unix epoch).
 ///

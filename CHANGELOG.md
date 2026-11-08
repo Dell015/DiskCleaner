@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+### Phase B5 - Leftovers
+- `dc-leftovers`: finds folders that apps left behind, with evidence and confidence (points: High >= 80, Medium >= 50). Four kinds: data of an app whose program folder is gone, backup-named copies (`X.old`), well-known apps that are not installed (built-in list of 31, validated data file), program files nobody registered. Never `Safe`; weak evidence, personal-looking data, games launchers and protected/Windows/Microsoft/linked folders are shown only or refused. Second look at the real disk (`verify`), `explain`.
+- `dc-cli`: `dc leftovers scan.json --apps apps.json [--limit] [--explain PATH] [--out FILE] [--timing]`.
+- `dc-rules`: `child_lists` and `folder_blocker` are public; candidates are serializable. `dc-attrib`: `container_kind` is public.
+### Performance (classify)
+- Dev profile optimized (D68 rule: speed never at the cost of correctness), allocation-free wildcard matching, parallel candidate search, one owner-lookup index, `--timing`.
 ### Phase B4b - Rules and classification
 - `dc-rules`: TOML rule packs (validated on load, examples required), built-in pack v1 (about 45 rules), classifier (protected list first, highest risk wins, unknown = DontTouch), candidate finder with folder checks and a second check against the real file system.
 - `dc-protected`: `$WINDOWS.~BT` / `$WINDOWS.~WS` are no longer protected (decision D63); `Pattern` is public.
@@ -22,3 +28,5 @@
 - `dc-core`: `Risk` enum (`Safe < ProbablySafe < DontTouch`, default-deny, escalate-only) with property and snapshot tests.
 - `tools/fixture-gen`: deterministic, create-only dummy file-tree generator with output guard and manifest.
 - CI (fmt, clippy, build, test on Windows and Linux; cargo-deny).
+
+- `dc leftovers` now takes several scan files and merges the results (`dc_leftovers::merge`), so ProgramData and Program Files can be covered.

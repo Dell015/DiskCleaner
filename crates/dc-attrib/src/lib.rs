@@ -16,6 +16,7 @@ mod resolve;
 mod rules;
 mod totals;
 
+pub use index::{container_kind, Container};
 pub use model::{
     Assignment, AttribResult, Confidence, Evidence, EvidenceKind, Owner, OwnerId, OwnerKind,
     OwnerTotals, ProgramFinding, Sizes, UnattributedDir, SCHEMA_VERSION,

@@ -13,6 +13,7 @@ use dc_rules::Classifier;
 
 use crate::apps_cmd;
 use crate::size::format_bytes;
+use crate::timing::Stopwatch;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum RiskFilter {
@@ -36,26 +37,8 @@ pub struct ClassifyArgs {
 const REMINDER: &str =
     "These are suggestions from rules. Nothing has been or will be deleted by this command.";
 
-/// Prints "step: time" lines to standard error when `--timing` is given.
-struct Stopwatch {
-    on: bool,
-    last: std::time::Instant,
-}
-
-impl Stopwatch {
-    fn lap(&mut self, step: &str) {
-        if self.on {
-            eprintln!("timing    {step:<22} {:.2?}", self.last.elapsed());
-        }
-        self.last = std::time::Instant::now();
-    }
-}
-
 pub fn run(args: &ClassifyArgs) -> Result<ExitCode> {
-    let mut watch = Stopwatch {
-        on: args.timing,
-        last: std::time::Instant::now(),
-    };
+    let mut watch = Stopwatch::new(args.timing);
     let reader = BufReader::new(
         File::open(&args.scan).with_context(|| format!("cannot open {}", args.scan.display()))?,
     );

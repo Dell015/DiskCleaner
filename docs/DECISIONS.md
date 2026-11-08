@@ -89,6 +89,19 @@ Format: **ID - decision** / why / where it is enforced.
 - Hidden/duplicate registry entries are kept, not merged (D28).
 - `dc` has no Ctrl+C handler yet (library cancel token only).
 - **D68** Performance rule (from the project owner): speed is pursued, but never by giving up correctness or safety. A speed-up must give the same answers as before, and must be proven with a test that compares the new code with the old behaviour (example: the byte-based `glob_match` is tested against the old character-based version over every short pattern and text). Never skip a safety check to be faster; skip work only when the result is provably unchanged.
+- **D69** B5 Q1-Q14 all taken at the recommended defaults (requirements file). Leftover kinds: data of an app whose program folder is gone, program folders nobody registered, backup siblings (`X.old` and similar). Stale registrations are only reported.
+- **D70** A leftover needs positive evidence. An unowned folder alone is "unowned", never "leftover". Every finding shows its evidence and a confidence (High >= 80 points, Medium >= 50, otherwise Low).
+- **D71** Findings are never `Safe`. High and Medium give `ProbablySafe`; Low is reported as `DontTouch` (possible leftover, not offered). Anything that may hold personal data is `DontTouch`. The final risk is `escalate_all` of every step.
+- **D72** Age (untouched 180 / 365 days) only supports other evidence. A change within the last 30 days caps confidence at Low.
+- **D73** Only direct children of containers (per-user AppData Local/Roaming/LocalLow, ProgramData, Program Files, Program Files (x86), Common Files) are examined. Never Documents, Desktop, Downloads, Pictures. Depth-2 vendor folders are a later extension (N54).
+- **D74** The registry is never written or deleted from. Apps registered inside another app's folder, updates, system components and hidden entries are not used as evidence (N37).
+- **D75** Anything protected, owned by Windows or published by Microsoft, or containing a link, cloud placeholder or hardlinked file, is refused, not offered.
+- **D76** No running-process check and no built-in list of known apps in B5; evidence comes from this computer's registry snapshot and the scan only.
+- **D77** Findings reuse the B4b `Candidate` type so later phases handle rule candidates and leftovers the same way.
+- **D78** The personal-data check is deliberately cautious and uses only names, extensions, sizes and times from the scan (no file is opened).
+- **D79** B5 is built in one piece (all four kinds, personal-data check, stale-apps list, second look at the disk, `--explain`), not in two slices, because of D81.
+- **D80** Accepted by the owner. Q14 named McAfee, Valorant and The Finals, and fully uninstalled apps leave no registry trace, so B5 has a built-in list of well-known apps (`crates/dc-leftovers/packs/known_apps.toml`, data with mandatory examples, validated on load). It adds a fourth kind, `known_app_removed` (60 points): a folder named exactly like a listed app (after normalization) that is unowned and whose app is not installed now. The list can only add evidence. Entries marked `report_only` (game launchers and games that can hold installed games or saves) are shown but never offered. This reverses the Q9 default.
+- **D81** Working rule from the owner: for obvious questions, take the most complete, detailed option without asking. Questions are for real trade-offs only.
 
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.
