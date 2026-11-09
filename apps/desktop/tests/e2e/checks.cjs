@@ -23,7 +23,7 @@ const check = (ok, what) => {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const st = () => page.evaluate(() => {
     const s = window.__dc.state;
-    return { items: s.vis ? s.vis.items.length : 0, open: s.vis ? s.vis.open.size : 0, zoom: s.zoomOpened.size, running: s.replay.running, selected: s.selected, n: s.tree ? s.tree.n : 0, truncated: s.vis ? s.vis.truncated : false };
+    return { items: s.vis ? s.vis.items.length : 0, building: s.replay.partial ? s.replay.partial.items.length : 0, open: s.vis ? s.vis.open.size : 0, zoom: s.zoomOpened.size, running: s.replay.running, selected: s.selected, n: s.tree ? s.tree.n : 0, truncated: s.vis ? s.vis.truncated : false };
   });
   const shot = (name) => page.screenshot({ path: path.join(out, `${name}.png`) });
 
@@ -38,7 +38,7 @@ const check = (ok, what) => {
     await page.waitForTimeout(1500);
     await shot("01-growing");
     const mid = await st();
-    check(mid.running && mid.items > 1, `graph grows during the scan (${mid.items} nodes so far)`);
+    check(mid.running && mid.building > 1, `graph grows step by step (${mid.building} nodes so far)`);
     await page.waitForFunction(() => !window.__dc.state.replay.running, null, { timeout: 90000 });
     await page.waitForTimeout(7000);
     await shot("02-overview");
@@ -109,6 +109,7 @@ const check = (ok, what) => {
     }
 
     // Drag a node: it moves and is pinned (with nothing selected, every node can be grabbed).
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
     await page.keyboard.press("Escape");
     await page.keyboard.press("f");
     await page.waitForTimeout(1200);
@@ -118,8 +119,8 @@ const check = (ok, what) => {
     for (let attempt = 0; attempt < 4 && !pinned; attempt++) {
       const drag = await page.evaluate((n) => {
         const v = window.__dc.view;
-        const keys = v.graph.nodes().filter((k) => v.onScreen(k, -40) && v.pixelRadius(k) > 3);
-        const k = keys[(Math.floor(keys.length / 2) + n * 7) % Math.max(1, keys.length)];
+        const keys = v.graph.nodes().filter((k) => v.onScreen(k, -40)).sort((a, b) => v.pixelRadius(b) - v.pixelRadius(a));
+        const k = keys[1 + n];
         if (!k) return null;
         const a = v.graph.getNodeAttributes(k);
         const p = v.sigma.graphToViewport({ x: a.x, y: a.y });

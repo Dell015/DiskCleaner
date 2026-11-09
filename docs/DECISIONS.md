@@ -117,6 +117,8 @@ Format: **ID - decision** / why / where it is enforced.
 - **D92** Font: Atkinson Hyperlegible Next and Mono, bundled (no network), chosen so similar characters in paths never look alike.
 - **D93** Focus blur uses a second sigma layer behind the main one, blurred with CSS; glow and scan pulses are drawn on a 2D canvas between the two. Effects can be switched off one by one.
 
+- **D94** The picture is built at a steady pace, separate from loading: the data is read first (in slices, page stays responsive), the final set of nodes is worked out once, then revealed ring by ring from the root at the same rate whatever the disk size (about 7 s at the default speed). No node appears and later disappears, sizes are final from the start, and the frame eases outward instead of jumping. A live scan later can feed the same queue.
+
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.
 1. **Safety first:** search every crate for anything that can delete, move, rename, write or execute (including registry writes, `Command`, `ShellExecute`). Confirm only `dc-quarantine` could ever do it and only behind the feature.

@@ -80,6 +80,7 @@ export class GraphView {
   private frozen = false;
   private cameraTimer = 0;
   private lastFit = 0;
+  private moveToken = 0;
   private unitPx = 1;
 
   constructor(private readonly host: HTMLElement, private readonly on: GraphHandlers) {
@@ -128,6 +129,7 @@ export class GraphView {
       edgeReducer: (key: string, a: Attrs) => this.reduceEdge(key, a, "front"),
     } as never);
     this.layout = new ForceLayout(this.graph);
+    backEl.style.display = "none";
     this.bindEvents();
     this.setStyle(this.style, this.dark);
     new ResizeObserver(() => this.sizeFx()).observe(host);
@@ -148,6 +150,7 @@ export class GraphView {
     this.quality = q;
     this.sigma.setSetting("labelDensity", q.labels);
     this.host.classList.toggle("no-blur", !q.focusBlur);
+    this.setBack(this.selected !== null && q.focusBlur);
     this.refreshAll();
   }
 
@@ -168,9 +171,24 @@ export class GraphView {
     this.refreshAll();
   }
 
+  /** Redraw on the next frame (several requests in one frame cost one draw). */
   private refreshAll(): void {
-    this.sigma.refresh({ skipIndexation: true });
-    this.back.refresh({ skipIndexation: true });
+    this.sigma.scheduleRefresh();
+    if (this.backOn) this.back.scheduleRefresh();
+  }
+
+  /** The blurred back layer only exists on screen while something is selected (saves the GPU a whole layer). */
+  private backOn = false;
+  private setBack(on: boolean): void {
+    if (on === this.backOn) return;
+    this.backOn = on;
+    const el = this.back.getContainer();
+    el.style.display = on ? "" : "none";
+    if (on) {
+      this.back.resize();
+      this.back.getCamera().setState(this.sigma.getCamera().getState());
+      this.back.refresh();
+    }
   }
 
   // ---------- data in ----------
@@ -250,7 +268,7 @@ export class GraphView {
       this.layout.resize();
       this.layout.heat(0.05);
     }
-    if (!this.frozen) this.fitBox();
+    if (!this.frozen) this.fitBox(true);
     this.updateHighlight();
     this.animate();
     return { added, removed };
@@ -276,7 +294,7 @@ export class GraphView {
     }
     const i = item.node;
     const isRoot = i === this.rootNode;
-    const raw = i === 0 ? "This PC" : tree.names[i];
+    const raw = i === 0 ? "This PC" : (tree.names[i] ?? "");
     return {
       node: i, parentKey: item.parentKey, open: item.open, zIndex: isRoot ? 2 : 1,
       label: raw.replace(/[\\/]+$/, "") || raw,
@@ -324,14 +342,48 @@ export class GraphView {
 
   freeze(on: boolean): void {
     this.frozen = on;
-    if (!on) this.fitBox();
+    // Freezing settles the frame where it is now (finishing any easing would move the picture).
+    if (on) this.boxTarget = this.box;
+    else this.fitBox();
   }
 
   isFrozen(): boolean {
     return this.frozen;
   }
 
-  private fitBox(): void {
+  /** The frame shown now and the one it is easing toward (smooth zoom-out while growing). */
+  private box: { x: [number, number]; y: [number, number] } | null = null;
+  private boxTarget: { x: [number, number]; y: [number, number] } | null = null;
+
+  private setBox(b: { x: [number, number]; y: [number, number] }): void {
+    this.box = b;
+    this.sigma.setCustomBBox(b);
+    this.back.setCustomBBox(b);
+  }
+
+  /** Ease the frame a step toward its target. Returns true while still moving. */
+  private easeBox(): boolean {
+    const t = this.boxTarget;
+    const b = this.box;
+    if (!t) return false;
+    if (!b) {
+      this.setBox(t);
+      return false;
+    }
+    const k = 0.07;
+    const n = { x: [b.x[0] + (t.x[0] - b.x[0]) * k, b.x[1] + (t.x[1] - b.x[1]) * k] as [number, number], y: [b.y[0] + (t.y[0] - b.y[0]) * k, b.y[1] + (t.y[1] - b.y[1]) * k] as [number, number] };
+    const left = Math.abs(t.x[0] - n.x[0]) + Math.abs(t.x[1] - n.x[1]) + Math.abs(t.y[0] - n.y[0]) + Math.abs(t.y[1] - n.y[1]);
+    const span = t.x[1] - t.x[0];
+    if (left < span * 0.002) {
+      this.setBox(t);
+      return false;
+    }
+    this.setBox(n);
+    return true;
+  }
+
+  /** Frame the whole graph. `smooth`: ease toward it over the next frames instead of jumping. */
+  private fitBox(smooth = false): void {
     if (this.graph.order === 0) return;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     this.graph.forEachNode((_k, a) => {
@@ -346,8 +398,8 @@ export class GraphView {
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const half = Math.max((x1 - x0) / 2, (y1 - y0) / 2, R0 * 5) * 1.06 + 1;
     const box = { x: [cx - half, cx + half] as [number, number], y: [cy - half, cy + half] as [number, number] };
-    this.sigma.setCustomBBox(box);
-    this.back.setCustomBBox(box);
+    this.boxTarget = box;
+    if (!smooth || !this.box) this.setBox(box);
   }
 
   fit(): void {
@@ -366,9 +418,13 @@ export class GraphView {
     }
     const dist = Math.hypot(t.x - st.x, t.y - st.y);
     const span = Math.max(st.ratio, t.ratio);
+    const token = ++this.moveToken;
     if (dist > span * 0.9) {
       const mid = { x: (st.x + t.x) / 2, y: (st.y + t.y) / 2, ratio: Math.min(1.2, Math.max(span * 1.8, dist * 1.1)), angle: t.angle };
-      void cam.animate(mid, { duration: ms * 0.45, easing: "quadraticOut" }).then(() => cam.animate(t, { duration: ms * 0.75, easing: "cubicInOut" }));
+      void cam.animate(mid, { duration: ms * 0.45, easing: "quadraticOut" }).then(() => {
+        // A newer move replaced this one: do not finish the old trip.
+        if (token === this.moveToken) void cam.animate(t, { duration: ms * 0.75, easing: "cubicInOut" });
+      });
     } else {
       void cam.animate(t, { duration: ms, easing: "cubicInOut" });
     }
@@ -409,6 +465,7 @@ export class GraphView {
     this.selected = key;
     this.updateHighlight();
     this.host.classList.toggle("focused", key !== null && this.quality.focusBlur);
+    this.setBack(key !== null && this.quality.focusBlur);
     this.refreshAll();
     this.animate();
   }
@@ -620,11 +677,12 @@ export class GraphView {
         const e = t * t;
         this.graph.mergeNodeAttributes(k, { x: l.x + ((to.x as number) - l.x) * e, y: l.y + ((to.y as number) - l.y) * e });
       }
-      if (!this.frozen && this.layout.running() && now - this.lastFit > 400) {
+      if (!this.frozen && this.layout.running() && now - this.lastFit > 200) {
         this.lastFit = now;
-        this.fitBox();
+        this.fitBox(true);
       }
-      const busy = this.born.size > 0 || this.fresh.size > 0 || this.leaving.size > 0;
+      const framing = !this.frozen && this.easeBox();
+      const busy = this.born.size > 0 || this.fresh.size > 0 || this.leaving.size > 0 || framing;
       if (busy) this.refreshAll();
       if (busy || this.layout.running()) requestAnimationFrame(step);
       else {
@@ -812,8 +870,11 @@ export class GraphView {
     this.chain.clear();
     this.frozen = false;
     this.stable = false;
+    this.box = null;
+    this.boxTarget = null;
     this.layout = new ForceLayout(this.graph);
     this.host.classList.remove("focused");
+    this.setBack(false);
     void this.sigma.getCamera().animate({ x: 0.5, y: 0.5, ratio: 1, angle: 0 }, { duration: 1 });
   }
 }

@@ -5,7 +5,7 @@ import "@fontsource-variable/atkinson-hyperlegible-next";
 import "@fontsource-variable/atkinson-hyperlegible-mono";
 import { appendRange, emptyTree } from "./core/build";
 import { KIND, type ViewData } from "./core/format";
-import { DEFAULT_LOD, nodeKey, selectVisible, type Visible } from "./core/lod";
+import { DEFAULT_LOD, nodeKey, selectVisible, type Visible, type VisItem } from "./core/lod";
 import { search } from "./core/search";
 import type { Tree } from "./core/tree";
 import { count, human } from "./core/util";
@@ -20,8 +20,8 @@ import { paletteOf, STYLES, type StyleId } from "./graph/style";
 /** A folder this big on screen (radius, px) opens when you zoom in; below CLOSE_PX it closes again. */
 const OPEN_PX = 24;
 const CLOSE_PX = 9;
-const SYNC_MS = 140;
-const REPLAY_SECONDS = [24, 14, 8, 4, 2];
+/** How long the picture takes to build, per speed setting (slowest first). */
+const REPLAY_SECONDS = [18, 11, 7, 4, 2];
 
 type Tab = "findings" | "apps";
 type Theme = "dark" | "light" | "system";
@@ -70,7 +70,7 @@ const state = {
   data: null as ViewData | null,
   tree: null as Tree | null,
   vis: null as Visible | null,
-  replay: { next: 0, running: false, paused: false, last: 0, lastSync: 0 },
+  replay: { running: false, paused: false, last: 0, shown: 0, order: [] as VisItem[], partial: null as Visible | null },
   opened: new Set<number>(),
   zoomOpened: new Set<number>(),
   closed: new Set<number>(),
@@ -152,17 +152,47 @@ function start(data: ViewData): void {
   byId("empty").hidden = true;
   byId("minimap").hidden = false;
   userMoved = false;
-  state.replay = { next: 0, running: true, paused: false, last: performance.now(), lastSync: 0 };
+  state.replay = { running: true, paused: false, last: 0, shown: 0, order: [], partial: null };
   frameTimes = [];
+  prepare(data, 0);
+}
+
+/**
+ * Step 1: put every entry in the tree, a slice per frame so the page stays responsive.
+ * The data is already scanned; nothing here is shown yet.
+ */
+function prepare(data: ViewData, from: number): void {
+  const tree = state.tree;
+  if (!tree || state.data !== data) return;
+  const n = data.names.length;
+  const to = Math.min(n, from + 150_000);
+  appendRange(tree, data, from, to);
+  if (to < n) {
+    byId("loading").hidden = false;
+    byId("loadingText").textContent = `Preparing: ${Math.round((to / n) * 100)}%`;
+    requestAnimationFrame(() => prepare(data, to));
+    return;
+  }
+  byId("loading").hidden = true;
   renderSide();
-  // The growth plays the first time a file opens; with motion off it is skipped.
+  // Step 2: decide the final picture once, then reveal it at a steady pace.
+  const root = pictureRoot();
+  view.rootNode = root;
+  const target = selectVisible(tree, { ...DEFAULT_LOD, budget: settings.quality.budget }, { opened: new Set(), closed: new Set(), wide: new Set(), mustShow: new Set(), root });
+  const depthOf = (it: VisItem): number => (it.node >= 0 ? tree.depth[it.node] : tree.depth[it.group?.parent ?? 0] + 1);
+  const rank = new Map(target.items.map((it, i) => [it.key, i]));
+  // Outward in rings from the root (folders first in each ring, biggest first): the graph reaches out.
+  state.replay.order = target.items.slice().sort((a, b) => depthOf(a) - depthOf(b) || (rank.get(a.key) ?? 0) - (rank.get(b.key) ?? 0));
+  state.replay.partial = { items: [], byKey: new Map(), open: new Set(), truncated: false };
   if (settings.quality.motion !== "full") {
     finishReplay();
     return;
   }
   byId("scan").hidden = false;
   byId("pause").textContent = "Pause";
-  requestAnimationFrame(replayStep);
+  key();
+  state.replay.last = performance.now();
+  requestAnimationFrame(revealStep);
 }
 
 function replay(): void {
@@ -175,48 +205,67 @@ function replay(): void {
   }
 }
 
-/** Frame times seen while the scan grew: they decide whether graphics should step down. */
+/** Frame times seen while the picture grew: they decide whether graphics should step down. */
 let frameTimes: number[] = [];
 
-function replayStep(now: number): void {
-  const r = state.replay;
-  const data = state.data;
-  const tree = state.tree;
-  if (!r.running || !data || !tree) return;
-  const n = data.names.length;
-  if (!r.paused) {
-    const dt = Math.min(100, now - r.last);
-    const secs = REPLAY_SECONDS[Number(byId<HTMLInputElement>("speed").value) - 1] ?? 8;
-    const per = Math.max(1, Math.ceil((n / (secs * 1000)) * dt));
-    const to = Math.min(n, r.next + per);
-    appendRange(tree, data, r.next, to);
-    r.next = to;
+/** Step 3: a few more nodes every frame, at the same rate whatever the size of the disk. */
+function revealStep(now: number): void {
+  try {
+    revealFrame(now);
+  } catch (err) {
+    // Never leave the picture half built: show the rest at once.
+    console.error("building the picture failed; showing it all at once", err);
+    finishReplay();
   }
-  if (!r.paused) frameTimes.push(now - r.last);
+}
+
+function revealFrame(now: number): void {
+  const r = state.replay;
+  const tree = state.tree;
+  const part = r.partial;
+  if (!r.running || !tree || !part) return;
+  const dt = Math.min(64, now - r.last);
   r.last = now;
-  if (r.next >= n) {
+  if (!r.paused) {
+    frameTimes.push(dt);
+    const secs = REPLAY_SECONDS[Number(byId<HTMLInputElement>("speed").value) - 1] ?? 7;
+    const before = Math.floor(r.shown);
+    r.shown = Math.min(r.order.length, r.shown + (r.order.length / secs) * (dt / 1000));
+    const upto = Math.floor(r.shown);
+    let head: string | null = null;
+    for (let i = before; i < upto; i++) {
+      const it = { ...r.order[i], open: false };
+      part.items.push(it);
+      part.byKey.set(it.key, it);
+      if (it.parentKey) {
+        const parent = part.byKey.get(it.parentKey);
+        if (parent && parent.node >= 0 && !parent.open) {
+          parent.open = true;
+          part.open.add(parent.node);
+        }
+        head = it.parentKey;
+      }
+    }
+    if (upto > before) {
+      view.sync(tree, part, true);
+      if (head) view.setHead(head);
+      byId("scanText").textContent = `Building the picture: ${count(upto)} of ${count(r.order.length)} nodes`;
+      drawMinimap();
+    }
+  }
+  if (r.shown >= r.order.length) {
     finishReplay();
     return;
   }
-  if (now - r.lastSync > SYNC_MS && !r.paused) {
-    r.lastSync = now;
-    refresh(true);
-    let p = r.next - 1;
-    while (p > 0 && !state.vis?.byKey.has(nodeKey(p))) p = tree.parent[p];
-    view.setHead(nodeKey(Math.max(0, p)));
-    byId("scanText").textContent = `Scanning: ${count(r.next)} of ${count(n)} entries, ${human(tree.agg[0])}`;
-  }
-  requestAnimationFrame(replayStep);
+  requestAnimationFrame(revealStep);
 }
 
 function finishReplay(): void {
   const r = state.replay;
-  const data = state.data;
   const tree = state.tree;
-  if (!data || !tree) return;
-  if (r.next < data.names.length) appendRange(tree, data, r.next, data.names.length);
-  r.next = data.names.length;
+  if (!tree || !r.running) return;
   r.running = false;
+  r.shown = r.order.length;
   byId("scan").hidden = true;
   view.setHead(null);
   refresh(true);
@@ -226,8 +275,10 @@ function finishReplay(): void {
 
 /** Once the layout is calm: frame everything (unless the user moved), then hold still. */
 function settle(): void {
+  const started = performance.now();
   const wait = (): void => {
-    if (view.layoutRunning() && !userMoved) setTimeout(wait, 300);
+    // Wait for the layout to calm down, but never more than 5 s.
+    if (view.layoutRunning() && !userMoved && performance.now() - started < 5000) setTimeout(wait, 300);
     else {
       if (!userMoved) view.fit();
       view.freeze(true);
@@ -372,11 +423,14 @@ function clearFocusTimers(): void {
 
 /** Make an entry visible (opening the way to it), select it and fly there. */
 function reveal(i: number): void {
-  if (state.replay.running && state.tree && i >= state.tree.n) finishReplay();
+  if (state.replay.running) finishReplay();
   const tree = state.tree;
   if (!tree || i < 0 || i >= tree.n) return;
   const root = pictureRoot();
   if (i !== root && !tree.isAncestor(root, i)) state.focusRoot = null;
+  // Stop following the growing frame before flying: the target must not move under the camera.
+  userMoved = true;
+  view.freeze(true);
   for (const a of tree.ancestors(i)) state.closed.delete(a);
   state.selected = nodeKey(i);
   refresh(true);
@@ -384,7 +438,8 @@ function reveal(i: number): void {
   openDrawer();
   crumbs();
   clearFocusTimers();
-  focusTimers.push(window.setTimeout(() => view.focus(nodeKey(i)), 120), window.setTimeout(() => view.focus(nodeKey(i)), 700));
+  // Fly once the new nodes have a place (they start at their folder and move out).
+  focusTimers.push(window.setTimeout(() => view.focus(nodeKey(i)), 450));
 }
 
 /** Make a folder the centre of the picture ("local graph"). null goes back to everything. */
