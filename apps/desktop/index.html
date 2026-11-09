@@ -29,14 +29,21 @@
   </header>
   <main id="stage">
     <div id="graph"></div>
-    <div id="scan" hidden>
-      <span class="pulse" aria-hidden="true"></span>
-      <span id="scanText">Scanning</span>
-      <button id="pause">Pause</button>
-      <label class="speed">Speed <input id="speed" type="range" min="1" max="5" value="3"></label>
-      <button id="skip">Skip</button>
-      <button id="stop" hidden>Stop</button>
-    </div>
+    <section id="scan" aria-live="polite" hidden>
+      <div class="scan-top">
+        <span id="scanTitle">Reading</span>
+        <span id="scanPct"></span>
+      </div>
+      <div class="scan-bar" role="progressbar" aria-label="Progress" aria-valuemin="0" aria-valuemax="100"><span id="scanFill"></span></div>
+      <div class="scan-meta"><span id="scanText"></span><span id="scanCount"></span></div>
+      <div class="scan-path" id="scanPath"></div>
+      <div class="scan-actions">
+        <button id="pause">Pause</button>
+        <label class="speed">Speed <input id="speed" type="range" min="1" max="5" value="3"></label>
+        <button id="skip">Show all now</button>
+        <button id="stop" hidden>Stop scan</button>
+      </div>
+    </section>
     <div id="controls">
       <div class="seg" role="group" aria-label="Colour by">
         <button data-mode="risk" class="on">Risk</button>

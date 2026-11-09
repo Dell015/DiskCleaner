@@ -45,6 +45,13 @@ interface LiveSession {
   credit: number;
   text: string;
   cancel: () => void;
+  root: string;
+  driveRoot: boolean;
+  volumeUsed: number | null;
+  files: number;
+  dirs: number;
+  current: string;
+  phase: "reading" | "checking" | "placing";
 }
 type Theme = "dark" | "light" | "system";
 
@@ -275,7 +282,7 @@ function revealFrame(now: number): void {
     if (upto > before) {
       view.sync(tree, part, true);
       if (head) view.setHead(head);
-      byId("scanText").textContent = `Building the picture: ${count(upto)} of ${count(r.order.length)} nodes`;
+      setScan("Building the picture", (upto / r.order.length) * 100, `${count(upto)} of ${count(r.order.length)} nodes`, `${count(tree.files[0])} files, ${human(tree.agg[0])}`);
       drawMinimap();
     }
   }
@@ -315,6 +322,22 @@ function settle(): void {
   setTimeout(wait, 600);
 }
 
+
+// ---------- progress readout ----------
+
+/** Update the progress readout. `pct` null means "how much is left is not known". */
+function setScan(title: string, pct: number | null, meta: string, countText: string, path = ""): void {
+  byId("scanTitle").textContent = title;
+  byId("scanPct").textContent = pct === null ? "" : `${Math.floor(pct)}%`;
+  const bar = byId("scanFill").parentElement as HTMLElement;
+  bar.classList.toggle("unknown", pct === null);
+  byId("scanFill").style.width = pct === null ? "" : `${Math.min(100, Math.max(0, pct))}%`;
+  if (pct !== null) bar.setAttribute("aria-valuenow", String(Math.floor(pct)));
+  else bar.removeAttribute("aria-valuenow");
+  byId("scanText").textContent = meta;
+  byId("scanCount").textContent = countText;
+  byId("scanPath").textContent = path;
+}
 
 // ---------- live scan (desktop app, or a simulated one with ?live=demo) ----------
 
@@ -381,12 +404,13 @@ function beginLive(starter: (on: (e: LiveEvent) => void) => () => void): void {
   byId("scan").hidden = false;
   byId("scan").classList.add("live");
   byId("stop").hidden = false;
-  byId("scanText").textContent = "Starting";
+  setScan("Starting the scan", null, "", "");
   const id = ++liveCounter;
   const session: LiveSession = {
     id, lt: null, active: true, finished: false, summary: null, queue: [], queued: new Set(),
     partial: { items: [], byKey: new Map(), open: new Set(), truncated: false },
     lastTarget: 0, lastSync: 0, last: performance.now(), credit: 0, text: "Starting", cancel: () => undefined,
+    root: "", driveRoot: false, volumeUsed: null, files: 0, dirs: 0, current: "", phase: "reading",
   };
   state.live = session;
   session.cancel = starter((e) => onLiveEvent(id, e));
@@ -397,6 +421,9 @@ function onLiveEvent(id: number, e: LiveEvent): void {
   if (!s || s.id !== id) return;
   switch (e.type) {
     case "started":
+      s.root = e.root;
+      s.driveRoot = Boolean(e.drive_root);
+      s.volumeUsed = e.drive_root && e.volume_used ? e.volume_used : null;
       s.lt = new LiveTree(e.root);
       state.tree = s.lt.tree;
       view.rootNode = 1;
@@ -410,15 +437,18 @@ function onLiveEvent(id: number, e: LiveEvent): void {
       s.lt?.add(e.dirs);
       break;
     case "progress":
-      s.text = `Scanning: ${count(state.tree ? state.tree.n - 2 : 0)} entries, ${human(state.tree?.agg[0] ?? 0)}`;
+      s.files = e.files;
+      s.dirs = e.dirs;
+      s.current = e.current;
       break;
     case "analysing":
-      s.text = "Checking what was found";
+      s.phase = "checking";
       break;
     case "finished": {
       s.summary = e;
       s.lt?.finish(e);
       s.finished = true;
+      s.phase = "placing";
       if (e.status === "cancelled") toast("Scan stopped. The picture shows what was read; no checks were run.");
       else if (e.status === "partial") toast(`Done. ${count(e.errors)} entries could not be read (usually folders Windows keeps private).`);
       else if (!e.apps_known) toast("Done. Installed apps could not be read, so owners and leftovers are missing.");
@@ -481,7 +511,7 @@ function liveStep(now: number): void {
       s.lastSync = now;
       view.sync(tree, part, true);
       if (head) view.setHead(head);
-      byId("scanText").textContent = s.text;
+      liveReadout(s, tree);
       drawMinimap();
       status();
     }
@@ -495,6 +525,25 @@ function liveStep(now: number): void {
     return;
   }
   requestAnimationFrame(liveStep);
+}
+
+/** The readout while a live scan runs. */
+function liveReadout(s: LiveSession, tree: Tree): void {
+  const found = tree.agg[0];
+  // Once reading is done there is nothing left to stop.
+  byId("stop").hidden = s.phase !== "reading";
+  const counts = `${count(Math.max(s.files, tree.files[0]))} files, ${count(Math.max(s.dirs, 0))} folders`;
+  if (s.phase === "checking") {
+    setScan("Checking what was found", null, "Cleanup rules, app owners and leftovers", counts);
+  } else if (s.phase === "placing") {
+    const total = s.partial.items.length + s.queue.length;
+    setScan("Placing the last folders", total ? (s.partial.items.length / total) * 100 : 100, `${count(s.partial.items.length)} of ${count(total)} nodes`, counts);
+  } else if (s.volumeUsed) {
+    // A whole drive: compare what was found with the space in use (never shows 100% before the end).
+    setScan(`Reading ${s.root}`, Math.min(99, (found / s.volumeUsed) * 100), `${human(found)} of ${human(s.volumeUsed)} in use`, counts, s.current);
+  } else {
+    setScan(`Reading ${s.root}`, null, `${human(found)} found`, counts, s.current);
+  }
 }
 
 /** Work out what the picture should hold now and queue what is new (nothing shown is removed). */
@@ -1092,7 +1141,7 @@ function bindScan(): void {
   byId("stop").addEventListener("click", () => {
     const s = state.live;
     if (s?.active) {
-      byId("scanText").textContent = "Stopping";
+      byId("scanTitle").textContent = "Stopping";
       s.cancel();
     }
   });

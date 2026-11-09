@@ -103,6 +103,12 @@ pub enum LiveEvent {
         schema_version: u32,
         /// The scanned folder (display form).
         root: String,
+        /// The folder is a whole drive (then `volume_used` says how much there is to read).
+        drive_root: bool,
+        /// Size of the drive holding the folder, when known.
+        volume_total: Option<u64>,
+        /// Space in use on that drive, when known (a progress bar can compare against it).
+        volume_used: Option<u64>,
     },
     /// Folders read since the last batch, each before anything inside it.
     Batch {
@@ -206,9 +212,13 @@ impl std::fmt::Debug for LiveOptions {
 /// Run a live scan, sending events to `sink` (from the calling thread). Returns the finished scan.
 pub fn run(mut opts: LiveOptions, mut sink: impl FnMut(LiveEvent)) -> Result<ScanResult, ApiError> {
     let apps_reader = opts.apps.take().map(std::thread::spawn);
-    let shown_root = std::fs::canonicalize(&opts.root)
+    let canonical = std::fs::canonicalize(&opts.root).ok();
+    let shown_root = canonical
+        .as_ref()
         .map(|p| display_path(&p.to_string_lossy()))
-        .unwrap_or_else(|_| opts.root.to_string_lossy().into_owned());
+        .unwrap_or_else(|| opts.root.to_string_lossy().into_owned());
+    let drive_root = canonical.as_ref().is_some_and(|p| p.parent().is_none());
+    let volume = canonical.as_deref().and_then(crate::system::volume_usage);
     let (tx, rx) = mpsc::channel::<Msg>();
     let listing_tx = tx.clone();
     let progress_tx = tx;
@@ -234,6 +244,9 @@ pub fn run(mut opts: LiveOptions, mut sink: impl FnMut(LiveEvent)) -> Result<Sca
     sink(LiveEvent::Started {
         schema_version: LIVE_SCHEMA_VERSION,
         root: shown_root.clone(),
+        drive_root,
+        volume_total: volume.map(|v| v.0),
+        volume_used: volume.map(|v| v.1),
     });
     let mut pending: Vec<LiveDir> = Vec::new();
     let mut pending_entries = 0usize;

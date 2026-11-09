@@ -70,3 +70,14 @@ describe("live tree", () => {
     expect(lt.add([{ dir: "C:\\missing", entries: [{ name: "x", kind: 0, size: 1, mtime: 0, flags: 0, cat: -1 }] }])).toBe(0);
   });
 });
+
+describe("live tree with a whole drive", () => {
+  it("joins 'C:\\' and a folder name without doubling the separator", () => {
+    const lt = new LiveTree("C:\\");
+    expect(lt.add([{ dir: "C:\\", entries: [{ name: "Windows", kind: 1, size: 0, mtime: 0, flags: 0, cat: -1 }] }])).toBe(1);
+    expect(lt.add([{ dir: "C:\\Windows", entries: [{ name: "System32", kind: 1, size: 0, mtime: 0, flags: 0, cat: -1 }] }])).toBe(1);
+    expect(lt.add([{ dir: "C:\\Windows\\System32", entries: [{ name: "a.dll", kind: 0, size: 4096, mtime: 0, flags: 0, cat: 8 }] }])).toBe(1);
+    expect(lt.tree.agg[0]).toBe(4096);
+    expect(lt.find("C:\\Windows\\System32\\a.dll")).toBeGreaterThan(0);
+  });
+});

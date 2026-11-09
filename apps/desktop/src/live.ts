@@ -22,7 +22,7 @@ export interface LiveSummary {
   apps_known: boolean;
 }
 export type LiveEvent =
-  | { type: "started"; schema_version: number; root: string }
+  | { type: "started"; schema_version: number; root: string; drive_root?: boolean; volume_total?: number | null; volume_used?: number | null }
   | { type: "batch"; dirs: LiveDir[] }
   | { type: "progress"; files: number; dirs: number; bytes: number; current: string }
   | { type: "analysing" }
@@ -58,10 +58,12 @@ export class LiveTree {
     for (const d of dirs) {
       const parent = this.dirs.get(this.key(d.dir));
       if (parent === undefined) continue;
+      // "C:\" + "Windows" must give "C:\Windows", not "C:\\Windows".
+      const base = d.dir.replace(/[\\/]+$/, "");
       for (const e of d.entries) {
         const i = this.tree.append(parent, e.name, e.kind, e.kind === KIND.file ? e.size : 0, e.mtime, e.flags, e.cat);
         added++;
-        if (e.kind === KIND.dir) this.dirs.set(this.key(`${d.dir}${this.sep}${e.name}`), i);
+        if (e.kind === KIND.dir) this.dirs.set(this.key(`${base}${this.sep}${e.name}`), i);
       }
     }
     return added;
@@ -118,18 +120,19 @@ export function simulateLive(data: ViewData, onEvent: (e: LiveEvent) => void, en
   for (let i = 1; i < n; i++) kids[data.parent[i]].push(i);
   const root = 1;
   const pathOf: string[] = new Array(n);
-  pathOf[root] = data.names[root].replace(/[\\/]+$/, "");
+  // Like the scanner: the root keeps its trailing separator ("C:\\"), folders below do not.
+  pathOf[root] = data.names[root];
   const order: number[] = [root];
   for (let k = 0; k < order.length; k++) {
     const d = order[k];
     for (const c of kids[d]) {
-      pathOf[c] = `${pathOf[d]}\\${data.names[c]}`;
+      pathOf[c] = `${pathOf[d].replace(/[\\/]+$/, "")}\\${data.names[c]}`;
       if (data.kind[c] === KIND.dir) order.push(c);
     }
   }
   let cancelled = false;
   let k = 0;
-  onEvent({ type: "started", schema_version: LIVE_SCHEMA_VERSION, root: data.names[root] });
+  onEvent({ type: "started", schema_version: LIVE_SCHEMA_VERSION, root: data.names[root], drive_root: true, volume_total: null, volume_used: data.size.reduce((a, b) => a + b, 0) });
   let last = performance.now();
   const tick = (): void => {
     if (cancelled) return finish("cancelled");

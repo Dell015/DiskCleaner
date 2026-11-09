@@ -12,10 +12,10 @@ use std::sync::Mutex;
 use dc_scan::{flags_from_windows_attributes, FileId, FileProbe, Probe};
 use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FileStandardInfo, GetDiskFreeSpaceW, GetFileInformationByHandle,
-    GetFileInformationByHandleEx, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, FILE_STANDARD_INFO, OPEN_EXISTING,
+    CreateFileW, FileStandardInfo, GetDiskFreeSpaceExW, GetDiskFreeSpaceW,
+    GetFileInformationByHandle, GetFileInformationByHandleEx, BY_HANDLE_FILE_INFORMATION,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO, OPEN_EXISTING,
 };
 
 /// Probe backed by the Win32 file APIs.
@@ -128,6 +128,18 @@ fn query_cluster_size(root: &str) -> Option<u64> {
     }
     let size = u64::from(sectors) * u64::from(bytes);
     (size > 0).then_some(size)
+}
+
+/// Size and free space of the volume holding `path` (read-only query). `None` if unknown.
+#[must_use]
+pub fn volume_space(path: &Path) -> Option<(u64, u64)> {
+    let root = volume_root(path)?;
+    let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+    let (mut avail, mut total, mut free) = (0u64, 0u64, 0u64);
+    // SAFETY: `wide` is a NUL-terminated UTF-16 buffer that outlives the call and the three
+    // out-pointers refer to writable u64 values on this stack frame.
+    let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut avail, &mut total, &mut free) };
+    (ok != 0 && total > 0).then_some((total, free))
 }
 
 /// `C:\` for `C:\...` and `\\?\C:\...`; `None` for anything else.
