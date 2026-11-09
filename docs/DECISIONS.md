@@ -128,6 +128,19 @@ Format: **ID - decision** / why / where it is enforced.
 - **D100** Nothing may stay highlighted without a visible way out: on the map, a bar says what is highlighted and offers "Clear selection" (or "Show everything" after a focus), Esc does the same, and clicking empty space clears it. A hover that the graph library never reported leaving (pointer moved onto a panel, window lost focus, the node was removed) is cleared, so the picture can no longer get stuck dimmed.
 - **D101** During a live scan, moving around the map (focus, open, find) hands the picture over to the user: the paced reveal stops and the map follows their view, updated a few times a second. A live scan never waits forever for entries whose folder is not on screen.
 
+- **D102** Size names in the app are a setting (Settings, Sizes): "Like Windows" (counted in 1024s, written GB/MB, the same numbers File Explorer shows; the default), "Precise" (1024s, written GiB/MiB) and "Like drive boxes" (1000s, GB/MB). The command-line tool keeps GiB/MiB so its output stays exact and stable for scripts.
+- **D103** Riot Client is a known app (`riot-client`, names "Riot Client" and "Riot Games"). It is report-only like other game launchers, because the "Riot Games" folder also holds installed VALORANT and League of Legends.
+
+- **D104** Scattered traces: attribution and leftovers now also look directly inside a user's `Documents`, `Documents\My Games` and `Saved Games`, the public `Documents`, and the top of each drive (`C:\Riot Games`). An installed app's folders there count as its own. A well-known app that is no longer installed is reported there but never offered (reason `outside_app_folders`), because these places sit among the person's files; backup-style names are not used as evidence there; inside Documents the protected list refuses them anyway. The Apps tab lists, for the picked app, every place it keeps things.
+- **D105** Saving a scan: the desktop app keeps the last finished (not stopped) scan and can save it as a view file through a save dialog. The file is built in Rust with the same checks (`dc_api::view::build`), only a new `.json` file is created and an existing file is never replaced. This is the app's only write; it never touches anything scanned. Capability adds `dialog:allow-save` only.
+- **D106** Entries the scan could not read are sent with the finished scan (up to 1000, with a plain-language reason) and shown in a "Not read" tab, which appears only when there are some.
+
+- **D107** The registry is never edited. Leftover registry entries take a few kilobytes and removing the wrong one can break apps or Windows.
+- **D108** Owner's cleaning answers (2026-11-09), detailed in `docs/phases/b9-cleaning/plan.md`: a hidden holding folder on the same drive; held items are deleted for good after a retention time (default 30 days, changeable; this replaces the roadmap's "purge only by explicit command"); always a confirmation, never a direct delete; Safe freely, Probably safe with an extra tick, your own files as "your call" with a stronger confirmation; installed apps through their own uninstaller (the one exception to "never run programs", only after confirmation); re-check before every move; restore page, keep-both on conflict, log file; admin-only folders skipped and listed; cleaning only on click.
+- **D109** Before any removing: an Overview page and sorted views (F4, read-only), so everything is visible before anything can go. Then B9 cleaning, then Organize (moves with Undo).
+- **D110** "Last used" comes from Windows' own record of started programs (UserAssist, current user, read-only); a Settings switch turns it off; with no record the app says "not known".
+- **D111** Disk jobs run one at a time per drive (hard disks are much slower with two readers). A folder can be acted on once its whole subtree was read. Live scans read Downloads, Desktop and Documents first.
+
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.
 1. **Safety first:** search every crate for anything that can delete, move, rename, write or execute (including registry writes, `Command`, `ShellExecute`). Confirm only `dc-quarantine` could ever do it and only behind the feature.
@@ -138,6 +151,6 @@ Review with fresh eyes, and treat the table above as intentional design unless i
 6. **Tests that cannot fail:** tests that assert nothing, depend on the machine, or skip silently.
 7. **Docs vs code:** requirements and design match what was built; `CHANGELOG.md` is accurate.
 8. **Windows-only paths:** code that only compiles on Windows gets extra scrutiny because the author could not compile it in the build container.
-10. **Desktop shell (apps/desktop/src-tauri):** confirm the capability file grants no fs or shell permission, no command can write, and the live events cannot place an entry outside the scanned folder.
+10. **Desktop shell (apps/desktop/src-tauri):** confirm the capability file grants no fs or shell permission, the only write is `save_scan` (new `.json` file only, never replaces), and the live events cannot place an entry outside the scanned folder.
 9. **Graph view (apps/desktop/):** confirm the page cannot write, delete or send anything; that `checkView` rejects every contradiction; that no file name reaches `innerHTML`; that the level of detail never exceeds the hard cap and sizes add up.
 Report findings as: severity, file:line, what is wrong, a concrete failing scenario, suggested fix.

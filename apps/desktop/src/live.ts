@@ -20,6 +20,8 @@ export interface LiveSummary {
   assignments: { path: string; owner: number; confidence: number }[];
   uncounted: string[];
   apps_known: boolean;
+  /** What could not be read, and why (a capped list; `errors` has the full count). */
+  unreadable?: { path: string; why: string }[];
 }
 export type LiveEvent =
   | { type: "started"; schema_version: number; root: string; drive_root?: boolean; volume_total?: number | null; volume_used?: number | null }
@@ -155,8 +157,14 @@ export function simulateLive(data: ViewData, onEvent: (e: LiveEvent) => void, en
   };
   const finish = (status: LiveSummary["status"]): void => {
     const done = status === "complete";
+    const base = pathOf[root].replace(/[\\/]+$/, "");
     onEvent({
-      type: "finished", status, errors: 0, files: 0, dirs: order.length, bytes_on_disk: 0, apps_known: done,
+      // Like a real disk: a few places Windows keeps to itself cannot be read.
+      type: "finished", status: done ? "partial" : status, errors: done ? 2 : 0, files: 0, dirs: order.length, bytes_on_disk: 0, apps_known: done,
+      unreadable: done ? [
+        { path: `${base}\\System Volume Information`, why: "Windows did not allow reading it (usually a folder private to Windows or to another user)" },
+        { path: `${base}\\Users\\Other user`, why: "Windows did not allow reading it (usually a folder private to Windows or to another user)" },
+      ] : [],
       marks: done ? data.marks.map((m) => ({ ...m, path: pathOf[m.node] ?? "" })) : [],
       owners: done ? data.owners : [],
       assignments: [],

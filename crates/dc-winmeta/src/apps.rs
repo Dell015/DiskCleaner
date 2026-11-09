@@ -100,6 +100,8 @@ pub struct BuildOptions {
     /// Check the digital signature of each app's main program (offline, read-only). Slower, so
     /// off by default.
     pub verify_signatures: bool,
+    /// Read Windows' record of started programs, for "last used" (read-only, current user).
+    pub read_usage: bool,
 }
 
 /// Like [`build_snapshot`], with options.
@@ -218,12 +220,20 @@ pub fn build_snapshot_with(source: &dyn SystemInfoSource, options: &BuildOptions
 
     let mut problems = report.problems;
     problems.extend(shortcut_report.problems);
+    let usage = if options.read_usage {
+        let raw = source.program_usage();
+        problems.extend(raw.problems);
+        crate::usage::resolve_usage(&raw.items, &known_folders)
+    } else {
+        Vec::new()
+    };
     AppSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         created_by: format!("dc-winmeta {}", env!("CARGO_PKG_VERSION")),
         known_folders,
         apps,
         problems,
+        usage,
     }
 }
 
@@ -442,6 +452,7 @@ mod tests {
             &fake,
             &BuildOptions {
                 verify_signatures: true,
+                ..BuildOptions::default()
             },
         );
         assert_eq!(

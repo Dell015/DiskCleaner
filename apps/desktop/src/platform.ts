@@ -2,7 +2,7 @@
 // works with view files and the demo only.
 
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { ask, open } from "@tauri-apps/plugin-dialog";
+import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import type { LiveEvent } from "./live";
 
 export function isDesktop(): boolean {
@@ -33,6 +33,15 @@ export async function startScan(path: string, allowDriveRoot: boolean, onEvent: 
   const channel = new Channel<LiveEvent>();
   channel.onmessage = onEvent;
   await invoke("start_scan", { path, allowDriveRoot, withApps: true, onEvent: channel });
+}
+
+export interface Saved { path: string; entries: number; bytes: number }
+
+/** Ask where to save the finished scan, then save it. null if the user cancelled. */
+export async function saveScan(suggestedName: string): Promise<Saved | null> {
+  const path = await save({ title: "Save this scan", defaultPath: suggestedName, filters: [{ name: "DiskCleaner scan", extensions: ["json"] }] });
+  if (!path) return null;
+  return invoke<Saved>("save_scan", { path });
 }
 
 export async function cancelScan(): Promise<void> {

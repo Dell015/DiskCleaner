@@ -91,6 +91,39 @@ pub struct LiveSummary {
     pub uncounted: Vec<String>,
     /// Whether installed apps were known (owners and leftovers need them).
     pub apps_known: bool,
+    /// What could not be read, and why (at most [`MAX_UNREADABLE`]; `errors` has the full count).
+    pub unreadable: Vec<Unreadable>,
+}
+
+/// How many unreadable entries are listed one by one.
+pub const MAX_UNREADABLE: usize = 1000;
+
+/// An entry the scan could not read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Unreadable {
+    /// Full path (display form).
+    pub path: String,
+    /// Plain-language reason.
+    pub why: String,
+}
+
+/// A plain-language reason for a scan error.
+fn why_unreadable(kind: &str, message: &str) -> String {
+    match kind {
+        "permission_denied" => "Windows did not allow reading it (usually a folder private to Windows or to another user)".to_owned(),
+        "not_found" => "it disappeared while the scan ran".to_owned(),
+        _ if message.trim().is_empty() => format!("it could not be read ({kind})"),
+        _ => format!("it could not be read: {}", message.trim()),
+    }
+}
+
+/// A finished live scan, kept so it can be saved as a view file later.
+#[derive(Debug, Clone)]
+pub struct LiveResult {
+    /// What was scanned.
+    pub scan: ScanResult,
+    /// The installed apps that were read alongside, if any.
+    pub apps: Option<AppSnapshot>,
 }
 
 /// Something that happened in a live scan.
@@ -210,7 +243,15 @@ impl std::fmt::Debug for LiveOptions {
 }
 
 /// Run a live scan, sending events to `sink` (from the calling thread). Returns the finished scan.
-pub fn run(mut opts: LiveOptions, mut sink: impl FnMut(LiveEvent)) -> Result<ScanResult, ApiError> {
+pub fn run(opts: LiveOptions, sink: impl FnMut(LiveEvent)) -> Result<ScanResult, ApiError> {
+    run_keep(opts, sink).map(|r| r.scan)
+}
+
+/// Like [`run`], and also hands back the installed apps that were read (to save the scan later).
+pub fn run_keep(
+    mut opts: LiveOptions,
+    mut sink: impl FnMut(LiveEvent),
+) -> Result<LiveResult, ApiError> {
     let apps_reader = opts.apps.take().map(std::thread::spawn);
     let canonical = std::fs::canonicalize(&opts.root).ok();
     let shown_root = canonical
@@ -314,7 +355,7 @@ pub fn run(mut opts: LiveOptions, mut sink: impl FnMut(LiveEvent)) -> Result<Sca
             return Err(e);
         }
     }
-    Ok(scan)
+    Ok(LiveResult { scan, apps })
 }
 
 fn summarize(
@@ -367,6 +408,15 @@ fn summarize(
             .map(|n| path(n.id))
             .collect(),
         apps_known: apps.is_some(),
+        unreadable: scan
+            .errors
+            .iter()
+            .take(MAX_UNREADABLE)
+            .map(|e| Unreadable {
+                path: display_path(&e.path),
+                why: why_unreadable(&e.kind, &e.message),
+            })
+            .collect(),
     })
 }
 

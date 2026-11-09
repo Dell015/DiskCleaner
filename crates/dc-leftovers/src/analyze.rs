@@ -120,6 +120,8 @@ fn on_path_to_container(key: &str) -> bool {
     match parts.as_slice() {
         [_] | [_, "users"] | [_, "users", _] | [_, "users", _, "appdata"] => true,
         [_, "users", _, "appdata", "local" | "roaming" | "locallow"] => true,
+        [_, "users", _, "documents" | "saved games"] => true,
+        [_, "users", _, "documents", "my games"] => true,
         [_, "programdata"] => true,
         [_, pf] | [_, pf, "common files"] => pf.starts_with("program files"),
         _ => false,
@@ -234,6 +236,9 @@ fn examine(ctx: &Ctx<'_>, child: Child, siblings: &HashMap<(NodeId, String), Nod
     let mut by_kind: Vec<(Kind, u32)> = Vec::new();
     let mut app: Option<String> = None;
     let mut report_only_app = false;
+    // Traces outside an app's usual folders (Documents, saves, the top of a drive) sit among
+    // the person's own files: they are only ever shown, and only for well-known apps.
+    let scattered = matches!(child.container, Container::UserFiles | Container::DriveRoot);
 
     // 1. Data of an app that is registered but whose program folder is gone.
     if matches!(
@@ -279,7 +284,7 @@ fn examine(ctx: &Ctx<'_>, child: Child, siblings: &HashMap<(NodeId, String), Nod
     }
 
     // 2. A backup-style name next to the folder it was made from.
-    if let Some(base) = backup_base(&lower) {
+    if let Some(base) = backup_base(&lower).filter(|_| !scattered) {
         if let Some(&sibling) = siblings.get(&(child.parent, base)) {
             if sibling != id {
                 let sibling_name = ctx
@@ -435,7 +440,7 @@ fn examine(ctx: &Ctx<'_>, child: Child, siblings: &HashMap<(NodeId, String), Nod
     } else {
         Risk::DontTouch
     }];
-    if bits != 0 || report_only_app {
+    if bits != 0 || report_only_app || scattered {
         risks.push(Risk::DontTouch);
     }
     let risk = Risk::escalate_all(risks);
@@ -447,6 +452,11 @@ fn examine(ctx: &Ctx<'_>, child: Child, siblings: &HashMap<(NodeId, String), Nod
                 " (shown only: may hold personal data: {})",
                 personal_data.join(", ")
             ),
+        )
+    } else if scattered {
+        (
+            "outside_app_folders",
+            " (shown only: it sits among your own files or at the top of a drive)".to_owned(),
         )
     } else if report_only_app {
         (

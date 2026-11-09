@@ -95,6 +95,28 @@ fn data_folders_match_the_app_by_name_with_medium_confidence() {
 }
 
 #[test]
+fn traces_in_documents_saves_and_the_top_of_a_drive_belong_to_their_app() {
+    let s = scan(&[
+        (r"Program Files\Live Game\game.exe", 100),
+        (r"Users\bob\Documents\My Games\Live Game\save.dat", 30),
+        (r"Users\bob\Saved Games\Live Game\slot1.sav", 20),
+        (r"Users\bob\Documents\Live Game\config.ini", 5),
+        (r"Live Game\shaders.bin", 7),
+        (r"Users\bob\Documents\Work\Live Game\notes.txt", 3),
+    ]);
+    let a = apps(&[(
+        "Live Game",
+        "Game Studio",
+        Some(r"C:\Program Files\Live Game"),
+    )]);
+    let r = attribute(&s, &a).unwrap();
+    // Everything except the folder deep inside the person's own "Work" folder.
+    assert_eq!(own_bytes(&r, "Live Game"), 162);
+    assert_eq!(r.unattributed.on_disk, 3);
+    assert_buckets_add_up(&r);
+}
+
+#[test]
 fn short_or_generic_names_never_claim_folders_by_name() {
     let s = scan(&[
         (r"Users\bob\AppData\Local\Go\cache", 100),

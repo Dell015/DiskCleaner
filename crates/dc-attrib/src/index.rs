@@ -98,12 +98,21 @@ pub enum Container {
     ProgramFiles,
     /// `X:\Program Files\Common Files` (and the x86 one): parts shared by programs.
     CommonFiles,
+    /// A user's `Documents`, `Documents\My Games` and `Saved Games` (and the public
+    /// `Documents`): personal places where apps also keep saves and settings.
+    UserFiles,
+    /// `X:\`: folders at the top of a drive (games and tools installed outside Program Files).
+    DriveRoot,
 }
 
 /// Classify a parent path key (for example `c:\users\bob\appdata\local`).
 pub fn container_kind(parent_key: &str) -> Option<Container> {
     let rest = parent_key.get(2..)?; // drop "c:"
+    if !parent_key.get(..2).is_some_and(|d| d.ends_with(':')) {
+        return None;
+    }
     match rest {
+        r"\" => return Some(Container::DriveRoot),
         r"\programdata" => return Some(Container::ProgramData),
         r"\program files" | r"\program files (x86)" => return Some(Container::ProgramFiles),
         r"\program files\common files" | r"\program files (x86)\common files" => {
@@ -116,6 +125,8 @@ pub fn container_kind(parent_key: &str) -> Option<Container> {
         ["", "users", _user, "appdata", "local" | "roaming" | "locallow"] => {
             Some(Container::UserData)
         }
+        ["", "users", _user, "documents" | "saved games"]
+        | ["", "users", _user, "documents", "my games"] => Some(Container::UserFiles),
         _ => None,
     }
 }
@@ -139,6 +150,26 @@ mod tests {
             Some(Container::ProgramData)
         );
         assert_eq!(container_kind(r"c:\users\bob\appdata\local\temp"), None);
+        assert_eq!(container_kind("c:\\"), Some(Container::DriveRoot));
+        assert_eq!(container_kind(r"e:\"), Some(Container::DriveRoot));
+        assert_eq!(
+            container_kind(r"c:\users\bob\documents"),
+            Some(Container::UserFiles)
+        );
+        assert_eq!(
+            container_kind(r"c:\users\bob\documents\my games"),
+            Some(Container::UserFiles)
+        );
+        assert_eq!(
+            container_kind(r"c:\users\bob\saved games"),
+            Some(Container::UserFiles)
+        );
+        assert_eq!(
+            container_kind(r"c:\users\public\documents"),
+            Some(Container::UserFiles)
+        );
+        assert_eq!(container_kind(r"c:\users\bob\documents\work"), None);
+        assert_eq!(container_kind(r"\\server\share"), None);
         assert_eq!(container_kind(r"c:\users\bob"), None);
         assert_eq!(container_kind(""), None);
     }

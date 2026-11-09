@@ -19,6 +19,7 @@ mod model;
 mod parse;
 mod signature;
 mod source;
+mod usage;
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
@@ -40,6 +41,9 @@ pub use parse::{
 };
 pub use signature::{classify_trust_result, SignatureStatus, TRUST_E_NOSIGNATURE};
 pub use source::{FakeSource, SourceReport, SystemInfoSource};
+pub use usage::{
+    filetime_to_unix, last_use, parse_count, resolve_usage, rot13, ProgramUse, RawUsage,
+};
 
 #[cfg(windows)]
 pub use probe::{volume_space, WindowsProbe};

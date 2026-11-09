@@ -132,6 +132,7 @@ fn signatures_of_known_programs_are_sensible() {
         &WindowsSource,
         &dc_winmeta::BuildOptions {
             verify_signatures: true,
+            read_usage: true,
         },
     );
     assert!(

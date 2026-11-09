@@ -113,6 +113,68 @@ fn game_launcher_style_apps_are_shown_but_never_offered() {
 }
 
 #[test]
+fn traces_outside_the_usual_app_folders_are_found_but_only_shown() {
+    let found = run(
+        &[
+            f(r"Users\bob\Documents\McAfee\log.dat", 400),
+            f(r"Users\bob\Documents\My Games\Norton\x.dat", 400),
+            f(r"Users\bob\Saved Games\Avast\y.dat", 400),
+            f(r"McAfee\scan.dat", 400),
+        ],
+        &[],
+    );
+    // Saved games and the top of a drive: found, but only ever shown.
+    for path in [r"C:\Users\bob\Saved Games\Avast", r"C:\McAfee"] {
+        let finding = find(&found, path).unwrap_or_else(|| panic!("a finding for {path}"));
+        assert_eq!(finding.kind, Kind::KnownAppRemoved);
+        assert_eq!(finding.candidate.risk, Risk::DontTouch, "{path}");
+        assert_eq!(finding.candidate.reason, "outside_app_folders", "{path}");
+    }
+    // Inside Documents the protected list wins: refused, never a finding.
+    for path in [
+        r"C:\Users\bob\Documents\McAfee",
+        r"C:\Users\bob\Documents\My Games\Norton",
+    ] {
+        assert!(find(&found, path).is_none(), "{path}");
+        assert!(
+            found
+                .refused
+                .iter()
+                .any(|r| r.path == path && r.because.contains("protected")),
+            "{path}"
+        );
+    }
+    assert_eq!(found.offered.on_disk, 0);
+}
+
+#[test]
+fn backup_names_among_personal_files_or_at_the_top_of_a_drive_are_not_evidence() {
+    let found = run(
+        &[
+            f(r"Users\bob\Documents\Thesis\a.docx", 2),
+            f(r"Users\bob\Documents\Thesis.old\a.docx", 300),
+            f(r"Tools\a.cfg", 2),
+            f(r"Tools.old\a.cfg", 300),
+        ],
+        &[],
+    );
+    assert!(find(&found, r"C:\Users\bob\Documents\Thesis.old").is_none());
+    assert!(find(&found, r"C:\Tools.old").is_none());
+}
+
+#[test]
+fn an_installed_apps_saves_in_documents_are_not_leftovers() {
+    let found = run(
+        &[
+            f(r"Program Files\Norton\n.exe", 2),
+            f(r"Users\bob\Documents\Norton\x.dat", 400),
+        ],
+        &[app("Norton", r"C:\Program Files\Norton", false)],
+    );
+    assert!(find(&found, r"C:\Users\bob\Documents\Norton").is_none());
+}
+
+#[test]
 fn anything_that_looks_personal_is_never_offered() {
     let found = run(
         &[
@@ -253,7 +315,7 @@ fn updates_and_hidden_registrations_are_ignored() {
 fn an_unowned_folder_without_evidence_is_only_unowned() {
     let files = [
         f(r"Users\bob\AppData\Roaming\Random Thing\a.cfg", 900),
-        f(r"Users\bob\Documents\Old Stuff\b.cfg", 900),
+        f(r"Users\bob\Pictures\Old Stuff\b.cfg", 900),
     ];
     let scan = scan(&files);
     let snap = snapshot(&[]);
@@ -280,7 +342,7 @@ fn an_unowned_folder_without_evidence_is_only_unowned() {
         &attrib,
         &classifier,
         &resolver,
-        r"C:\Users\bob\Documents\Old Stuff",
+        r"C:\Users\bob\Pictures\Old Stuff",
     )
     .unwrap();
     assert_eq!(elsewhere.standing, Standing::NotExamined);

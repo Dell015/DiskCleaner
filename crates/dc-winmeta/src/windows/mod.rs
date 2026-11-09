@@ -82,4 +82,8 @@ impl SystemInfoSource for WindowsSource {
     fn env_var(&self, name: &str) -> Option<String> {
         std::env::var(name).ok()
     }
+
+    fn program_usage(&self) -> SourceReport<Vec<crate::usage::RawUsage>> {
+        registry::read_user_assist()
+    }
 }

@@ -3,10 +3,12 @@
 
 use std::collections::HashMap;
 
-use dc_core::{Category, Kind, Node, ScanResult, Tree};
+use dc_core::{Category, Kind, Node, ScanResult, ScanStatus, Tree};
+use dc_rules::Classifier;
+use dc_winmeta::AppSnapshot;
 use serde::Serialize;
 
-use crate::analysis::{Mark, Owner, ScanAnalysis};
+use crate::analysis::{analyze, Mark, Owner, ScanAnalysis};
 use crate::ApiError;
 
 /// Version of the `dc-view` format. Bump on any change the viewer must know about.
@@ -270,4 +272,19 @@ impl ViewBuilder {
         self.view.roots.sort();
         self.view
     }
+}
+
+/// One view file for one scan, with the same checks a live scan shows (none for a stopped scan,
+/// whose checks would be unreliable).
+pub fn build(scan: &ScanResult, apps: Option<&AppSnapshot>) -> Result<View, ApiError> {
+    let tree = scan.tree()?;
+    let analysis = if scan.status == ScanStatus::Cancelled {
+        ScanAnalysis::default()
+    } else {
+        let classifier = Classifier::builtin_with(crate::system::protected_list());
+        analyze(scan, &tree, apps, &classifier)?
+    };
+    let mut builder = ViewBuilder::new();
+    builder.add(scan, &tree, &analysis)?;
+    Ok(builder.finish())
 }

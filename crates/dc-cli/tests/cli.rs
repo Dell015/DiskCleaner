@@ -277,6 +277,7 @@ fn apps_shows_signatures_when_the_snapshot_has_them() {
         &fake,
         &BuildOptions {
             verify_signatures: true,
+            ..BuildOptions::default()
         },
     );
     let file = dir.path().join("apps.json");

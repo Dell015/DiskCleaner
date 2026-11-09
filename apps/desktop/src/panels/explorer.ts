@@ -3,7 +3,7 @@
 
 import { KIND } from "../core/format";
 import type { Tree } from "../core/tree";
-import { count, date, human } from "../core/util";
+import { count, date, getSizeUnits, human } from "../core/util";
 import { lookOf, type ColorMode } from "../graph/encode";
 import type { Palette } from "../graph/style";
 import { clear, h } from "./dom";
@@ -19,6 +19,8 @@ export interface ExplorerHandlers {
   open(node: number): void;
   up(): void;
   context(node: number, x: number, y: number): void;
+  /** Sort this folder by type in the Overview. */
+  sort(folder: number): void;
 }
 
 export class ExplorerView {
@@ -121,6 +123,7 @@ export class ExplorerView {
     this.head.append(
       up,
       h("div", { class: "x-title" }, h("h2", {}, name), h("span", { class: "path" }, f === 0 || t.path(f).replace(/[\\/]+$/, "") === name ? "" : t.path(f))),
+      h("button", { class: "x-sortbtn", title: "See this folder sorted by type: videos, installers, archives, old files", onclick: () => this.on.sort(f) }, "Sort this folder"),
       h("div", { class: "x-sum" }, h("b", {}, human(t.agg[f])), h("span", {}, `${count(t.files[f])} files, ${count(t.childCount[f])} items here`), bar),
     );
   }
@@ -153,7 +156,7 @@ export class ExplorerView {
     const top = this.scroller.scrollTop;
     const first = Math.max(0, Math.floor(top / ROW_H) - 4);
     const last = Math.min(this.rows.length, Math.ceil((top + this.scroller.clientHeight) / ROW_H) + 4);
-    const stamp = `${this.sortedFor}:${t.version}:${p.accent}:${this.mode}`;
+    const stamp = `${this.sortedFor}:${t.version}:${p.accent}:${this.mode}:${getSizeUnits()}`;
     if (stamp !== this.builtFor) {
       this.builtFor = stamp;
       this.built.clear();

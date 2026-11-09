@@ -132,3 +132,58 @@ fn installed_apps_are_read_alongside_and_used_for_the_checks() {
     };
     assert!(s.apps_known);
 }
+
+#[test]
+fn a_finished_live_scan_can_be_turned_into_a_view_file() {
+    let (_guard, tree) = fixture(300);
+    let mut summary = None;
+    let kept = dc_api::live::run_keep(LiveOptions::new(&tree), |e| {
+        if let LiveEvent::Finished(s) = e {
+            summary = Some(s);
+        }
+    })
+    .unwrap();
+    let summary = summary.expect("finished");
+    let view = dc_api::view::build(&kept.scan, kept.apps.as_ref()).unwrap();
+    // The view adds one shared top ("This PC") above the scanned folder.
+    assert_eq!(view.nodes.name.len(), kept.scan.nodes.len() + 1);
+    assert_eq!(view.marks.len(), summary.marks.len());
+    let text = serde_json::to_string(&view).unwrap();
+    assert!(text.starts_with("{\"schema\":\"dc-view\""));
+    // Every error is listed (up to the cap), each with a reason.
+    let listed = usize::try_from(summary.errors)
+        .unwrap()
+        .min(dc_api::live::MAX_UNREADABLE);
+    assert_eq!(summary.unreadable.len(), listed);
+    assert!(summary.unreadable.iter().all(|u| !u.why.is_empty()));
+}
+
+#[cfg(unix)]
+#[test]
+fn folders_that_cannot_be_read_are_listed_with_a_reason() {
+    use std::os::unix::fs::PermissionsExt;
+    let (_guard, tree) = fixture(50);
+    let locked = tree.join("locked-folder");
+    std::fs::create_dir(&locked).unwrap();
+    std::fs::write(locked.join("inside.txt"), b"x").unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let readable_anyway = std::fs::read_dir(&locked).is_ok(); // running as root
+    let mut summary = None;
+    let _ = run(LiveOptions::new(&tree), |e| {
+        if let LiveEvent::Finished(s) = e {
+            summary = Some(s);
+        }
+    });
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let summary = summary.expect("finished");
+    if readable_anyway {
+        return;
+    }
+    assert_eq!(summary.status, "partial");
+    let hit = summary
+        .unreadable
+        .iter()
+        .find(|u| u.path.ends_with("locked-folder"))
+        .expect("the locked folder is listed");
+    assert!(hit.why.contains("did not allow"), "{}", hit.why);
+}

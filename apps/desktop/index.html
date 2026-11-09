@@ -14,6 +14,7 @@
     <span class="mark" aria-hidden="true"></span>
     <nav id="crumbs" aria-label="Where you are"></nav>
     <div class="seg viewseg" id="viewSeg" role="group" aria-label="How to look">
+      <button data-view="overview" title="Everything at a glance: apps, downloads, big and old files">Overview</button>
       <button data-view="files" title="A simple list of folders and files, biggest first">Files</button>
       <button data-view="map" title="The node map: every folder as a node, sized by its space">Map</button>
     </div>
@@ -24,7 +25,8 @@
     </div>
     <div class="tools">
       <button id="scanBtn" class="primary" title="Pick a folder and watch it fill in" hidden>Scan folder</button>
-      <button id="open" title="Open a file made by dc view-data">Open file</button>
+      <button id="saveBtn" title="Save this scan as a file you can open again later" hidden>Save scan</button>
+      <button id="open" title="Open a saved scan, or a file made by dc view-data">Open file</button>
       <button id="demo" title="Load a made-up disk">Demo</button>
       <button id="settingsBtn" aria-haspopup="dialog">Settings</button>
       <button id="panelToggle" class="narrow-only">Findings</button>
@@ -34,6 +36,7 @@
   <main id="stage">
     <div id="graph"></div>
     <section id="explorer" aria-label="Files" hidden></section>
+    <section id="overview" aria-label="Overview" hidden></section>
     <div id="selbar" role="status" hidden>
       <span id="selText"></span>
       <button id="selAll" hidden>Show everything</button>
@@ -90,9 +93,11 @@
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="findings" class="on" aria-selected="true">Findings</button>
       <button role="tab" data-tab="apps" aria-selected="false">Apps</button>
+      <button role="tab" data-tab="unread" aria-selected="false" id="unreadTab" hidden>Not read</button>
     </nav>
     <div id="tab-findings" class="tab"></div>
     <div id="tab-apps" class="tab" hidden></div>
+    <div id="tab-unread" class="tab" hidden></div>
     <section id="drawer" aria-label="Details" aria-hidden="true"></section>
   </aside>
   <dialog id="settings" aria-label="Settings">
@@ -101,6 +106,14 @@
       <fieldset><legend>Look</legend><div id="styles" class="choices"></div></fieldset>
       <fieldset><legend>Theme</legend>
         <div class="seg" id="themes"><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="light">Light</button><button type="button" data-theme="system">System</button></div>
+      </fieldset>
+      <fieldset><legend>Sizes</legend>
+        <div class="seg" id="units" role="group" aria-label="How sizes are written">
+          <button type="button" data-units="windows" title="Counted in 1024s, written GB and MB, the same numbers File Explorer shows">Like Windows (GB)</button>
+          <button type="button" data-units="binary" title="Counted in 1024s, written GiB and MiB, the precise names">Precise (GiB)</button>
+          <button type="button" data-units="decimal" title="Counted in 1000s, written GB and MB, the way drives are sold">Like drive boxes (GB)</button>
+        </div>
+        <p class="quiet" id="unitsNote"></p>
       </fieldset>
       <fieldset><legend>Graphics</legend>
         <div class="seg" id="presets"></div>

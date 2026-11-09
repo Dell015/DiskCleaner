@@ -5,15 +5,24 @@ use windows_sys::Win32::Foundation::{
     ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS, ERROR_SUCCESS,
 };
 use windows_sys::Win32::System::Registry::{
-    RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, KEY_READ, REG_DWORD,
-    REG_EXPAND_SZ, REG_SZ,
+    RegCloseKey, RegEnumKeyExW, RegEnumValueW, RegOpenKeyExW, RegQueryValueExW, HKEY,
+    HKEY_CURRENT_USER, KEY_READ, REG_BINARY, REG_DWORD, REG_EXPAND_SZ, REG_SZ,
 };
 
 use crate::model::{Problem, RawUninstallEntry, RegistrySource};
 use crate::parse::expand_env;
 use crate::source::SourceReport;
+use crate::usage::RawUsage;
 
 const UNINSTALL: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
+/// Windows' record of programs started from Explorer and Start (current user).
+const USER_ASSIST: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist";
+/// Safety valve: at most this many values per key are read.
+const MAX_VALUES: u32 = 100_000;
+/// Registry value names are at most 16,383 characters.
+const VALUE_NAME_UNITS: usize = 16_384;
+/// Usage values are 72 bytes; anything much larger is not one and is skipped.
+const USAGE_DATA_BYTES: usize = 1024;
 /// Registry strings longer than this are ignored (real values are a few hundred bytes).
 const MAX_VALUE_BYTES: u32 = 64 * 1024;
 /// Safety valve against a corrupt registry: at most this many subkeys are enumerated.
@@ -212,6 +221,101 @@ pub fn read_uninstall(
             Ok(key) => report.items.push(read_entry(&key, &name, source)),
             Err(code) => report.problems.push(problem(format!(
                 "cannot open entry '{name}' (error {code})"
+            ))),
+        }
+    }
+    report
+}
+
+/// The binary values of `key` (name, bytes). Values of other types, or too large, are skipped.
+fn binary_values(key: &Key) -> Result<Vec<(String, Vec<u8>)>, u32> {
+    let mut out = Vec::new();
+    let mut index = 0u32;
+    let mut name = vec![0u16; VALUE_NAME_UNITS];
+    let mut data = vec![0u8; USAGE_DATA_BYTES];
+    while index < MAX_VALUES {
+        let mut name_len = u32::try_from(VALUE_NAME_UNITS).unwrap_or(16_384);
+        let mut data_len = u32::try_from(USAGE_DATA_BYTES).unwrap_or(1024);
+        let mut kind = 0u32;
+        // SAFETY: `name` is writable for `name_len` UTF-16 units and `data` for `data_len`
+        // bytes (their exact lengths); the reserved pointer must be null; `key.0` is a valid
+        // open key. The call only reads the registry.
+        let status = unsafe {
+            RegEnumValueW(
+                key.0,
+                index,
+                name.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null(),
+                &mut kind,
+                data.as_mut_ptr(),
+                &mut data_len,
+            )
+        };
+        match status {
+            ERROR_SUCCESS => {
+                if kind == REG_BINARY {
+                    let units = usize::try_from(name_len).unwrap_or(0).min(name.len());
+                    let bytes = usize::try_from(data_len).unwrap_or(0).min(data.len());
+                    out.push((
+                        String::from_utf16_lossy(&name[..units]),
+                        data[..bytes].to_vec(),
+                    ));
+                }
+            }
+            // Too large for a usage value: skip it.
+            ERROR_MORE_DATA => {}
+            ERROR_NO_MORE_ITEMS => break,
+            other => return Err(other),
+        }
+        index += 1;
+    }
+    Ok(out)
+}
+
+/// Read Windows' record of started programs for the current user (still encoded; decoded by
+/// [`crate::usage::resolve_usage`]). A missing key is normal; other failures become problems.
+pub fn read_user_assist() -> SourceReport<Vec<RawUsage>> {
+    let mut report = SourceReport::<Vec<RawUsage>>::default();
+    let problem = |message: String| Problem {
+        source: "registry:userassist".to_owned(),
+        message,
+    };
+    let base = match open(HKEY_CURRENT_USER, USER_ASSIST, 0) {
+        Ok(key) => key,
+        Err(code) if code == ERROR_FILE_NOT_FOUND => return report,
+        Err(code) => {
+            report.problems.push(problem(format!(
+                "cannot open the program-usage key (error {code})"
+            )));
+            return report;
+        }
+    };
+    let groups = match subkey_names(&base) {
+        Ok(names) => names,
+        Err(code) => {
+            report
+                .problems
+                .push(problem(format!("cannot list program usage (error {code})")));
+            return report;
+        }
+    };
+    for group in groups {
+        let Ok(key) = open(
+            HKEY_CURRENT_USER,
+            &format!("{USER_ASSIST}\\{group}\\Count"),
+            0,
+        ) else {
+            continue;
+        };
+        match binary_values(&key) {
+            Ok(values) => report.items.extend(
+                values
+                    .into_iter()
+                    .map(|(name, data)| RawUsage { name, data }),
+            ),
+            Err(code) => report.problems.push(problem(format!(
+                "cannot read program usage in {group} (error {code})"
             ))),
         }
     }

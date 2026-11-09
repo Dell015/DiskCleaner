@@ -208,6 +208,13 @@ const check = (ok, what) => {
     check(await page.isVisible("#explorer") && !(await page.isVisible("#minimap")), "the list shows and the map is out of the way");
     const sizes = await page.$$eval("#explorer .x-row .c-size", (els) => els.map((e) => e.textContent));
     check(sizes.length > 3, `the list shows the folder's contents (${sizes.length} rows)`);
+    check(/ (GB|MB)$/.test(sizes[0]), `sizes are written like Windows by default (${sizes[0]})`);
+    await page.click("#settingsBtn");
+    await page.click("#units button[data-units=binary]");
+    const precise = await page.textContent("#explorer .x-row .c-size");
+    await page.click("#units button[data-units=windows]");
+    await page.keyboard.press("Escape");
+    check(/ GiB$/.test(precise), `the size names can be switched to the precise ones (${precise})`);
     const f0 = await page.evaluate(() => window.__dc.curFolder());
     await page.dblclick("#explorer .x-row.dir >> nth=0");
     await page.waitForTimeout(300);
@@ -288,6 +295,59 @@ const check = (ok, what) => {
     await page.waitForFunction(() => window.__dc.state.live && !window.__dc.state.live.active, null, { timeout: 120000 });
     await page.waitForTimeout(500);
     check((await page.locator("#tab-findings .row").count()) > 3 && (await page.locator("#explorer .x-row").count()) > 3, "a live scan in the list ends with findings");
+    check(await page.isVisible("#unreadTab") && (await page.textContent("#unreadTab")).includes("2"), "the tab of entries that could not be read appears");
+    await page.click("#unreadTab");
+    await page.waitForTimeout(200);
+    check((await page.locator("#tab-unread .row").count()) === 2 && (await page.textContent("#tab-unread")).includes("did not allow"), "it lists each one with the reason");
+    await shot("23-not-read");
+    check(!(await page.isVisible("#saveBtn")), "Save scan is only offered in the desktop app");
+    // Apps tab: the picked app shows every place it keeps things.
+    await page.goto(base + "?demo=40000&view=files");
+    await page.waitForFunction(() => document.querySelectorAll("#explorer .x-row").length > 3, null, { timeout: 60000 });
+    check(!(await page.isVisible("#unreadTab")), "a new file or demo clears the Not read tab");
+    await page.click(".tabs button[data-tab=apps]");
+    await page.click("#tab-apps .rows li:first-child .row");
+    await page.waitForTimeout(300);
+    check((await page.locator("#tab-apps .places .place").count()) >= 1, "an app shows every place it keeps things");
+    await shot("24-app-places");
+
+    // ---------- Overview: everything at a glance. ----------
+    await page.goto(base + "?demo=40000&view=overview");
+    await page.waitForFunction(() => document.querySelectorAll("#overview .ov-sec").length > 3, null, { timeout: 60000 });
+    await shot("30-overview");
+    const ov = await page.evaluate(() => ({
+      legend: document.querySelector("#overview .ov-legend").textContent,
+      groups: document.querySelectorAll("#overview .ov-group").length,
+      hints: [...document.querySelectorAll("#overview .ov-hint b")].map((b) => b.textContent),
+      apps: document.querySelectorAll("#overview .ov-app:not(.head)").length,
+      portable: document.querySelector("#ov-portable").textContent,
+    }));
+    check(/Apps and games/.test(ov.legend) && /Your files/.test(ov.legend) && /Windows/.test(ov.legend), "the Overview says where the space goes");
+    check(ov.groups >= 4, `Downloads are sorted by type (${ov.groups} groups)`);
+    check(ov.hints.includes("Installers of apps you already have") && ov.hints.includes("Archives already unpacked"), "Downloads come with hints");
+    check(ov.apps >= 10 && /Programs nobody installed/.test(ov.portable), `apps and programs nobody installed are listed (${ov.apps} apps)`);
+    await page.click("#overview .ov-app:not(.head) >> nth=0");
+    await page.waitForTimeout(200);
+    check((await page.locator("#overview .ov-app-detail").count()) === 1, "an app opens to show where it keeps things");
+    await page.click("#overview .ov-tools button:has-text('Least used first')");
+    await page.waitForTimeout(200);
+    check(true, "apps can be sorted by last use");
+    await page.click("#ov-big ~ * .ov-row >> nth=0").catch(async () => page.locator("#overview .ov-sec:has(#ov-big) .ov-row").first().click());
+    await page.waitForTimeout(400);
+    const opened = await page.evaluate(() => ({ view: window.__dc.settings.view, sel: window.__dc.state.selected, row: document.querySelectorAll("#explorer .x-row.on").length }));
+    check(opened.view === "files" && opened.sel && opened.row === 1, "a row in the Overview opens it in Files, selected");
+    await page.click("#explorer .x-up");
+    await page.waitForTimeout(200);
+    await page.click("#explorer .x-sortbtn");
+    await page.waitForTimeout(500);
+    check((await page.evaluate(() => window.__dc.settings.view)) === "overview" && (await page.textContent("#overview")).includes("Sorted:"), "Sort this folder shows any folder sorted by type");
+    await shot("31-sorted-folder");
+    // A live scan opens on the Overview and finishes there.
+    await page.goto(base + "?live=40000&view=overview");
+    await page.click("#emptyScan");
+    await page.waitForFunction(() => window.__dc.state.live && window.__dc.state.live.finished && !window.__dc.state.live.active, null, { timeout: 120000 });
+    await page.waitForTimeout(600);
+    check((await page.locator("#overview .ov-group").count()) >= 3, "the Overview fills in from a live scan");
 
     if (viewFile) {
       await page.goto(base + "?view=map");

@@ -212,6 +212,18 @@ export function appTotals(tree: Tree): { owner: number; bytes: number; folders: 
   return [...per.entries()].map(([owner, v]) => ({ owner, ...v, folders: v.folders.sort((a, b) => tree.agg[b] - tree.agg[a]) })).sort((a, b) => b.bytes - a.bytes);
 }
 
+/** What kind of place a folder is, in words (where an app keeps things). */
+export function placeKind(path: string): string {
+  const k = path.toLowerCase().replace(/\//g, "\\");
+  if (/^[a-z]:\\[^\\]+$/.test(k)) return "Top of the drive";
+  if (/\\program files( \(x86\))?\\/.test(k)) return "Program files";
+  if (/\\appdata\\(local|roaming|locallow)\\/.test(k)) return k.includes("\\appdata\\local\\temp\\") ? "Temporary files" : "App data";
+  if (/^[a-z]:\\programdata\\/.test(k)) return "Shared app data";
+  if (/\\(documents\\my games|saved games)\\/.test(k)) return "Game saves";
+  if (/\\documents\\/.test(k)) return "Documents";
+  return "Elsewhere";
+}
+
 export function renderApps(el: HTMLElement, tree: Tree, p: Palette, focused: number, act: PanelActions): void {
   clear(el);
   const totals = appTotals(tree);
@@ -219,7 +231,7 @@ export function renderApps(el: HTMLElement, tree: Tree, p: Palette, focused: num
     el.append(h("p", { class: "lead" }, "No app information in this file."), h("p", { class: "quiet" }, "Make the view file with --apps to see which app owns what."));
     return;
   }
-  el.append(h("p", { class: "quiet" }, "Space taken by each app's folders. Pick one to light up only its folders."));
+  el.append(h("p", { class: "quiet" }, "Space taken by each app's folders. Pick one to see every place it keeps things and light up only those."));
   if (focused >= 0) el.append(h("button", { class: "more", onclick: () => act.focusOwner(-1) }, "Show every app"));
   const max = Math.max(1, totals[0].bytes);
   const ol = h("ol", { class: "rows" });
@@ -229,12 +241,24 @@ export function renderApps(el: HTMLElement, tree: Tree, p: Palette, focused: num
     const b = h("span", { class: "minibar" });
     b.style.width = `${Math.max(1, (t.bytes / max) * 100)}%`;
     b.style.background = color;
-    ol.append(h("li", { class: focused === t.owner ? "on" : "" }, h("button", { class: "row", onclick: () => { act.focusOwner(t.owner); if (t.folders[0] !== undefined) act.reveal(t.folders[0]); } },
+    ol.append(h("li", { class: focused === t.owner ? "on" : "" }, h("button", { class: "row", attrs: { "aria-expanded": String(focused === t.owner) }, onclick: () => act.focusOwner(focused === t.owner ? -1 : t.owner) },
       shapeIcon({ color, ringColor: mix(color, p.text, 0.35), ringSize: 0.16, gapColor: p.bg, gapSize: 0 }, 12),
       h("span", { class: "title" }, o.name),
       h("span", { class: "size" }, human(t.bytes)),
-      h("span", { class: "path" }, t.folders.slice(0, 2).map((f) => tree.path(f)).join("   ")),
+      h("span", { class: "path" }, t.folders.length > 1 ? `${count(t.folders.length)} places: ${[...new Set(t.folders.map((f) => placeKind(tree.path(f)).toLowerCase()))].join(", ")}` : tree.path(t.folders[0])),
       b)));
+    // The picked app: every place it keeps things, so traces outside its own folder are easy to see.
+    if (focused === t.owner) {
+      const places = h("ul", { class: "places", attrs: { "aria-label": `Where ${o.name} keeps things` } });
+      for (const f of t.folders.slice(0, 60)) {
+        places.append(h("li", {}, h("button", { class: "place", title: tree.path(f), onclick: () => act.reveal(f) },
+          h("span", { class: "kind" }, placeKind(tree.path(f))),
+          h("span", { class: "size" }, human(tree.agg[f])),
+          h("span", { class: "path" }, tree.path(f)))));
+      }
+      if (t.folders.length > 60) places.append(h("li", { class: "quiet" }, `and ${count(t.folders.length - 60)} more`));
+      ol.append(h("li", { class: "places-wrap" }, h("p", { class: "quiet" }, `Where ${o.name} keeps things`), places));
+    }
   }
   el.append(ol);
 }

@@ -20,7 +20,10 @@ pub struct AppsArgs {
 pub fn read_system(verify_signatures: bool) -> Result<AppSnapshot> {
     Ok(dc_winmeta::build_snapshot_with(
         &dc_winmeta::WindowsSource,
-        &dc_winmeta::BuildOptions { verify_signatures },
+        &dc_winmeta::BuildOptions {
+            verify_signatures,
+            read_usage: true,
+        },
     ))
 }
 

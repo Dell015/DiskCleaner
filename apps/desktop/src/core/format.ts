@@ -22,7 +22,24 @@ export interface Mark {
   bytes: number;
 }
 
-export interface Owner { name: string; kind: "app" | "vendor" | "windows"; publisher?: string }
+export interface Owner {
+  name: string;
+  kind: "app" | "vendor" | "windows";
+  publisher?: string;
+  /** Apps: what Windows knows about them (all optional). */
+  version?: string;
+  /** Install date, YYYY-MM-DD. */
+  installed?: string;
+  /** Size the installer stated, bytes. */
+  stated_bytes?: number;
+  /** Has an uninstaller registered. */
+  uninstaller?: boolean;
+  /** Last started (Unix seconds), from Windows' record of started programs. */
+  last_used?: number;
+  runs?: number;
+  /** Registered install folder. */
+  folder?: string;
+}
 
 /** The file as written (columns of plain arrays). */
 export interface ViewFile {
@@ -61,6 +78,8 @@ export interface ViewData {
   /** Flat triples: node, owner, confidence. */
   assignments: Int32Array;
   marks: Mark[];
+  /** When the view file was made (Unix seconds), if it says. */
+  created?: number;
 }
 
 export const KIND = { file: 0, dir: 1, link: 2, other: 3 } as const;
@@ -157,6 +176,20 @@ export function checkView(raw: unknown): ViewData {
     if (!OWNER_KINDS.includes(kindText)) fail(`owner ${i} has an unknown kind`);
     const out: Owner = { name: text(o.name, `owner ${i} name`), kind: kindText as Owner["kind"] };
     if (o.publisher !== undefined) out.publisher = text(o.publisher, `owner ${i} publisher`);
+    if (o.version !== undefined) out.version = text(o.version, `owner ${i} version`);
+    if (o.installed !== undefined) {
+      const d = text(o.installed, `owner ${i} install date`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) fail(`owner ${i} has a damaged install date`);
+      out.installed = d;
+    }
+    if (o.stated_bytes !== undefined) out.stated_bytes = int(o.stated_bytes, `owner ${i} stated size`, 0, 2 ** 53);
+    if (o.uninstaller !== undefined) {
+      if (typeof o.uninstaller !== "boolean") fail(`owner ${i} uninstaller is damaged`);
+      out.uninstaller = o.uninstaller;
+    }
+    if (o.last_used !== undefined) out.last_used = int(o.last_used, `owner ${i} last used`, 0, 1e11);
+    if (o.runs !== undefined) out.runs = int(o.runs, `owner ${i} runs`, 0, 2 ** 32);
+    if (o.folder !== undefined) out.folder = text(o.folder, `owner ${i} folder`);
     return out;
   });
   const rawAssign = array(raw.assignments, "assignments");
@@ -199,7 +232,8 @@ export function checkView(raw: unknown): ViewData {
     }
     return out;
   });
-  return { roots, categories, names: nameList, parent, kind, size, mtime, flags, cat, owners, assignments, marks };
+  const created = typeof raw.created_unix === "number" && Number.isFinite(raw.created_unix) && raw.created_unix > 0 ? raw.created_unix : undefined;
+  return { roots, categories, names: nameList, parent, kind, size, mtime, flags, cat, owners, assignments, marks, created };
 }
 
 /** Parse text and check it. */

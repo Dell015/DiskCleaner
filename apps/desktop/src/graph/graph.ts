@@ -238,7 +238,7 @@ export class GraphView {
           this.leaving.delete(item.key);
           g.removeNodeAttribute(item.key, "leaving");
         }
-        if (old.size !== attrs.size || old.color !== attrs.color || old.label !== attrs.label || old.open !== attrs.open || old.ringColor !== attrs.ringColor) {
+        if (old.size !== attrs.size || old.color !== attrs.color || old.label !== attrs.label || old.open !== attrs.open || old.ringColor !== attrs.ringColor || old.hoverLabel !== attrs.hoverLabel) {
           if (Math.abs((old.size as number) - (attrs.size as number)) > 0.05 * (attrs.size as number)) resized = true;
           g.mergeNodeAttributes(item.key, attrs);
         }

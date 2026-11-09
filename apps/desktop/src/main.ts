@@ -8,10 +8,10 @@ import { KIND, type ViewData } from "./core/format";
 import { DEFAULT_LOD, nodeKey, selectVisible, type Visible, type VisItem } from "./core/lod";
 import { search } from "./core/search";
 import type { Tree } from "./core/tree";
-import { count, human } from "./core/util";
+import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
-import { cancelScan, confirmDrive, isDesktop, isDriveRoot, pickFolder, startScan, suggestedFolders } from "./platform";
+import { cancelScan, confirmDrive, isDesktop, isDriveRoot, pickFolder, saveScan, startScan, suggestedFolders } from "./platform";
 import { makeDemo } from "./core/demo";
 import { checkView } from "./core/format";
 import { byId, clear, h } from "./panels/dom";
@@ -21,6 +21,7 @@ import { GraphView, radiusFor } from "./graph/graph";
 import { matchPreset, prefersReducedMotion, PRESET_NAMES, PRESETS, type Quality, type QualityId } from "./graph/quality";
 import { paletteOf, STYLES, type StyleId } from "./graph/style";
 import { ExplorerView } from "./panels/explorer";
+import { OverviewView } from "./panels/overview";
 
 /** A folder this big on screen (radius, px) opens when you zoom in; below CLOSE_PX it closes again. */
 const OPEN_PX = 24;
@@ -28,7 +29,7 @@ const CLOSE_PX = 9;
 /** How long the picture takes to build, per speed setting (slowest first). */
 const REPLAY_SECONDS = [18, 11, 7, 4, 2];
 
-type Tab = "findings" | "apps";
+type Tab = "findings" | "apps" | "unread";
 
 /** A live scan in progress (or just finished). */
 interface LiveSession {
@@ -61,11 +62,12 @@ type Theme = "dark" | "light" | "system";
 
 // ---------- settings (kept in this browser only) ----------
 
-/** "files" is the simple list (the default); "map" is the node graph. */
-type ViewMode = "files" | "map";
-interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode }
+/** "overview" is everything at a glance (the default), "files" the simple list, "map" the node graph. */
+type ViewMode = "overview" | "files" | "map";
+const VIEW_MODES: ViewMode[] = ["overview", "files", "map"];
+interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits }
 function loadSettings(): Settings {
-  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "files" };
+  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows" };
   if (prefersReducedMotion()) base.quality.motion = "reduced";
   try {
     const raw = JSON.parse(localStorage.getItem("dc-settings") ?? "null") as Partial<Settings> | null;
@@ -74,7 +76,8 @@ function loadSettings(): Settings {
       if (raw.theme === "dark" || raw.theme === "light" || raw.theme === "system") base.theme = raw.theme;
       if (raw.quality && typeof raw.quality === "object") base.quality = { ...base.quality, ...raw.quality };
       base.chosen = Boolean(raw.chosen);
-      if (raw.view === "files" || raw.view === "map") base.view = raw.view;
+      if (raw.view && VIEW_MODES.includes(raw.view)) base.view = raw.view;
+      if (raw.units && SIZE_UNITS.includes(raw.units)) base.units = raw.units;
     }
   } catch {
     /* storage may be unavailable; defaults are used */
@@ -83,14 +86,17 @@ function loadSettings(): Settings {
   if (st && st in STYLES) base.style = st as StyleId;
   const th = params.get("theme");
   if (th === "dark" || th === "light" || th === "system") base.theme = th;
+  const un = params.get("units") as SizeUnits | null;
+  if (un && SIZE_UNITS.includes(un)) base.units = un;
   const vw = params.get("view");
-  if (vw === "files" || vw === "map") base.view = vw;
+  if (vw && VIEW_MODES.includes(vw as ViewMode)) base.view = vw as ViewMode;
   const q = params.get("quality");
   if (q && q in PRESETS) base.quality = { ...PRESETS[q as keyof typeof PRESETS] };
   return base;
 }
 const params = new URLSearchParams(location.search);
 const settings = loadSettings();
+setSizeUnits(settings.units);
 function saveSettings(): void {
   try {
     localStorage.setItem("dc-settings", JSON.stringify(settings));
@@ -121,8 +127,13 @@ const state = {
   findingsShown: 60,
   owner: -1,
   hitIndex: -1,
+  /** What the last live scan could not read (empty for files and the demo). */
+  unreadable: [] as { path: string; why: string }[],
+  unreadableCount: 0,
   /** The folder the list shows (-1: the top of what was scanned). */
   folder: -1,
+  /** A folder the user asked to see sorted in the Overview (-1: Downloads). */
+  sortRoot: -1,
 };
 
 const app = byId("app");
@@ -151,6 +162,22 @@ const explorer = new ExplorerView(byId("explorer"), {
   context: (i, x, y) => {
     const r = byId("stage").getBoundingClientRect();
     contextMenu(nodeKey(i), x - r.left, y - r.top);
+  },
+  sort: (f) => {
+    state.sortRoot = f;
+    setViewMode("overview");
+  },
+});
+const overview = new OverviewView(byId("overview"), {
+  open: (i) => {
+    const tree = state.tree;
+    if (!tree) return;
+    if (tree.kind[i] === KIND.dir && tree.childCount[i] > 0) goFolder(i);
+    else goFolder(tree.parent[i], i);
+  },
+  clearSort: () => {
+    state.sortRoot = -1;
+    renderFlat();
   },
 });
 (window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder() };
@@ -199,6 +226,8 @@ function start(data: ViewData): void {
   state.focusRoot = null;
   state.owner = -1;
   state.folder = -1;
+  state.sortRoot = -1;
+  resetScanExtras();
   state.findingsShown = 60;
   state.filter = data.marks.some((m) => m.offered) ? "offered" : data.marks.length ? "shown" : "offered";
   clearFocusTimers();
@@ -241,7 +270,7 @@ function prepare(data: ViewData, from: number): void {
   state.replay.order = target.items.slice().sort((a, b) => depthOf(a) - depthOf(b) || (rank.get(a.key) ?? 0) - (rank.get(b.key) ?? 0));
   state.replay.partial = { items: [], byKey: new Map(), open: new Set(), truncated: false };
   // The list has nothing to animate; the map grows ring by ring.
-  if (settings.quality.motion !== "full" || settings.view === "files") {
+  if (settings.quality.motion !== "full" || settings.view !== "map") {
     finishReplay();
     return;
   }
@@ -420,6 +449,8 @@ function beginLive(starter: (on: (e: LiveEvent) => void) => () => void): void {
   state.focusRoot = null;
   state.owner = -1;
   state.folder = -1;
+  state.sortRoot = -1;
+  resetScanExtras();
   clearFocusTimers();
   closeDrawer();
   view.reset();
@@ -473,6 +504,12 @@ function onLiveEvent(id: number, e: LiveEvent): void {
       break;
     case "finished": {
       s.summary = e;
+      state.unreadable = e.unreadable ?? [];
+      state.unreadableCount = e.errors;
+      byId("unreadTab").hidden = e.errors === 0;
+      byId("unreadTab").textContent = `Not read (${count(e.errors)})`;
+      // A finished scan (not a stopped one) can be saved and opened again later.
+      byId("saveBtn").hidden = !isDesktop() || e.status === "cancelled";
       s.lt?.finish(e);
       s.finished = true;
       s.phase = "placing";
@@ -500,12 +537,14 @@ function liveStep(now: number): void {
     const dt = Math.min(250, now - s.last);
     s.last = now;
     frameTimes.push(Math.min(64, dt));
-    if (settings.view === "files" || s.manual) {
-      // No paced reveal: the list (or the user's own map) updates a few times a second.
-      if (now - s.lastList > 450 || s.finished) {
+    if (settings.view !== "map" || s.manual) {
+      // No paced reveal: the list (or the user's own map) updates a few times a second; the
+      // Overview, which adds up everything, every two seconds.
+      const every = settings.view === "overview" ? 2000 : 450;
+      if (now - s.lastList > every || s.finished) {
         s.lastList = now;
         liveReadout(s, tree);
-        if (settings.view === "files") renderList();
+        if (settings.view !== "map") renderFlat();
         else refresh(true);
       }
       if (s.finished) {
@@ -643,8 +682,8 @@ function selectedNode(): number | null {
 function refresh(animate: boolean): void {
   const tree = state.tree;
   if (!tree || tree.n === 0) return;
-  if (settings.view === "files") {
-    renderList();
+  if (settings.view !== "map") {
+    renderFlat();
     crumbs();
     return;
   }
@@ -668,7 +707,7 @@ function refresh(animate: boolean): void {
 function zoomDetail(): void {
   const tree = state.tree;
   const vis = state.vis;
-  if (!tree || !vis || state.replay.running || settings.view === "files" || (state.live?.active && !state.live.manual)) return;
+  if (!tree || !vis || state.replay.running || settings.view !== "map" || (state.live?.active && !state.live.manual)) return;
   let changed = false;
   for (const n of [...state.zoomOpened]) {
     const r = view.pixelRadius(nodeKey(n));
@@ -745,7 +784,7 @@ function toggle(key: string): void {
 function toggleNode(i: number): void {
   const tree = state.tree;
   if (!tree || tree.kind[i] !== KIND.dir) return;
-  if (settings.view === "files") {
+  if (settings.view !== "map") {
     goFolder(i);
     return;
   }
@@ -775,7 +814,7 @@ function reveal(i: number): void {
   if (state.replay.running) finishReplay();
   const tree = state.tree;
   if (!tree || i < 0 || i >= tree.n) return;
-  if (settings.view === "files") {
+  if (settings.view !== "map") {
     goFolder(i === 0 ? 0 : tree.parent[i], i);
     return;
   }
@@ -800,7 +839,7 @@ function reveal(i: number): void {
 function focusOn(i: number | null): void {
   const tree = state.tree;
   if (!tree) return;
-  if (settings.view === "files") {
+  if (settings.view !== "map") {
     goFolder(i ?? 0);
     return;
   }
@@ -843,6 +882,12 @@ function goFolder(i: number, pick: number | null = null): void {
   const tree = state.tree;
   if (!tree || i < 0 || i >= tree.n) return;
   hideMenu();
+  // From the Overview, opening something shows it in the list.
+  if (settings.view === "overview") {
+    settings.view = "files";
+    saveSettings();
+    applyViewMode();
+  }
   state.folder = i;
   state.selected = pick === null ? null : nodeKey(pick);
   view.setSelected(null);
@@ -860,6 +905,24 @@ function renderList(): void {
   explorer.show(tree, curFolder(), selectedNode(), view.pal, view.mode);
 }
 
+/** "Now" for "how long ago": the scan's own time (a saved file is judged as of when it was made). */
+function scanNow(): number {
+  return state.live ? Date.now() / 1000 : state.data?.created ?? Date.now() / 1000;
+}
+
+function renderOverview(force = false): void {
+  const tree = state.tree;
+  if (settings.view !== "overview" || !tree || tree.n === 0) return;
+  const sortRoot = state.sortRoot >= 0 && state.sortRoot < tree.n ? state.sortRoot : -1;
+  overview.show(tree, scanNow(), sortRoot, Boolean(state.live?.active), force);
+}
+
+/** Draw whichever flat view is showing (Overview or Files). */
+function renderFlat(): void {
+  if (settings.view === "files") renderList();
+  else if (settings.view === "overview") renderOverview();
+}
+
 /** The user moved around the map while a scan runs: from now on show their view, not the paced reveal. */
 function takeOver(): void {
   const s = state.live;
@@ -868,8 +931,9 @@ function takeOver(): void {
 
 function applyViewMode(): void {
   const files = settings.view === "files";
-  app.classList.toggle("files", files);
+  app.classList.toggle("files", settings.view !== "map");
   byId("explorer").hidden = !files;
+  byId("overview").hidden = settings.view !== "overview";
   document.querySelectorAll<HTMLButtonElement>("#viewSeg button").forEach((b) => {
     const on = b.dataset.view === settings.view;
     b.classList.toggle("on", on);
@@ -886,6 +950,12 @@ function setViewMode(m: ViewMode): void {
   applyViewMode();
   const tree = state.tree;
   if (!tree) return;
+  if (m === "overview") {
+    hideMenu();
+    renderOverview(true);
+    crumbs();
+    return;
+  }
   if (m === "files") {
     // Open the list where the map was looking.
     const sel = selectedNode();
@@ -968,7 +1038,7 @@ function crumbs(): void {
   clear(el);
   if (!tree) return;
   selbar();
-  if (settings.view === "files") {
+  if (settings.view !== "map") {
     const f = curFolder();
     const chain = f > 0 ? [...tree.ancestors(f), f].filter((a) => a !== 0) : [];
     const all = h("button", { onclick: () => goFolder(0) }, "This PC");
@@ -1000,6 +1070,51 @@ function crumbs(): void {
 
 // ---------- side column ----------
 
+/** What the scan could not read, and why. */
+function renderUnreadable(): void {
+  const el = byId("tab-unread");
+  clear(el);
+  const n = state.unreadableCount;
+  el.append(
+    h("p", { class: "lead" }, n === 1 ? "1 entry could not be read" : `${count(n)} entries could not be read`),
+    h("p", { class: "quiet" }, "Usually folders Windows keeps to itself, or another user's files. Their size is not in the totals. Nothing was changed."),
+  );
+  const ol = h("ol", { class: "rows" });
+  for (const u of state.unreadable) {
+    const node = state.live?.lt?.find(u.path) ?? -1;
+    const row = h("button", { class: "row plain", title: u.path, onclick: () => (node >= 0 ? reveal(node) : undefined) },
+      h("span", { class: "title" }, u.path.split(/[\\/]/).pop() || u.path),
+      h("span", { class: "path" }, u.path),
+      h("span", { class: "why" }, u.why));
+    if (node < 0) row.setAttribute("aria-disabled", "true");
+    ol.append(h("li", {}, row));
+  }
+  el.append(ol);
+  if (n > state.unreadable.length) el.append(h("p", { class: "quiet" }, `The first ${count(state.unreadable.length)} are listed.`));
+}
+
+/** Clear what belongs to the previous scan or file. */
+function resetScanExtras(): void {
+  state.unreadable = [];
+  state.unreadableCount = 0;
+  byId("unreadTab").hidden = true;
+  byId("saveBtn").hidden = true;
+  if (state.tab === "unread") setTab("findings");
+}
+
+async function saveCurrentScan(): Promise<void> {
+  const s = state.live;
+  if (!s?.finished) return;
+  const name = (s.root.replace(/[\\/:]+/g, " ").trim() || "scan").replace(/\s+/g, "-");
+  const day = new Date().toISOString().slice(0, 10);
+  try {
+    const saved = await saveScan(`diskcleaner-${name}-${day}.json`);
+    if (saved) toast(`Saved ${count(saved.entries)} entries (${human(saved.bytes)}). Open it again any time with Open file.`);
+  } catch (e) {
+    showError(String(e));
+  }
+}
+
 function setTab(t: Tab): void {
   state.tab = t;
   document.querySelectorAll<HTMLButtonElement>(".tabs button").forEach((b) => {
@@ -1009,6 +1124,7 @@ function setTab(t: Tab): void {
   });
   byId("tab-findings").hidden = t !== "findings";
   byId("tab-apps").hidden = t !== "apps";
+  byId("tab-unread").hidden = t !== "unread";
   renderSide();
 }
 
@@ -1016,7 +1132,7 @@ function renderSide(): void {
   const tree = state.tree;
   if (!tree) return;
   if (state.live && !state.live.finished) {
-    const el = byId(state.tab === "findings" ? "tab-findings" : "tab-apps");
+    const el = byId(`tab-${state.tab}`);
     clear(el);
     el.append(h("p", { class: "lead" }, "Reading the disk"), h("p", { class: "quiet" }, "Findings and apps appear when the scan is done. Nothing is changed while it runs."));
     return;
@@ -1030,7 +1146,8 @@ function renderSide(): void {
       state.findingsShown += 60;
       renderSide();
     });
-  } else renderApps(byId("tab-apps"), tree, view.pal, state.owner, actions);
+  } else if (state.tab === "apps") renderApps(byId("tab-apps"), tree, view.pal, state.owner, actions);
+  else renderUnreadable();
   if (state.selected) renderDrawer();
 }
 
@@ -1063,8 +1180,10 @@ function sizeKey(): void {
   if (!tree || !state.vis) return;
   const rootBytes = tree.agg[pictureRoot()] || tree.agg[0];
   const upp = view.pixelsPerUnit();
-  const M = 1024 * 1024;
-  const steps = [M, 10 * M, 100 * M, 1024 * M, 10240 * M, 102400 * M, 1048576 * M];
+  // Round numbers in the chosen units (1 MB, 10 MB, ... 1 TB).
+  const K = getSizeUnits() === "decimal" ? 1000 : 1024;
+  const M = K * K;
+  const steps = [M, 10 * M, 100 * M, K * M, 10 * K * M, 100 * K * M, K * K * M];
   const fit = steps.filter((b) => {
     const r = radiusFor(b, rootBytes) * upp;
     return r >= 2.5 && r <= 22 && b <= rootBytes;
@@ -1134,7 +1253,7 @@ function contextMenu(k: string, x: number, y: number): void {
   const tree = state.tree;
   const menu = byId("menu");
   if (!tree) return;
-  if (settings.view === "files") {
+  if (settings.view !== "map") {
     const i = Number(k.slice(1));
     if (!(i >= 0 && i < tree.n)) return;
     clear(menu);
@@ -1233,6 +1352,12 @@ function renderSettings(): void {
     } }, sw, h("span", {}, h("b", {}, st.name), h("span", { class: "s" }, st.summary))));
   }
   document.querySelectorAll<HTMLButtonElement>("#themes button").forEach((b) => b.classList.toggle("on", b.dataset.theme === settings.theme));
+  document.querySelectorAll<HTMLButtonElement>("#units button").forEach((b) => {
+    const on = b.dataset.units === settings.units;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  byId("unitsNote").textContent = `Example: 10,000,000,000 bytes is ${human(1e10)}.`;
   const presets = byId("presets");
   clear(presets);
   const cur = matchPreset(settings.quality);
@@ -1265,6 +1390,22 @@ function applyLook(): void {
   drawMinimap();
 }
 
+/** Write every size again in the chosen units. */
+function applyUnits(u: SizeUnits): void {
+  settings.units = u;
+  setSizeUnits(u);
+  saveSettings();
+  renderSettings();
+  renderSide();
+  if (state.selected) renderDrawer();
+  if (state.live?.active && state.tree) liveReadout(state.live, state.tree);
+  if (settings.view === "files") renderList();
+  else if (settings.view === "overview") renderOverview(true);
+  else if (!state.live?.active || state.live.manual) refresh(false);
+  sizeKey();
+  status();
+}
+
 function applyQuality(): void {
   saveSettings();
   view.setQuality(settings.quality);
@@ -1278,6 +1419,7 @@ function bindSettings(): void {
     renderSettings();
     dlg.showModal();
   });
+  document.querySelectorAll<HTMLButtonElement>("#units button").forEach((b) => b.addEventListener("click", () => applyUnits((b.dataset.units ?? "windows") as SizeUnits)));
   document.querySelectorAll<HTMLButtonElement>("#themes button").forEach((b) => b.addEventListener("click", () => {
     settings.theme = (b.dataset.theme ?? "dark") as Theme;
     applyLook();
@@ -1356,6 +1498,7 @@ function bindScan(): void {
     return;
   }
   byId("scanBtn").addEventListener("click", () => void scanFolder());
+  byId("saveBtn").addEventListener("click", () => void saveCurrentScan());
   byId("emptyScan").addEventListener("click", () => void scanFolder());
   byId("stop").addEventListener("click", () => {
     const s = state.live;
@@ -1409,7 +1552,7 @@ function bind(): void {
       document.querySelectorAll("#controls .seg button").forEach((x) => x.classList.toggle("on", x === b));
       key();
       if (state.selected) renderDrawer();
-      renderList();
+      renderFlat();
       drawMinimap();
     }));
   document.querySelectorAll<HTMLButtonElement>(".tabs button").forEach((b) => b.addEventListener("click", () => {

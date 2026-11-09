@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::model::{KnownFolder, Problem, RawUninstallEntry, Shortcut, VersionInfo};
 use crate::parse::path_key;
 use crate::signature::SignatureStatus;
+use crate::usage::RawUsage;
 
 /// Data plus the non-fatal problems met while collecting it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -32,6 +33,10 @@ pub trait SystemInfoSource {
     fn path_exists(&self, path: &str) -> bool;
     /// The value of an environment variable (case-insensitive on Windows).
     fn env_var(&self, name: &str) -> Option<String>;
+    /// Windows' record of programs started from Explorer and Start (raw, still encoded).
+    fn program_usage(&self) -> SourceReport<Vec<RawUsage>> {
+        SourceReport::default()
+    }
 }
 
 /// An in-memory source for tests.
@@ -51,6 +56,8 @@ pub struct FakeSource {
     pub signatures: BTreeMap<String, SignatureStatus>,
     /// Environment variables (names are matched case-insensitively).
     pub env: BTreeMap<String, String>,
+    /// Raw program-usage values to report.
+    pub usage: Vec<RawUsage>,
     existing: BTreeSet<String>,
 }
 
@@ -107,6 +114,13 @@ impl SystemInfoSource for FakeSource {
 
     fn path_exists(&self, path: &str) -> bool {
         self.existing.contains(&path_key(path))
+    }
+
+    fn program_usage(&self) -> SourceReport<Vec<RawUsage>> {
+        SourceReport {
+            items: self.usage.clone(),
+            problems: Vec::new(),
+        }
     }
 
     fn env_var(&self, name: &str) -> Option<String> {

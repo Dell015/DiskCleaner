@@ -35,7 +35,10 @@ pub fn installed_apps(verify_signatures: bool) -> Option<AppSnapshot> {
     {
         Some(dc_winmeta::build_snapshot_with(
             &dc_winmeta::WindowsSource,
-            &dc_winmeta::BuildOptions { verify_signatures },
+            &dc_winmeta::BuildOptions {
+                verify_signatures,
+                read_usage: true,
+            },
         ))
     }
     #[cfg(not(windows))]

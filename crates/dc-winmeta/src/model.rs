@@ -185,4 +185,7 @@ pub struct AppSnapshot {
     pub apps: Vec<InstalledApp>,
     /// Non-fatal problems met while reading.
     pub problems: Vec<Problem>,
+    /// Programs started from Explorer or Start, with their last start (empty when not read).
+    #[serde(default)]
+    pub usage: Vec<crate::usage::ProgramUse>,
 }

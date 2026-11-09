@@ -124,6 +124,16 @@ examples_match = ['C:\ProgramData\Riot Vanguard']
 examples_no_match = ['C:\ProgramData\Riot Vanguard unrelated tools']
 
 [[app]]
+id = "riot-client"
+name = "Riot Client"
+# "Riot Games" is the shared folder that holds Riot Client, VALORANT and League of Legends installs.
+names = ["Riot Client", "Riot Games"]
+app_prefixes = ["riot client", "riot games"]
+report_only = true
+examples_match = ['C:\Riot Games', 'C:\Users\me\AppData\Local\Riot Games', 'C:\ProgramData\Riot Games\Riot Client']
+examples_no_match = ['C:\Riot Games unrelated tools', 'C:\ProgramData\Riot']
+
+[[app]]
 id = "league-of-legends"
 name = "League of Legends"
 names = ["League of Legends"]

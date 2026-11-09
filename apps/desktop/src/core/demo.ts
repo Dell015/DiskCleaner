@@ -246,14 +246,48 @@ export function makeDemo(target = 150_000, seed = 42, now = 1_762_000_000): View
   b.files(vids, n(60), CAT.video, 1_200_000_000, 200, 1.0, "VID_");
   b.files(b.dir(vids, "Captures", 5), n(80), CAT.video, 300_000_000, 60, 1.0, "clip_");
   const dl = b.dir(me, "Downloads", 0);
-  b.files(dl, n(120), CAT.installer, 90_000_000, 120, 1.4);
+  b.files(dl, n(120), CAT.installer, 90_000_000, 120, 1.4, "setup-");
   b.files(dl, n(60), CAT.archive, 300_000_000, 200, 1.4);
+  // Installers of apps that are installed, an archive next to what was unpacked from it, a
+  // portable tool and a loose program: what the Overview should point out.
+  for (const [name, mb, age] of [["ChromeSetup.exe", 1.4, 400], ["Blender-4.2.1-windows-x64.msi", 330, 200], ["Git-2.46.0-64-bit.exe", 65, 150], ["OBS-Studio-30.2-Full-Installer-x64.exe", 140, 90], ["DiscordSetup.exe", 110, 30]] as const) {
+    b.push(dl, name, 0, mb * 1_000_000, age, CAT.installer);
+  }
+  b.push(dl, "game-mods.zip", 0, 2_400_000_000, 500, CAT.archive);
+  b.files(b.dir(dl, "game-mods", 500), n(40), CAT.game, 50_000_000, 500);
+  const hw = b.dir(dl, "HWiNFO64", 250);
+  b.push(hw, "HWiNFO64.exe", 0, 12_000_000, 250, CAT.exe);
+  b.push(dl, "speedtest.exe", 0, 4_000_000, 40, CAT.exe);
   b.files(dl, n(200), CAT.document, 1_000_000, 300, 1.5);
   b.push(dl, "Win11_23H2_x64.iso", 0, 6_800_000_000, 700, CAT.archive);
+  // Tools unpacked from the internet, outside Program Files: nobody installed them.
+  const tools = b.dir(c, "Tools", 300);
+  for (const [dir, exe] of [["Rufus", "rufus-4.5.exe"], ["CPU-Z", "cpuz_x64.exe"], ["platform-tools", "adb.exe"]]) {
+    const t = b.dir(tools, dir, 300);
+    b.push(t, exe, 0, 9_000_000, 300, CAT.exe);
+    b.files(t, 3, CAT.other, 400_000, 300);
+  }
   const music = b.dir(me, "Music", 300);
   b.files(music, n(500), CAT.audio, 8_000_000, 600, 0.5);
   const od = b.dir(me, "OneDrive", 1);
   for (let i = 0; i < n(300); i++) b.push(od, `cloud-file-${i}.docx`, 0, 0, 100, CAT.document, 4);
+
+  // What Windows knows about each app: version, install date, last start, uninstaller. A few
+  // apps own nothing in the scanned folders; one has no record of being started.
+  const ownNothing: [string, string][] = [["Microsoft Edge WebView2 Runtime", "Microsoft Corporation"], ["Zoom Workplace", "Zoom Communications"], ["WinRAR 7.01 (64-bit)", "win.rar GmbH"]];
+  for (const [name, publisher] of ownNothing) b.owners.push({ name, kind: "app", publisher });
+  b.owners.forEach((o, i) => {
+    if (o.kind !== "app") return;
+    o.version = `${1 + (i % 9)}.${i % 7}.${(i * 13) % 50}`;
+    const installedDays = 30 + Math.floor(r() * 1200);
+    o.installed = new Date((now - installedDays * DAY) * 1000).toISOString().slice(0, 10);
+    o.uninstaller = i % 11 !== 3;
+    o.stated_bytes = Math.round(r() * 2e9);
+    if (i % 5 !== 2) {
+      o.last_used = Math.round(now - Math.min(installedDays, Math.floor(r() ** 2 * 900)) * DAY);
+      o.runs = 1 + Math.floor(r() * 400);
+    }
+  });
 
   // Keep the disk a realistic size whatever the number of entries: scale file sizes so the
   // whole demo holds about 620 GB (pagefile and other big files keep their share).

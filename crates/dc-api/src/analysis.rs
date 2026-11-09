@@ -45,8 +45,9 @@ pub struct Mark {
     pub bytes: u64,
 }
 
-/// An app (or vendor, or Windows) that owns folders.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// An app (or vendor, or Windows) that owns folders. Every installed app is listed, also one
+/// that owns nothing in the scanned folders (then it has no assignments).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Owner {
     /// Display name.
     pub name: String,
@@ -58,6 +59,74 @@ pub struct Owner {
     /// Registry key, to tell same-named apps apart (not sent to views).
     #[serde(skip)]
     pub key: String,
+    /// Version text (apps).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// Install date as `YYYY-MM-DD`, when the installer wrote a valid one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed: Option<String>,
+    /// Size the installer stated, in bytes (a hint; the scan's own numbers are what counts).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stated_bytes: Option<u64>,
+    /// The app has an uninstaller registered.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub uninstaller: bool,
+    /// Last started, Unix seconds, from Windows' record of started programs. `None`: not known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_used: Option<i64>,
+    /// How often it was started, from the same record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runs: Option<u32>,
+    /// Registered install folder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+}
+
+/// `20240115` as `2024-01-15`; anything else gives `None`.
+fn install_date(text: &str) -> Option<String> {
+    let t = text.trim();
+    if t.len() != 8 || !t.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let (y, m, d) = (&t[..4], &t[4..6], &t[6..]);
+    let ok =
+        ("1990"..="2100").contains(&y) && ("01"..="12").contains(&m) && ("01"..="31").contains(&d);
+    ok.then(|| format!("{y}-{m}-{d}"))
+}
+
+/// Apps that are worth listing: named, not updates or hidden parts, not system components.
+fn listed(app: &dc_winmeta::InstalledApp) -> bool {
+    let f = &app.flags;
+    !f.hidden_entry && !f.update_or_patch && !f.system_component && !app.name.trim().is_empty()
+}
+
+/// Fill in what the snapshot knows about each app owner, and add the installed apps that own
+/// nothing in the scan.
+fn describe_apps(owners: &mut Vec<Owner>, snapshot: &AppSnapshot) {
+    for app in snapshot.apps.iter().filter(|a| listed(a)) {
+        let at = owners
+            .iter()
+            .position(|o| o.kind == "app" && o.key == app.key && o.name == app.name);
+        let at = at.unwrap_or_else(|| {
+            owners.push(Owner {
+                name: app.name.clone(),
+                kind: "app",
+                publisher: app.publisher.clone(),
+                key: app.key.clone(),
+                ..Owner::default()
+            });
+            owners.len() - 1
+        });
+        let use_ = dc_winmeta::last_use(app, &snapshot.usage);
+        let o = &mut owners[at];
+        o.version = app.version.clone();
+        o.installed = app.install_date.as_deref().and_then(install_date);
+        o.stated_bytes = app.estimated_size_kb.map(|kb| u64::from(kb) * 1024);
+        o.uninstaller = app.uninstall_command.is_some();
+        o.last_used = use_.and_then(|(last, _)| last);
+        o.runs = use_.map(|(_, runs)| runs);
+        o.folder = app.install_folder.clone();
+    }
 }
 
 /// Everything the checks found in one scan. Node numbers are indexes into that scan.
@@ -169,11 +238,13 @@ pub fn analyze(
                     kind,
                     publisher: owner.publisher.clone(),
                     key: owner.key.clone(),
+                    ..Owner::default()
                 });
                 next
             });
         out.assignments.push([a.node, id, confidence]);
     }
+    describe_apps(&mut out.owners, snapshot);
     let left = dc_leftovers::find_leftovers(scan, snapshot, &attrib, classifier, &FsResolver)?;
     let left = dc_leftovers::verify(left, classifier, &FsResolver);
     for f in &left.findings {
@@ -255,4 +326,89 @@ fn normal(p: &str) -> String {
     p.trim_end_matches(['\\', '/'])
         .replace('/', "\\")
         .to_lowercase()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{describe_apps, install_date, Owner};
+    use dc_winmeta::{
+        build_snapshot_with, rot13, BuildOptions, FakeSource, KnownFolder, RawUninstallEntry,
+        RawUsage, RegistrySource,
+    };
+
+    #[test]
+    fn every_installed_app_is_listed_with_what_windows_knows() {
+        let entry = |key: &str, name: &str, folder: &str| RawUninstallEntry {
+            key: key.into(),
+            source: Some(RegistrySource::Machine64),
+            display_name: Some(name.into()),
+            install_location: Some(folder.into()),
+            display_version: Some("1.2".into()),
+            install_date: Some("20240115".into()),
+            estimated_size_kb: Some(2048),
+            uninstall_string: Some(format!("\"{folder}\\uninstall.exe\"")),
+            ..RawUninstallEntry::default()
+        };
+        let mut fake = FakeSource::new()
+            .with_existing(r"C:\Program Files\Owns")
+            .with_existing(r"C:\Program Files\Elsewhere");
+        fake.folders = vec![KnownFolder {
+            name: "ProgramFiles".into(),
+            path: Some(r"C:\Program Files".into()),
+        }];
+        fake.entries = vec![
+            entry("owns", "Owns Folders", r"C:\Program Files\Owns"),
+            entry("else", "Elsewhere App", r"C:\Program Files\Elsewhere"),
+        ];
+        let mut data = vec![0u8; 72];
+        data[4..8].copy_from_slice(&4u32.to_le_bytes());
+        let jan_2025: u64 = (1_735_689_600 + 11_644_473_600) * 10_000_000;
+        data[60..68].copy_from_slice(&jan_2025.to_le_bytes());
+        fake.usage = vec![RawUsage {
+            name: rot13(r"{905E63B6-C1BF-494E-B29C-65B732D3D21A}\Elsewhere\app.exe"),
+            data,
+        }];
+        let snap = build_snapshot_with(
+            &fake,
+            &BuildOptions {
+                read_usage: true,
+                ..BuildOptions::default()
+            },
+        );
+        let mut owners = vec![Owner {
+            name: "Owns Folders".into(),
+            kind: "app",
+            key: "owns".into(),
+            ..Owner::default()
+        }];
+        describe_apps(&mut owners, &snap);
+        assert_eq!(owners.len(), 2, "the app that owns nothing is listed too");
+        let owns = &owners[0];
+        assert_eq!(owns.installed.as_deref(), Some("2024-01-15"));
+        assert_eq!(owns.stated_bytes, Some(2048 * 1024));
+        assert!(owns.uninstaller);
+        assert_eq!(owns.last_used, None, "no record means not known");
+        let other = &owners[1];
+        assert_eq!(other.name, "Elsewhere App");
+        assert_eq!(other.last_used, Some(1_735_689_600));
+        assert_eq!(other.runs, Some(4));
+    }
+
+    #[test]
+    fn install_dates_are_checked() {
+        assert_eq!(install_date("20240115").as_deref(), Some("2024-01-15"));
+        assert_eq!(install_date(" 20240115 ").as_deref(), Some("2024-01-15"));
+        for bad in [
+            "",
+            "2024",
+            "2024-01-15",
+            "20241315",
+            "20240100",
+            "18000101",
+            "2024011a",
+            "２０２４０１１５",
+        ] {
+            assert_eq!(install_date(bad), None, "{bad}");
+        }
+    }
 }

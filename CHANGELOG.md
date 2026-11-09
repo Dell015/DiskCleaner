@@ -1,10 +1,20 @@
 # Changelog
 
 ## Unreleased
+### Overview (F4, read-only)
+- New **Overview** page, now the default: where the space goes (apps, your files, Windows, everything else); every installed app with size, places, install date and last used (from Windows' record of started programs); programs nobody installed (portable tools, unpacked games); Downloads sorted by type with hints (installers of apps you have, archives already unpacked, untouched for a year); biggest files; files not changed for a year.
+- "Sort this folder" in Files shows any folder (a messy drive) sorted the same way.
+- Backend: `dc-winmeta` reads Windows' record of started programs (UserAssist, current user, read-only; decoding tested, the Windows read itself unverified here); `dc-api` lists every installed app with version, install date, stated size, uninstaller and last use.
+- Plans written: `docs/phases/f4-overview/plan.md`, `docs/phases/b9-cleaning/plan.md`.
 ### Desktop app - Files view and stuck-highlight fixes
 - New default **Files** view: a simple, sortable folder list (size bars, share of folder, files, last change, verdict, owner); the node graph is now the **Map** view, one click away in the header.
 - The map always shows how to clear a highlight ("Clear selection", "Show everything", Esc, click empty space); left-over hover highlights are cleared.
 - Focusing a folder during or after a live scan no longer leaves an unresponsive screen; a live scan can no longer wait forever to finish.
+- Settings: choose how sizes are written: like Windows (GB, default), precise (GiB) or like drive boxes (1000s).
+- Known apps: Riot Client / Riot Games (report-only).
+- Scattered traces: app folders in Documents, My Games, Saved Games and at the top of a drive are linked to their app; leftovers there are shown, never offered. The Apps tab lists every place an app keeps things.
+- Save scan (desktop): save a finished scan as a file and open it again later with Open file. Only new files are created.
+- "Not read" tab: lists what the scan could not read, with the reason.
 ### Phase B5 - Leftovers
 - `dc-leftovers`: finds folders that apps left behind, with evidence and confidence (points: High >= 80, Medium >= 50). Four kinds: data of an app whose program folder is gone, backup-named copies (`X.old`), well-known apps that are not installed (built-in list of 31, validated data file), program files nobody registered. Never `Safe`; weak evidence, personal-looking data, games launchers and protected/Windows/Microsoft/linked folders are shown only or refused. Second look at the real disk (`verify`), `explain`.
 - `dc-cli`: `dc leftovers scan.json --apps apps.json [--limit] [--explain PATH] [--out FILE] [--timing]`.
