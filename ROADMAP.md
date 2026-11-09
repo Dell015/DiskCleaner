@@ -2,6 +2,8 @@
 
 Repo location: `E:\CodeShi\DiskCleaner`
 Scope: **backend only** (Rust). No UI code. The frontend (Tauri + React + R3F) comes later and will consume the API crate defined here.
+> Update: the graph view frontend was started early at the owner's request; it lives in `apps/desktop/` (phases f1, f2 in `docs/phases/`). Rule packs live in `rules/`.
+
 
 ---
 

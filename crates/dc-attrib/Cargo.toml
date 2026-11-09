@@ -9,9 +9,9 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-dc-core = { path = "../dc-core" }
-dc-protected = { path = "../dc-protected" }
-dc-winmeta = { path = "../dc-winmeta" }
+dc-core.workspace = true
+dc-protected.workspace = true
+dc-winmeta.workspace = true
 serde.workspace = true
 
 [dev-dependencies]

@@ -26,6 +26,22 @@ rayon = "=1.12.0"
 criterion = { version = "=0.8.2", default-features = false }
 windows-sys = { version = "=0.61.2", default-features = false }
 
+# Internal crates (members use `name.workspace = true`).
+dc-advisor = { path = "crates/dc-advisor" }
+dc-api = { path = "crates/dc-api" }
+dc-attrib = { path = "crates/dc-attrib" }
+dc-cli = { path = "crates/dc-cli" }
+dc-core = { path = "crates/dc-core" }
+dc-leftovers = { path = "crates/dc-leftovers" }
+dc-mft = { path = "crates/dc-mft" }
+dc-protected = { path = "crates/dc-protected" }
+dc-quarantine = { path = "crates/dc-quarantine" }
+dc-rules = { path = "crates/dc-rules" }
+dc-scan = { path = "crates/dc-scan" }
+dc-store = { path = "crates/dc-store" }
+dc-winmeta = { path = "crates/dc-winmeta" }
+fixture-gen = { path = "tools/fixture-gen" }
+
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 missing_docs = "warn"

@@ -1,4 +1,4 @@
-//! The built-in list of well-known apps (data, in `packs/known_apps.toml`).
+//! The built-in list of well-known apps (data, in `rules/apps/known_apps.toml` at the repo root).
 //!
 //! The list can only add evidence. It is validated when loaded; a list with any problem is
 //! refused as a whole and the program then simply has no list (no extra findings).
@@ -12,7 +12,7 @@ use serde::Deserialize;
 pub const MIN_NAME_LEN: usize = 4;
 
 /// The text of the built-in list.
-pub const BUILTIN_TEXT: &str = include_str!("../packs/known_apps.toml");
+pub const BUILTIN_TEXT: &str = include_str!("../../../rules/apps/known_apps.toml");
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -10,7 +10,7 @@ src/
   folders.rs    container detection and the list of direct children to examine
   analyze.rs    containers walk, the four kinds of evidence, age, scoring, vetoes, risk
   facts.rs      one backwards pass: newest modified time, programs inside, personal-data bits
-  known.rs      the validated list of well-known apps (packs/known_apps.toml)
+  known.rs      the validated list of well-known apps (rules/apps/known_apps.toml)
   (CLI text tables live in dc-cli: leftovers_cmd.rs)
 ```
 Dependencies: `dc-core`, `dc-protected`, `dc-rules` (for `Candidate`, `Sizes`, the classifier and the folder check), `dc-attrib` (assignments, owners), `dc-winmeta` (model types only: `AppSnapshot`, `InstalledApp`, `AppFlags`). It does not call any Windows API.

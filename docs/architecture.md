@@ -24,3 +24,23 @@ Dependency direction (no cycles): `dc-core` ← everything; `dc-protected` ← `
 everything ← `dc-api` ← `dc-cli`.
 
 Phases are described in [ROADMAP.md](../ROADMAP.md); per-phase requirements and design live in `docs/phases/`.
+
+## Folders
+
+```
+DiskCleaner/
+  Cargo.toml          virtual workspace manifest: members, pinned dependencies, lints
+  crates/             every Rust crate, flat, folder name = crate name
+  rules/              rule packs (data): junk/ cleanup rules, apps/ well-known apps
+  apps/desktop/       graph view (Vite + TypeScript + sigma.js); Tauri shell goes in src-tauri/ later
+  tools/fixture-gen/  dummy-data generator for tests
+  docs/               architecture, decisions, notes, per-phase plans
+  data/               your own scans and view files (ignored by git)
+  fixtures/           generated test trees (ignored by git)
+  .github/workflows/  CI
+```
+
+Why this shape: one flat `crates/` folder with the folder named after the crate (easy to find,
+nothing nested inside another crate); the root is a virtual manifest; internal crates are declared
+once in `[workspace.dependencies]`; non-Rust apps live under `apps/`; data that changes without code
+(rule packs) lives in `rules/`; private output never sits next to source code.

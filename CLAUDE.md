@@ -10,8 +10,11 @@ An open-source, Windows-first disk analyzer and cleanup advisor (WizTree-like sp
 2. Find leftovers from uninstalled apps
 3. Show what is using space, and why (app -> executables -> folders -> files)
 
-## Current scope: BACKEND ONLY
-- Rust workspace under `crates/`. No frontend code, no Tauri, no React. A later phase will wrap `dc-api` in a UI.
+## Current scope
+- Backend: Rust workspace under `crates/`.
+- Frontend: the graph view in `apps/desktop/` (Vite + TypeScript + sigma.js), started early at the
+  owner's request (D82-D93). It reads files from `dc view-data`; a Tauri shell will later live in
+  `apps/desktop/src-tauri/` and talk to `dc-api`.
 - Follow `ROADMAP.md` at the repo root. Work one phase at a time. Do not start a later phase early.
 - Do not add features that are not in the current phase's tasks. If you think something is missing, say so in your summary instead of building it.
 
@@ -51,10 +54,14 @@ DiskCleaner/
   Cargo.toml  deny.toml  rustfmt.toml  clippy.toml  LICENSE  README.md  SAFETY.md  ROADMAP.md  CHANGELOG.md
   CLAUDE.md
   .github/workflows/ci.yml
-  docs/                architecture.md, threat-model.md, rules-guide.md, api.md, mft-design.md, perf.md
-  rules/               protected.toml, apps/*.toml, junk/*.toml
+  docs/                README.md (index), architecture.md, DECISIONS.md, NOTES.md, phases/<phase>/
+                       (later: threat-model.md, rules-guide.md, api.md, mft-design.md, perf.md)
+  rules/               rule packs as data: junk/*.toml (cleanup), apps/*.toml (well-known apps).
+                       The protected list is compiled into dc-protected, not a file.
+  apps/desktop/        graph view (src/core data, src/graph drawing, src/panels UI, tests/unit, tests/e2e)
   tools/fixture-gen/   deterministic dummy-data generator
   fixtures/            generated, gitignored; tests only
+  data/                the owner's own scans and view files, gitignored (never in tests)
   crates/
     dc-core/        shared types (Node, Tree, Risk, errors, schemas)
     dc-protected/   protected-path engine         [SAFETY-CRITICAL]
@@ -76,7 +83,8 @@ DiskCleaner/
 
 ## Rules for adding code
 - Put code in the crate that owns the concern. Don't add cross-crate shortcuts; extend `dc-core` types or traits instead.
-- Per-phase requirements and design live in `docs/phases/<phase-name>/` (b0-foundations, b1-scanner, b2-winmeta, b3-attribution, b4-rules, b5-leftovers, b6-store, b7-mft, b8-advisor, b9-quarantine, b10-api).
+- Per-phase requirements and design live in `docs/phases/<phase-name>/` (backend: b2-winmeta, b3-attrib, b4a-protected, b4b-rules, b5-leftovers, then b6-store, b7-mft, b8-advisor, b9-quarantine, b10-api; frontend: f1-graph-view, f2-ui-polish).
+- Internal crates are declared once in the root `[workspace.dependencies]`; use `dc-x.workspace = true`, never a `path = "../dc-x"`.
 - Rule packs are data (`rules/**/*.toml`), not code. Prefer adding a rule over adding a special case in Rust.
 
 ## Safety rules (never weaken)

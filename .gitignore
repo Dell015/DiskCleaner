@@ -11,3 +11,13 @@
 /me*.json
 /classify*.txt
 /*.tgz
+/view*.json
+
+# Your own scans, app snapshots and view files live here (see data/README.md). Never committed.
+/data/*
+!/data/README.md
+
+# Frontend build output
+/apps/desktop/node_modules/
+/apps/desktop/dist/
+/apps/desktop/tests/e2e/out/

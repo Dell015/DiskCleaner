@@ -8,13 +8,13 @@ src/
   lib.rs        API and the "classification is advice, not an action" note
   pack.rs       RulePack, Rule (serde, deny_unknown_fields), parse + validate
   validate.rs   the checks of R2, returning all problems at once
-  builtin.rs    include_str!("../packs/builtin.toml") and a cached parsed pack
+  builtin.rs    include_str!("../../../rules/junk/builtin.toml") and a cached parsed pack
   facts.rs      NodeFacts { kind, size, mtime, flags } (plain data)
   classify.rs   Classifier { protected, pack }: classify(path, facts, resolver) -> Classification
   folder.rs     classify a folder item from its descendants in the scan tree
   candidates.rs topmost-candidate selection and totals
   report.rs     text tables for the CLI
-packs/builtin.toml   the built-in pack (data, reviewable in one file)
+rules/junk/builtin.toml   the built-in pack (data, reviewable in one file)
 ```
 Dependencies: `dc-core` (Risk, Tree), `dc-protected`, `serde`, `toml` (pinned). `dc-attrib` is **not** a dependency; attribution is joined only in the CLI for display.
 

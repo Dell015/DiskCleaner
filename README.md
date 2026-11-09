@@ -43,3 +43,14 @@ The output directory must be new or empty. The generator only creates files; it 
 
 ## License
 MIT. See [LICENSE](LICENSE).
+
+## Project layout
+
+```
+crates/         Rust crates (scanner, rules, leftovers, CLI `dc`, ...), one flat folder each
+rules/          rule packs as data: junk/ cleanup rules, apps/ well-known apps
+apps/desktop/   graph view of the disk (web app; desktop shell later)
+tools/          test helpers (fixture-gen)
+docs/           architecture, decisions, notes, per-phase plans (start at docs/README.md)
+data/           your own scans and view files; ignored by git
+```

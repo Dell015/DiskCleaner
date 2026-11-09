@@ -521,3 +521,97 @@ fn leftovers_runs_explains_saves_and_never_overwrites() {
     );
     assert!(explained.contains("state"), "{explained}");
 }
+
+#[test]
+fn view_data_writes_a_consistent_columnar_file_and_never_overwrites() {
+    use dc_winmeta::{build_snapshot, FakeSource};
+
+    let (dir, tree, _manifest) = fixture();
+    let apps = build_snapshot(&FakeSource::new());
+    let snapshot = dir.path().join("apps.json");
+    std::fs::write(&snapshot, serde_json::to_string(&apps).unwrap()).unwrap();
+    let scan = dir.path().join("scan.json");
+    assert!(dc(&[
+        "scan",
+        tree.to_str().unwrap(),
+        "--out",
+        scan.to_str().unwrap()
+    ])
+    .status
+    .success());
+    let scanned: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&scan).unwrap()).unwrap();
+    let scan_entries = scanned["nodes"].as_array().unwrap().len();
+    let scan_bytes = scanned["totals"]["size_on_disk_bytes"].as_u64().unwrap();
+
+    let view = dir.path().join("view.json");
+    let out = dc(&[
+        "view-data",
+        scan.to_str().unwrap(),
+        scan.to_str().unwrap(),
+        "--apps",
+        snapshot.to_str().unwrap(),
+        "--out",
+        view.to_str().unwrap(),
+    ]);
+    let shown = text(&out.stdout);
+    assert!(out.status.success(), "{shown}{}", text(&out.stderr));
+    assert!(shown.contains("Nothing was changed"), "{shown}");
+
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(&view).unwrap()).unwrap();
+    assert_eq!(v["schema"], "dc-view");
+    assert_eq!(v["schema_version"], 1);
+    let nodes = &v["nodes"];
+    let n = nodes["name"].as_array().unwrap().len();
+    // Virtual root plus both scans.
+    assert_eq!(n, 1 + 2 * scan_entries);
+    for column in ["parent", "kind", "size", "mtime", "flags", "cat"] {
+        assert_eq!(nodes[column].as_array().unwrap().len(), n, "{column}");
+    }
+    let parents: Vec<i64> = nodes["parent"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_i64().unwrap())
+        .collect();
+    assert_eq!(parents[0], -1);
+    for (i, p) in parents.iter().enumerate().skip(1) {
+        assert!(*p >= 0 && (*p as usize) < i, "node {i} has parent {p}");
+    }
+    // Both scan roots hang under the virtual root and keep their full path as the name.
+    let tops: Vec<usize> = (1..n).filter(|i| parents[*i] == 0).collect();
+    assert_eq!(tops.len(), 2);
+    for t in &tops {
+        assert_eq!(nodes["name"][*t], v["roots"][0]);
+    }
+    let total: u64 = nodes["size"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_u64().unwrap())
+        .sum();
+    assert_eq!(total, 2 * scan_bytes);
+    for m in v["marks"].as_array().unwrap() {
+        let node = m["node"].as_u64().unwrap() as usize;
+        assert!(node < n);
+        assert!(["safe", "probably_safe", "dont_touch"].contains(&m["risk"].as_str().unwrap()));
+        if m["risk"] == "dont_touch" {
+            assert_eq!(m["offered"], false);
+        }
+    }
+    for a in v["assignments"].as_array().unwrap() {
+        assert!((a[0].as_u64().unwrap() as usize) < n);
+        assert!((a[1].as_u64().unwrap() as usize) < v["owners"].as_array().unwrap().len());
+    }
+
+    // Never overwrites.
+    let before = std::fs::read(&view).unwrap();
+    let again = dc(&[
+        "view-data",
+        scan.to_str().unwrap(),
+        "--out",
+        view.to_str().unwrap(),
+    ]);
+    assert!(!again.status.success());
+    assert_eq!(std::fs::read(&view).unwrap(), before);
+}

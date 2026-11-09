@@ -9,8 +9,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-dc-core = { path = "../dc-core" }
-dc-scan = { path = "../dc-scan" }
+dc-core.workspace = true
+dc-scan.workspace = true
 serde.workspace = true
 
 [target.'cfg(windows)'.dependencies]
@@ -19,7 +19,7 @@ windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Securit
 [dev-dependencies]
 serde_json.workspace = true
 proptest.workspace = true
-fixture-gen = { path = "../../tools/fixture-gen" }
+fixture-gen.workspace = true
 tempfile.workspace = true
 
 [lints]

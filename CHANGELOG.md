@@ -30,3 +30,6 @@
 - CI (fmt, clippy, build, test on Windows and Linux; cargo-deny).
 
 - `dc leftovers` now takes several scan files and merges the results (`dc_leftovers::merge`), so ProgramData and Program Files can be covered.
+- `dc view-data`: writes one compact file for the graph view from one or more scans (with `--apps`: owner apps and leftovers). Read-only, never overwrites.
+- Graph view (`ui/`): the disk as a live, draggable, zoomable graph. Grows like a scan, opens folders as you zoom in, colours by risk, app or file type, and explains every finding. Loads `dc view-data` files or a built-in demo. Unit tests (vitest) and browser checks (`ui/qa/e2e.cjs`).
+- Project layout: rule packs moved to `rules/` (junk/, apps/), the graph view to `apps/desktop/` (src/core, src/graph, src/panels, tests/unit, tests/e2e), your own scan files to `data/` (ignored by git); internal crates declared once in the workspace; docs index; CI checks the frontend too.

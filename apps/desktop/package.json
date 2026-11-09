@@ -1,0 +1,31 @@
+{
+  "name": "diskcleaner-desktop",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "check": "tsc --noEmit",
+    "e2e": "node tests/e2e/checks.cjs",
+    "perf": "node tests/e2e/perf.cjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/atkinson-hyperlegible-mono": "5.3.0",
+    "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
+    "@sigma/edge-curve": "3.1.0",
+    "@sigma/node-border": "3.0.0",
+    "d3-force": "3.0.0",
+    "graphology": "0.25.4",
+    "graphology-types": "0.24.8",
+    "sigma": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/d3-force": "3.0.10",
+    "typescript": "5.7.3",
+    "vite": "7.3.7",
+    "vitest": "4.1.12"
+  }
+}

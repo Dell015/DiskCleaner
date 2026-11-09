@@ -404,6 +404,7 @@ dependencies = [
  "dc-scan",
  "dc-winmeta",
  "fixture-gen",
+ "serde",
  "serde_json",
  "tempfile",
 ]

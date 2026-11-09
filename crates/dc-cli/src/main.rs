@@ -18,6 +18,7 @@ mod scan_cmd;
 mod size;
 mod timing;
 mod top_cmd;
+mod view_cmd;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -129,6 +130,21 @@ enum Command {
         /// Save the full result as JSON (never overwrites an existing file).
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
+        /// Print how long each step took (to standard error).
+        #[arg(long)]
+        timing: bool,
+    },
+    /// Write one compact file for the graph view (read-only; never overwrites a file).
+    ViewData {
+        /// One or more JSON files written by `dc scan`; they are joined under one root.
+        #[arg(required = true, num_args = 1..)]
+        scans: Vec<PathBuf>,
+        /// A snapshot written by `dc apps --out`: adds owner apps and leftovers.
+        #[arg(long)]
+        apps: Option<PathBuf>,
+        /// Where to save the view file.
+        #[arg(long, value_name = "FILE")]
+        out: PathBuf,
         /// Print how long each step took (to standard error).
         #[arg(long)]
         timing: bool,
@@ -246,6 +262,17 @@ fn run() -> Result<ExitCode> {
             apps,
             limit,
             explain,
+            out,
+            timing,
+        }),
+        Command::ViewData {
+            scans,
+            apps,
+            out,
+            timing,
+        } => view_cmd::run(&view_cmd::ViewArgs {
+            scans,
+            apps,
             out,
             timing,
         }),

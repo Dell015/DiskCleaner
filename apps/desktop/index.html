@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>DiskCleaner</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -16 32 32'%3E%3Ccircle r='15' fill='%230b1322'/%3E%3Ccircle r='6' fill='none' stroke='%2362bdf0' stroke-width='2.5'/%3E%3Ccircle cx='-9' cy='-7' r='2.6' fill='%23e8a93a'/%3E%3Ccircle cx='9' cy='-5' r='3' fill='%232cc5a0'/%3E%3Ccircle cx='6' cy='9' r='2.2' fill='%236d8fbd'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="bar">
+    <span class="mark" aria-hidden="true"></span>
+    <nav id="crumbs" aria-label="Where you are"></nav>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search names or paths" autocomplete="off" spellcheck="false" aria-label="Search names or paths">
+      <kbd>/</kbd>
+      <div id="hits" role="listbox" hidden></div>
+    </div>
+    <div class="tools">
+      <button id="open" title="Open a file made by dc view-data">Open file</button>
+      <button id="demo" title="Load a made-up disk">Demo</button>
+      <button id="settingsBtn" aria-haspopup="dialog">Settings</button>
+      <button id="panelToggle" class="narrow-only">Findings</button>
+      <input id="file" type="file" accept=".json,application/json" hidden>
+    </div>
+  </header>
+  <main id="stage">
+    <div id="graph"></div>
+    <div id="scan" hidden>
+      <span class="pulse" aria-hidden="true"></span>
+      <span id="scanText">Scanning</span>
+      <button id="pause">Pause</button>
+      <label class="speed">Speed <input id="speed" type="range" min="1" max="5" value="3"></label>
+      <button id="skip">Skip</button>
+    </div>
+    <div id="controls">
+      <div class="seg" role="group" aria-label="Colour by">
+        <button data-mode="risk" class="on">Risk</button>
+        <button data-mode="app">App</button>
+        <button data-mode="type">Type</button>
+      </div>
+      <div id="key"></div>
+      <div id="sizekey" aria-label="Size scale"></div>
+      <div id="status" aria-live="polite"></div>
+    </div>
+    <canvas id="minimap" title="Click to move there" hidden></canvas>
+    <div id="tip" hidden></div>
+    <div id="menu" role="menu" hidden></div>
+    <section id="empty">
+      <div class="empty-inner">
+        <h1>Open a view of your disk</h1>
+        <p>Each folder becomes a node, sized by the space it takes. Zoom in to go from whole drives down to single files. Findings show what could go, and why.</p>
+        <div class="actions">
+          <button id="emptyOpen" class="primary">Open a view file</button>
+          <button id="emptyDemo">Try the demo</button>
+        </div>
+        <p class="quiet">Make a view file with <code>dc view-data scan.json --apps apps.json --out view.json</code>, or drop one anywhere on this window. It stays on this computer; nothing is uploaded or deleted.</p>
+      </div>
+    </section>
+    <div id="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loadingText">Loading</span></div>
+    <div id="error" role="alert" hidden><span id="errorText"></span><button id="errorClose" aria-label="Close">×</button></div>
+    <div id="drop" hidden>Drop the view file to open it</div>
+    <div id="toast" role="status" hidden></div>
+  </main>
+  <aside id="side">
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="findings" class="on" aria-selected="true">Findings</button>
+      <button role="tab" data-tab="apps" aria-selected="false">Apps</button>
+    </nav>
+    <div id="tab-findings" class="tab"></div>
+    <div id="tab-apps" class="tab" hidden></div>
+    <section id="drawer" aria-label="Details" aria-hidden="true"></section>
+  </aside>
+  <dialog id="settings" aria-label="Settings">
+    <form method="dialog" id="settingsForm">
+      <header><h2>Settings</h2><button value="close" aria-label="Close">×</button></header>
+      <fieldset><legend>Look</legend><div id="styles" class="choices"></div></fieldset>
+      <fieldset><legend>Theme</legend>
+        <div class="seg" id="themes"><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="light">Light</button><button type="button" data-theme="system">System</button></div>
+      </fieldset>
+      <fieldset><legend>Graphics</legend>
+        <div class="seg" id="presets"></div>
+        <p class="quiet" id="presetNote"></p>
+        <label class="opt"><input type="checkbox" id="q-glow"> Glow on the biggest folders and the selection</label>
+        <label class="opt"><input type="checkbox" id="q-blur"> Blur what is unrelated to the selection</label>
+        <label class="opt"><input type="checkbox" id="q-curved"> Curved links</label>
+        <label class="opt"><input type="checkbox" id="q-pulses"> Light pulses while scanning</label>
+        <label class="opt">Motion <select id="q-motion"><option value="full">Full</option><option value="reduced">Reduced</option><option value="off">Off</option></select></label>
+        <label class="opt">Detail <input type="range" id="q-budget" min="300" max="5000" step="100"> <output id="q-budget-out"></output></label>
+        <label class="opt">Names <input type="range" id="q-labels" min="0.2" max="1" step="0.05"></label>
+      </fieldset>
+      <fieldset><legend>Picture</legend>
+        <button type="button" id="savePic">Save picture of the graph</button>
+        <p class="quiet">Press H to hide everything but the graph.</p>
+      </fieldset>
+    </form>
+  </dialog>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
