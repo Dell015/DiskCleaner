@@ -10,6 +10,10 @@ import { search } from "./core/search";
 import type { Tree } from "./core/tree";
 import { count, human } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
+import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
+import { cancelScan, confirmDrive, isDesktop, isDriveRoot, pickFolder, startScan, suggestedFolders } from "./platform";
+import { makeDemo } from "./core/demo";
+import { checkView } from "./core/format";
 import { byId, clear, h } from "./panels/dom";
 import { CATEGORY_LABELS, RISK_LABELS, renderApps, renderDetails, renderFindings, renderKey, type FindingFilter, type PanelActions } from "./panels/panels";
 import { type ColorMode } from "./graph/encode";
@@ -24,6 +28,24 @@ const CLOSE_PX = 9;
 const REPLAY_SECONDS = [18, 11, 7, 4, 2];
 
 type Tab = "findings" | "apps";
+
+/** A live scan in progress (or just finished). */
+interface LiveSession {
+  id: number;
+  lt: LiveTree | null;
+  active: boolean;
+  finished: boolean;
+  summary: LiveSummary | null;
+  queue: VisItem[];
+  queued: Set<string>;
+  partial: Visible;
+  lastTarget: number;
+  lastSync: number;
+  last: number;
+  credit: number;
+  text: string;
+  cancel: () => void;
+}
 type Theme = "dark" | "light" | "system";
 
 // ---------- settings (kept in this browser only) ----------
@@ -43,7 +65,6 @@ function loadSettings(): Settings {
   } catch {
     /* storage may be unavailable; defaults are used */
   }
-  const params = new URLSearchParams(location.search);
   const st = params.get("style");
   if (st && st in STYLES) base.style = st as StyleId;
   const th = params.get("theme");
@@ -52,6 +73,7 @@ function loadSettings(): Settings {
   if (q && q in PRESETS) base.quality = { ...PRESETS[q as keyof typeof PRESETS] };
   return base;
 }
+const params = new URLSearchParams(location.search);
 const settings = loadSettings();
 function saveSettings(): void {
   try {
@@ -71,6 +93,7 @@ const state = {
   tree: null as Tree | null,
   vis: null as Visible | null,
   replay: { running: false, paused: false, last: 0, shown: 0, order: [] as VisItem[], partial: null as Visible | null },
+  live: null as LiveSession | null,
   opened: new Set<number>(),
   zoomOpened: new Set<number>(),
   closed: new Set<number>(),
@@ -99,7 +122,7 @@ const view = new GraphView(byId("graph"), {
 });
 view.setStyle(STYLES[settings.style], isDark());
 view.setQuality(settings.quality);
-(window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n) };
+(window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p) };
 
 // ---------- loading ----------
 
@@ -133,6 +156,7 @@ function load(req: LoaderRequest): void {
 }
 
 function start(data: ViewData): void {
+  endLive();
   state.data = data;
   state.tree = emptyTree(data);
   state.vis = null;
@@ -230,7 +254,9 @@ function revealFrame(now: number): void {
     frameTimes.push(dt);
     const secs = REPLAY_SECONDS[Number(byId<HTMLInputElement>("speed").value) - 1] ?? 7;
     const before = Math.floor(r.shown);
-    r.shown = Math.min(r.order.length, r.shown + (r.order.length / secs) * (dt / 1000));
+    // The whole build takes `secs`, but never slower than 60 nodes a second (small trees are quick).
+    const rate = Math.max(r.order.length / secs, 60);
+    r.shown = Math.min(r.order.length, r.shown + rate * (dt / 1000));
     const upto = Math.floor(r.shown);
     let head: string | null = null;
     for (let i = before; i < upto; i++) {
@@ -289,12 +315,229 @@ function settle(): void {
   setTimeout(wait, 600);
 }
 
+
+// ---------- live scan (desktop app, or a simulated one with ?live=demo) ----------
+
+let liveCounter = 0;
+
+/** Stop any live scan and forget it (a file or the demo is being opened instead). */
+function endLive(): void {
+  const s = state.live;
+  if (!s) return;
+  if (s.active) s.cancel();
+  s.active = false;
+  state.live = null;
+  byId("stop").hidden = true;
+}
+
+/** Ask for a folder (or take one) and scan it live. */
+async function scanFolder(path?: string): Promise<void> {
+  try {
+    const desktop = isDesktop();
+    if (!desktop && !params.has("live")) return;
+    const target = path ?? (desktop ? await pickFolder() : "C:\\");
+    if (!target) return;
+    let allow = false;
+    if (desktop && (await isDriveRoot(target))) {
+      if (!(await confirmDrive(target))) return;
+      allow = true;
+    }
+    beginLive((on) => {
+      if (desktop) {
+        startScan(target, allow, on).catch((e) => on({ type: "failed", message: String(e) }));
+        return () => void cancelScan();
+      }
+      // Browser checks: pretend to scan the demo disk.
+      const sim = simulateLive(checkView(makeDemo(Number(params.get("live")) || 150_000)), on);
+      return () => sim.cancel();
+    });
+  } catch (e) {
+    showError(`The scan could not start: ${String(e)}`);
+  }
+}
+
+function beginLive(starter: (on: (e: LiveEvent) => void) => () => void): void {
+  endLive();
+  state.replay.running = false;
+  worker?.terminate();
+  state.data = null;
+  state.tree = null;
+  state.vis = null;
+  state.opened.clear();
+  state.zoomOpened.clear();
+  state.closed.clear();
+  state.wide.clear();
+  state.selected = null;
+  state.focusRoot = null;
+  state.owner = -1;
+  clearFocusTimers();
+  closeDrawer();
+  view.reset();
+  view.setFocusOwner(-1);
+  userMoved = false;
+  frameTimes = [];
+  byId("empty").hidden = true;
+  byId("minimap").hidden = false;
+  byId("scan").hidden = false;
+  byId("scan").classList.add("live");
+  byId("stop").hidden = false;
+  byId("scanText").textContent = "Starting";
+  const id = ++liveCounter;
+  const session: LiveSession = {
+    id, lt: null, active: true, finished: false, summary: null, queue: [], queued: new Set(),
+    partial: { items: [], byKey: new Map(), open: new Set(), truncated: false },
+    lastTarget: 0, lastSync: 0, last: performance.now(), credit: 0, text: "Starting", cancel: () => undefined,
+  };
+  state.live = session;
+  session.cancel = starter((e) => onLiveEvent(id, e));
+}
+
+function onLiveEvent(id: number, e: LiveEvent): void {
+  const s = state.live;
+  if (!s || s.id !== id) return;
+  switch (e.type) {
+    case "started":
+      s.lt = new LiveTree(e.root);
+      state.tree = s.lt.tree;
+      view.rootNode = 1;
+      renderSide();
+      key();
+      crumbs();
+      s.last = performance.now();
+      requestAnimationFrame(liveStep);
+      break;
+    case "batch":
+      s.lt?.add(e.dirs);
+      break;
+    case "progress":
+      s.text = `Scanning: ${count(state.tree ? state.tree.n - 2 : 0)} entries, ${human(state.tree?.agg[0] ?? 0)}`;
+      break;
+    case "analysing":
+      s.text = "Checking what was found";
+      break;
+    case "finished": {
+      s.summary = e;
+      s.lt?.finish(e);
+      s.finished = true;
+      if (e.status === "cancelled") toast("Scan stopped. The picture shows what was read; no checks were run.");
+      else if (e.status === "partial") toast(`Done. ${count(e.errors)} entries could not be read (usually folders Windows keeps private).`);
+      else if (!e.apps_known) toast("Done. Installed apps could not be read, so owners and leftovers are missing.");
+      break;
+    }
+    case "failed":
+      s.active = false;
+      byId("scan").hidden = true;
+      byId("stop").hidden = true;
+      showError(e.message);
+      break;
+  }
+}
+
+/** Every frame: new nodes join at a steady pace; every 400 ms the picture's target is worked out again. */
+function liveStep(now: number): void {
+  const s = state.live;
+  const tree = state.tree;
+  if (!s || !s.active || !tree) return;
+  try {
+    // Slow frames still drain the queue at the intended pace (up to a quarter second per frame).
+    const dt = Math.min(250, now - s.last);
+    s.last = now;
+    frameTimes.push(Math.min(64, dt));
+    if (now - s.lastTarget > 400 || (s.finished && s.queue.length === 0 && now - s.lastTarget > 100)) {
+      s.lastTarget = now;
+      liveTarget(s, tree);
+    }
+    const rate = Math.max(45, s.queue.length / 1.4);
+    s.credit += (rate * dt) / 1000;
+    let k = Math.floor(s.credit);
+    s.credit -= k;
+    let added = 0;
+    let head: string | null = null;
+    const part = s.partial;
+    const cap = DEFAULT_LOD.hardCap;
+    let tries = s.queue.length;
+    while (k > 0 && s.queue.length > 0 && part.items.length < cap && tries-- > 0) {
+      const it = s.queue.shift()!;
+      if (it.parentKey && !part.byKey.has(it.parentKey)) {
+        s.queue.push(it); // its folder is not on screen yet
+        continue;
+      }
+      s.queued.delete(it.key);
+      const c = { ...it, open: false };
+      part.items.push(c);
+      part.byKey.set(c.key, c);
+      if (c.parentKey) {
+        const parent = part.byKey.get(c.parentKey);
+        if (parent && parent.node >= 0 && !parent.open) {
+          parent.open = true;
+          part.open.add(parent.node);
+        }
+        head = c.parentKey;
+      }
+      k--;
+      added++;
+    }
+    if (added > 0 || now - s.lastSync > 250) {
+      s.lastSync = now;
+      view.sync(tree, part, true);
+      if (head) view.setHead(head);
+      byId("scanText").textContent = s.text;
+      drawMinimap();
+      status();
+    }
+    if (s.finished && s.queue.length === 0) {
+      finishLive();
+      return;
+    }
+  } catch (err) {
+    console.error("the live picture failed; showing the result directly", err);
+    finishLive();
+    return;
+  }
+  requestAnimationFrame(liveStep);
+}
+
+/** Work out what the picture should hold now and queue what is new (nothing shown is removed). */
+function liveTarget(s: LiveSession, tree: Tree): void {
+  if (tree.n < 2) return;
+  const target = selectVisible(tree, { ...DEFAULT_LOD, budget: settings.quality.budget }, { opened: new Set(), closed: new Set(), wide: new Set(), mustShow: new Set(), root: 1 });
+  const depthOf = (it: VisItem): number => (it.node >= 0 ? tree.depth[it.node] : tree.depth[it.group?.parent ?? 0] + 1);
+  const rank = new Map(target.items.map((it, i) => [it.key, i]));
+  const fresh = target.items.filter((it) => !s.partial.byKey.has(it.key) && !s.queued.has(it.key));
+  fresh.sort((a, b) => depthOf(a) - depthOf(b) || (rank.get(a.key) ?? 0) - (rank.get(b.key) ?? 0));
+  for (const it of fresh) {
+    s.queue.push(it);
+    s.queued.add(it.key);
+  }
+  // "More items" nodes already on screen keep counting up.
+  for (const it of target.items) {
+    if (!it.group) continue;
+    const shown = s.partial.byKey.get(it.key);
+    if (shown) shown.group = it.group;
+  }
+}
+
+function finishLive(): void {
+  const s = state.live;
+  if (!s) return;
+  s.active = false;
+  s.finished = true;
+  byId("scan").hidden = true;
+  byId("scan").classList.remove("live");
+  byId("stop").hidden = true;
+  view.setHead(null);
+  refresh(true);
+  renderSide();
+  settle();
+}
+
 // ---------- visible set ----------
 
 function pictureRoot(): number {
   const data = state.data;
   const tree = state.tree;
   if (state.focusRoot !== null && tree && state.focusRoot < tree.n) return state.focusRoot;
+  if (state.live && tree && tree.n > 1) return 1;
   if (data && tree && data.roots.length === 1 && tree.n > 1) return 1;
   return 0;
 }
@@ -307,6 +550,8 @@ function selectedNode(): number | null {
 function refresh(animate: boolean): void {
   const tree = state.tree;
   if (!tree || tree.n === 0) return;
+  // While a live scan grows the picture, its own loop owns the graph.
+  if (state.live?.active) return;
   const mustShow = new Set<number>();
   const sel = selectedNode();
   const root = pictureRoot();
@@ -325,7 +570,7 @@ function refresh(animate: boolean): void {
 function zoomDetail(): void {
   const tree = state.tree;
   const vis = state.vis;
-  if (!tree || !vis || state.replay.running) return;
+  if (!tree || !vis || state.replay.running || state.live?.active) return;
   let changed = false;
   for (const n of [...state.zoomOpened]) {
     const r = view.pixelRadius(nodeKey(n));
@@ -524,6 +769,12 @@ function setTab(t: Tab): void {
 function renderSide(): void {
   const tree = state.tree;
   if (!tree) return;
+  if (state.live && !state.live.finished) {
+    const el = byId(state.tab === "findings" ? "tab-findings" : "tab-apps");
+    clear(el);
+    el.append(h("p", { class: "lead" }, "Reading the disk"), h("p", { class: "quiet" }, "Findings and apps appear when the scan is done. Nothing is changed while it runs."));
+    return;
+  }
   if (state.tab === "findings") {
     renderFindings(byId("tab-findings"), tree, view.pal, state.filter, state.findingsShown, actions, (f) => {
       state.filter = f;
@@ -588,7 +839,7 @@ function status(): void {
   if (!tree || !vis) return;
   el.append(`Showing ${count(vis.items.length)} of ${count(tree.n - 1)} entries, ${human(tree.agg[0])} in all`);
   if (vis.truncated) el.append(". ", h("span", { class: "warn" }, "Detail limit reached: raise Detail in Settings to see more."));
-  if (!state.replay.running) {
+  if (!state.replay.running && state.data && !state.live) {
     el.append(" ");
     const b = h("button", { class: "textlink", onclick: replay }, "Replay scan");
     el.append(b);
@@ -828,6 +1079,33 @@ function pick(node: number): void {
 
 // ---------- controls ----------
 
+/** Scanning needs the desktop app (or ?live for the browser checks). */
+function bindScan(): void {
+  const can = isDesktop() || params.has("live");
+  for (const id of ["scanBtn", "emptyScan"]) byId(id).hidden = !can;
+  if (!can) {
+    byId("emptyOpen").classList.add("primary");
+    return;
+  }
+  byId("scanBtn").addEventListener("click", () => void scanFolder());
+  byId("emptyScan").addEventListener("click", () => void scanFolder());
+  byId("stop").addEventListener("click", () => {
+    const s = state.live;
+    if (s?.active) {
+      byId("scanText").textContent = "Stopping";
+      s.cancel();
+    }
+  });
+  if (isDesktop()) {
+    void suggestedFolders().then((list) => {
+      const box = byId("suggest");
+      clear(box);
+      for (const sug of list) box.append(h("button", { title: sug.path, onclick: () => void scanFolder(sug.path) }, `Scan ${sug.label}`));
+      box.hidden = list.length === 0;
+    }).catch(() => undefined);
+  }
+}
+
 function bind(): void {
   const file = byId<HTMLInputElement>("file");
   const openFile = (): void => file.click();
@@ -949,8 +1227,8 @@ function bind(): void {
 
 bind();
 bindSettings();
+bindScan();
 document.documentElement.dataset.theme = isDark() ? "dark" : "light";
 // Labels are drawn on a canvas: redraw once the fonts have arrived.
 void document.fonts?.ready.then(() => view.relook());
-const params = new URLSearchParams(location.search);
 if (params.has("demo")) load({ type: "demo", size: Number(params.get("demo")) || 150_000 });

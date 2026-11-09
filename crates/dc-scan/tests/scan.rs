@@ -410,3 +410,56 @@ fn scanner_sources_contain_no_destructive_calls() {
         }
     }
 }
+
+#[test]
+fn live_listings_cover_every_entry_once_folder_before_contents_and_change_nothing() {
+    let (_guard, tree, _) = fixture(400);
+    let listings = Arc::new(Mutex::new(Vec::<dc_scan::Listing>::new()));
+    let sink = Arc::clone(&listings);
+    let options = ScanOptions {
+        listing: Some(Arc::new(move |l: &dc_scan::Listing| {
+            sink.lock().unwrap().push(l.clone())
+        })),
+        ..ScanOptions::default()
+    };
+    let live = scan(&tree, default_probe().as_ref(), &options).unwrap();
+    let plain = scan(&tree, default_probe().as_ref(), &ScanOptions::default()).unwrap();
+    // Listening must not change the answer (access times move when folders are read again).
+    let no_atime = |nodes: &[dc_core::Node]| {
+        nodes
+            .iter()
+            .cloned()
+            .map(|mut n| {
+                n.atime = None;
+                n
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(no_atime(&live.nodes), no_atime(&plain.nodes));
+    assert_eq!(live.totals, plain.totals);
+
+    let listings = listings.lock().unwrap();
+    let root = fs::canonicalize(&tree)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(listings[0].dir, root, "the root is listed first");
+    let sep = std::path::MAIN_SEPARATOR;
+    let mut known_dirs = std::collections::HashSet::from([root.clone()]);
+    let mut entries = 0usize;
+    for l in listings.iter() {
+        assert!(
+            known_dirs.contains(&l.dir),
+            "{} was listed before its folder",
+            l.dir
+        );
+        for e in &l.entries {
+            entries += 1;
+            if e.kind == Kind::Dir {
+                assert!(known_dirs.insert(format!("{}{sep}{}", l.dir, e.name)));
+            }
+        }
+    }
+    // Every stored entry except the root, exactly once.
+    assert_eq!(entries, live.nodes.len() - 1);
+}

@@ -3,6 +3,11 @@
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+  # proc-macro-error is unmaintained (no security issue). It is a build-time macro helper pulled in
+  # by the GTK bindings Tauri uses on Linux only; nothing of it ships in the Windows app (D97).
+  { id = "RUSTSEC-2024-0370", reason = "build-time only, Linux GTK bindings via Tauri" },
+]
 
 [licenses]
 version = 2
@@ -15,6 +20,9 @@ allow = [
   "ISC",
   "Unicode-3.0",
   "Zlib",
+  # Mozilla's CSS/HTML parsing crates used by Tauri (cssparser, selectors, ...). File-level
+  # copyleft: we use them unchanged, which MPL-2.0 allows inside an MIT project (D97).
+  "MPL-2.0",
 ]
 confidence-threshold = 0.8
 

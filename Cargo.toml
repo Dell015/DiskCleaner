@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "tools/fixture-gen"]
+members = ["crates/*", "tools/fixture-gen", "apps/desktop/src-tauri"]
 
 [workspace.package]
 version = "0.0.0"

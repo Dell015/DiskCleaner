@@ -183,9 +183,26 @@ const check = (ok, what) => {
     check(await page.evaluate(() => window.__pwned === undefined), "file names are never run as HTML");
     check((await page.textContent("#drawer h2")).includes("<img"), "odd names are shown as plain text");
 
+    // A live scan (simulated in the browser; the desktop app feeds the same code from Rust).
+    await page.goto(base + "?live=40000");
+    await page.click("#emptyScan");
+    await page.waitForFunction(() => window.__dc.state.live && window.__dc.state.live.partial.items.length > 5, null, { timeout: 30000 });
+    const early = await page.evaluate(() => window.__dc.state.live.partial.items.length);
+    await shot("10-live-growing");
+    await page.waitForFunction(() => window.__dc.state.live && !window.__dc.state.live.active, null, { timeout: 120000 });
+    await page.waitForTimeout(2500);
+    await shot("11-live-done");
+    const live = await page.evaluate(() => ({ n: window.__dc.state.tree.n, marks: window.__dc.state.tree.marks.length, items: window.__dc.state.vis ? window.__dc.state.vis.items.length : 0 }));
+    check(early > 5 && live.items > early, `live scan grows the graph (${early} early, ${live.items} at the end)`);
+    check(live.marks > 5, `findings arrive at the end of a live scan (${live.marks})`);
+    check((await page.locator("#tab-findings .row").count()) > 3, "findings list fills after the live scan");
+    await page.click("#tab-findings .row");
+    await page.waitForTimeout(800);
+    check(await page.isVisible("#drawer.open h2"), "a finding from a live scan opens its details");
+
     if (viewFile) {
       await page.setInputFiles("#file", viewFile);
-      await page.waitForFunction(() => window.__dc.state.tree && !window.__dc.state.replay.running && window.__dc.state.tree.n > 4, null, { timeout: 60000 });
+      await page.waitForFunction(() => window.__dc.state.data && window.__dc.state.data.names.length > 4 && !window.__dc.state.replay.running && window.__dc.state.vis, null, { timeout: 120000 });
       await page.waitForTimeout(4000);
       await shot("09-real-export");
       const s = await st();

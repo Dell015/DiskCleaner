@@ -43,6 +43,22 @@ pub struct Progress {
 /// Receives throttled [`Progress`] snapshots, from a helper thread.
 pub type ProgressFn = Arc<dyn Fn(&Progress) + Send + Sync>;
 
+/// One folder's entries, reported as soon as the folder has been read (before anything inside
+/// its subfolders). Lets a live view grow while the scan runs. Sizes of folders are not known yet.
+#[derive(Debug, Clone)]
+pub struct Listing {
+    /// The folder (full path, lossy text).
+    pub dir: String,
+    /// Depth below the scanned root (root = 0).
+    pub depth: u32,
+    /// Its entries, sorted by name. `id`, `parent` and totals are not set yet.
+    pub entries: Vec<dc_core::Node>,
+}
+
+/// Receives each [`Listing`], from scanner threads (in an order where a folder always comes
+/// before anything inside it).
+pub type ListingFn = Arc<dyn Fn(&Listing) + Send + Sync>;
+
 /// How to scan.
 #[derive(Clone)]
 pub struct ScanOptions {
@@ -58,6 +74,8 @@ pub struct ScanOptions {
     pub progress: Option<ProgressFn>,
     /// Minimum time between progress callbacks.
     pub progress_interval: Duration,
+    /// Optional live listing callback.
+    pub listing: Option<ListingFn>,
 }
 
 impl Default for ScanOptions {
@@ -69,6 +87,7 @@ impl Default for ScanOptions {
             cancel: CancelToken::new(),
             progress: None,
             progress_interval: Duration::from_millis(100),
+            listing: None,
         }
     }
 }
@@ -81,6 +100,7 @@ impl std::fmt::Debug for ScanOptions {
             .field("allow_drive_root", &self.allow_drive_root)
             .field("cancelled", &self.cancel.is_cancelled())
             .field("progress", &self.progress.is_some())
+            .field("listing", &self.listing.is_some())
             .finish()
     }
 }

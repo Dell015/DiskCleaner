@@ -19,6 +19,7 @@
       <div id="hits" role="listbox" hidden></div>
     </div>
     <div class="tools">
+      <button id="scanBtn" class="primary" title="Pick a folder and watch it fill in" hidden>Scan folder</button>
       <button id="open" title="Open a file made by dc view-data">Open file</button>
       <button id="demo" title="Load a made-up disk">Demo</button>
       <button id="settingsBtn" aria-haspopup="dialog">Settings</button>
@@ -34,6 +35,7 @@
       <button id="pause">Pause</button>
       <label class="speed">Speed <input id="speed" type="range" min="1" max="5" value="3"></label>
       <button id="skip">Skip</button>
+      <button id="stop" hidden>Stop</button>
     </div>
     <div id="controls">
       <div class="seg" role="group" aria-label="Colour by">
@@ -50,12 +52,14 @@
     <div id="menu" role="menu" hidden></div>
     <section id="empty">
       <div class="empty-inner">
-        <h1>Open a view of your disk</h1>
-        <p>Each folder becomes a node, sized by the space it takes. Zoom in to go from whole drives down to single files. Findings show what could go, and why.</p>
+        <h1>See what fills your disk</h1>
+        <p>Each folder becomes a node, sized by the space it takes, and the picture grows as the disk is read. Zoom in to go from whole drives down to single files. Findings show what could go, and why.</p>
         <div class="actions">
-          <button id="emptyOpen" class="primary">Open a view file</button>
+          <button id="emptyScan" class="primary" hidden>Scan a folder</button>
+          <button id="emptyOpen">Open a view file</button>
           <button id="emptyDemo">Try the demo</button>
         </div>
+        <div id="suggest" class="suggest" hidden></div>
         <p class="quiet">Make a view file with <code>dc view-data scan.json --apps apps.json --out view.json</code>, or drop one anywhere on this window. It stays on this computer; nothing is uploaded or deleted.</p>
       </div>
     </section>

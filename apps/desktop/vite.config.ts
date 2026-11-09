@@ -7,7 +7,9 @@ const CSP = [
   "worker-src 'self'",
   "style-src 'self'",
   "img-src 'self' data:",
-  "connect-src 'self'",
+  "font-src 'self'",
+  // The desktop app talks to its Rust side through Tauri's IPC.
+  "connect-src 'self' ipc: http://ipc.localhost",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
@@ -25,6 +27,9 @@ function csp(): Plugin {
 
 export default defineConfig({
   plugins: [csp()],
+  // The desktop app (Tauri) expects the dev server on this port.
+  server: { port: 5173, strictPort: true },
+  clearScreen: false,
   worker: { format: "es" },
   build: { target: "es2022", sourcemap: false },
 });

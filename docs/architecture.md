@@ -1,6 +1,6 @@
 # Architecture
 
-Rust Cargo workspace. Backend only for now; a UI will later wrap `dc-api`.
+Rust Cargo workspace plus the desktop app (`apps/desktop`), which talks to the backend through `dc-api`.
 
 | Crate | Responsibility |
 |---|---|
@@ -15,13 +15,13 @@ Rust Cargo workspace. Backend only for now; a UI will later wrap `dc-api`.
 | `dc-store` | SQLite persistence, snapshots, diffs |
 | `dc-advisor` | Metadata-only AI layer, escalate-only (safety-critical) |
 | `dc-quarantine` | Quarantine/restore, feature-gated (safety-critical) |
-| `dc-api` | Facade for the future frontend |
+| `dc-api` | What the app needs: live scans with events, the shared checks, the view format |
 | `dc-cli` | Binary `dc` |
 | `tools/fixture-gen` | Deterministic dummy-data generator for tests |
 
 Dependency direction (no cycles): `dc-core` ← everything; `dc-protected` ← `dc-rules`, `dc-quarantine`;
 `dc-scan` + `dc-winmeta` ← `dc-attrib` ← `dc-leftovers`; `dc-rules` + `dc-attrib` ← `dc-advisor`;
-everything ← `dc-api` ← `dc-cli`.
+everything ← `dc-api` ← `dc-cli` and `dc-desktop` (the window).
 
 Phases are described in [ROADMAP.md](../ROADMAP.md); per-phase requirements and design live in `docs/phases/`.
 
@@ -32,7 +32,7 @@ DiskCleaner/
   Cargo.toml          virtual workspace manifest: members, pinned dependencies, lints
   crates/             every Rust crate, flat, folder name = crate name
   rules/              rule packs (data): junk/ cleanup rules, apps/ well-known apps
-  apps/desktop/       graph view (Vite + TypeScript + sigma.js); Tauri shell goes in src-tauri/ later
+  apps/desktop/       graph view (Vite + TypeScript + sigma.js); src-tauri/ is the desktop window (crate dc-desktop)
   tools/fixture-gen/  dummy-data generator for tests
   docs/               architecture, decisions, notes, per-phase plans
   data/               your own scans and view files (ignored by git)

@@ -13,8 +13,8 @@ An open-source, Windows-first disk analyzer and cleanup advisor (WizTree-like sp
 ## Current scope
 - Backend: Rust workspace under `crates/`.
 - Frontend: the graph view in `apps/desktop/` (Vite + TypeScript + sigma.js), started early at the
-  owner's request (D82-D93). It reads files from `dc view-data`; a Tauri shell will later live in
-  `apps/desktop/src-tauri/` and talk to `dc-api`.
+  owner's request (D82-D93). The desktop window is `apps/desktop/src-tauri/` (Tauri 2, crate
+  `dc-desktop`, D95-D98): it scans live through `dc-api`. It also opens `dc view-data` files.
 - Follow `ROADMAP.md` at the repo root. Work one phase at a time. Do not start a later phase early.
 - Do not add features that are not in the current phase's tasks. If you think something is missing, say so in your summary instead of building it.
 
@@ -34,7 +34,7 @@ An open-source, Windows-first disk analyzer and cleanup advisor (WizTree-like sp
 - A task is not done until all four pass.
 
 ## Preferred crates
-`rayon`, `crossbeam-channel`, `windows` (official Microsoft crate), `winreg`, `serde`/`serde_json`, `toml`, `rusqlite` (bundled), `thiserror` (libraries), `anyhow` (binaries only), `tracing`, `clap`, `reqwest` (rustls; only in `dc-advisor`), `proptest`, `criterion`, `tempfile`, `insta`, `blake3`, `schemars` + `ts-rs`/`specta` (API types for the future frontend).
+`tauri`, `tauri-build`, `tauri-plugin-dialog` (desktop window only), `rayon`, `crossbeam-channel`, `windows` (official Microsoft crate), `winreg`, `serde`/`serde_json`, `toml`, `rusqlite` (bundled), `thiserror` (libraries), `anyhow` (binaries only), `tracing`, `clap`, `reqwest` (rustls; only in `dc-advisor`), `proptest`, `criterion`, `tempfile`, `insta`, `blake3`, `schemars` + `ts-rs`/`specta` (API types for the future frontend).
 Ask before adding any dependency not listed; prefer well-maintained, permissively licensed crates.
 
 ## Code conventions

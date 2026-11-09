@@ -89,6 +89,7 @@ code { font-size: var(--t1); background: var(--panel-2); padding: 1px 5px; borde
 #empty .quiet { font-size: var(--t2); }
 #empty .actions { display: flex; gap: 10px; margin: 20px 0; }
 #empty .actions button { padding: 8px 16px; font-size: var(--t3); }
+#empty .actions button.primary:not([hidden]) ~ button.primary { background: transparent; color: var(--text); border-color: var(--line); }
 #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 12px; background: color-mix(in srgb, var(--bg) 88%, transparent); z-index: 20; }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -184,3 +185,6 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 }
 .textlink { border: 0; padding: 0; color: var(--accent); font-size: var(--t1); }
 .textlink:hover { text-decoration: underline; }
+#scan.live #pause, #scan.live .speed, #scan.live #skip { display: none; }
+.suggest { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 18px; }
+.suggest button { font-size: var(--t2); color: var(--text-2); }

@@ -26,6 +26,8 @@ const FALLBACK_CLUSTER: u64 = 4096;
 /// A scanned entry before it is placed in the arena.
 struct Raw {
     node: Node,
+    /// The name as the file system gave it (the node's name is a lossy copy).
+    os_name: OsString,
     file_id: Option<FileId>,
     link_count: u32,
     children: Vec<Raw>,
@@ -34,6 +36,7 @@ struct Raw {
 struct Shared<'a> {
     probe: &'a dyn FileProbe,
     cancel: &'a crate::CancelToken,
+    listing: Option<&'a crate::options::ListingFn>,
     files: AtomicU64,
     dirs: AtomicU64,
     bytes: AtomicU64,
@@ -127,6 +130,7 @@ pub fn scan(
     let shared = Shared {
         probe,
         cancel: &options.cancel,
+        listing: options.listing.as_ref(),
         files: AtomicU64::new(0),
         dirs: AtomicU64::new(0),
         bytes: AtomicU64::new(0),
@@ -147,7 +151,7 @@ pub fn scan(
                 callback(&shared.snapshot());
             });
         }
-        let children = scan_dir(&canonical, &shared);
+        let children = scan_dir(&canonical, 0, &shared);
         shared.done.store(true, Ordering::Relaxed);
         children
     });
@@ -219,7 +223,11 @@ fn unix_now() -> i64 {
 }
 
 /// Read one directory and, in parallel, everything below it.
-fn scan_dir(dir: &Path, shared: &Shared<'_>) -> Vec<Raw> {
+///
+/// Two steps: first every entry of this folder is described (in parallel), then the folders among
+/// them are read. Between the two, a listing callback (if any) gets this folder's entries, so a
+/// live view always hears about a folder before anything inside it.
+fn scan_dir(dir: &Path, depth: u32, shared: &Shared<'_>) -> Vec<Raw> {
     if shared.cancel.is_cancelled() {
         return Vec::new();
     }
@@ -244,14 +252,31 @@ fn scan_dir(dir: &Path, shared: &Shared<'_>) -> Vec<Raw> {
     }
     names.sort();
 
-    names
+    let mut raws: Vec<Raw> = names
         .par_iter()
-        .filter_map(|name| scan_entry(&dir.join(name), name, shared))
-        .collect()
+        .filter_map(|name| describe(&dir.join(name), name, shared))
+        .collect();
+
+    if let Some(listing) = shared.listing {
+        if !shared.cancel.is_cancelled() {
+            listing(&crate::options::Listing {
+                dir: dir.to_string_lossy().into_owned(),
+                depth,
+                entries: raws.iter().map(|r| r.node.clone()).collect(),
+            });
+        }
+    }
+
+    raws.par_iter_mut().for_each(|raw| {
+        if raw.node.kind == Kind::Dir {
+            raw.children = scan_dir(&dir.join(&raw.os_name), depth + 1, shared);
+        }
+    });
+    raws
 }
 
-/// Describe one directory entry; recurse into real directories.
-fn scan_entry(path: &Path, name: &OsString, shared: &Shared<'_>) -> Option<Raw> {
+/// Describe one directory entry (not what is inside it).
+fn describe(path: &Path, name: &OsString, shared: &Shared<'_>) -> Option<Raw> {
     if shared.cancel.is_cancelled() {
         return None;
     }
@@ -273,6 +298,7 @@ fn scan_entry(path: &Path, name: &OsString, shared: &Shared<'_>) -> Option<Raw> 
 
     let mut raw = Raw {
         node,
+        os_name: name.clone(),
         file_id: None,
         link_count: 1,
         children: Vec::new(),
@@ -287,7 +313,6 @@ fn scan_entry(path: &Path, name: &OsString, shared: &Shared<'_>) -> Option<Raw> 
             .map(|t| t.to_string_lossy().into_owned());
     } else if file_type.is_dir() {
         raw.node.kind = Kind::Dir;
-        raw.children = scan_dir(path, shared);
     } else if file_type.is_file() {
         raw.node.kind = Kind::File;
         raw.node.logical_size = meta.len();

@@ -119,6 +119,11 @@ Format: **ID - decision** / why / where it is enforced.
 
 - **D94** The picture is built at a steady pace, separate from loading: the data is read first (in slices, page stays responsive), the final set of nodes is worked out once, then revealed ring by ring from the root at the same rate whatever the disk size (about 7 s at the default speed). No node appears and later disappears, sizes are final from the start, and the frame eases outward instead of jumping. A live scan later can feed the same queue.
 
+- **D95** F3 desktop app: Tauri 2 (the owner chose option A). The window is `apps/desktop/src-tauri` (crate `dc-desktop`, binary `diskcleaner`), a workspace member. Exact pins: tauri 2.12.5, tauri-build 2.7.4, tauri-plugin-dialog 2.8.3; npm @tauri-apps/api 2.12.4, @tauri-apps/plugin-dialog 2.8.3, @tauri-apps/cli 2.12.4 (all at least two weeks old).
+- **D96** Live scanning: `dc-scan` gets an optional listing callback that reports each folder's entries after the folder is read and before anything inside it (the walker now describes a folder's entries, then reads its subfolders; results are identical, tested). `dc-api::live` turns this into events (`started`, `batch`, `progress`, `analysing`, `finished`, `failed`) sent over a Tauri channel. Marks and owners arrive at the end by path. A cancelled scan runs no checks. The checks, the view format and the protected list moved from `dc-cli` into `dc-api`, so the CLI and the app give the same answers.
+- **D97** Dependency policy for Tauri: `deny.toml` now allows MPL-2.0 (Mozilla's CSS parsing crates, used unchanged) and ignores RUSTSEC-2024-0370 (proc-macro-error unmaintained; build-time, Linux GTK only). The dialog plugin brings the fs plugin as a dependency, but no fs permission is granted: the capability file allows only core events and the open/ask/message dialogs.
+- **D98** The window is read-only by construction: four commands (start scan, stop, is-drive-root, suggested folders) plus a debug-only smoke-test reporter; a whole drive needs an explicit "yes" in a dialog; the Content-Security-Policy allows only the app's own files and Tauri's IPC.
+
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.
 1. **Safety first:** search every crate for anything that can delete, move, rename, write or execute (including registry writes, `Command`, `ShellExecute`). Confirm only `dc-quarantine` could ever do it and only behind the feature.
@@ -129,5 +134,6 @@ Review with fresh eyes, and treat the table above as intentional design unless i
 6. **Tests that cannot fail:** tests that assert nothing, depend on the machine, or skip silently.
 7. **Docs vs code:** requirements and design match what was built; `CHANGELOG.md` is accurate.
 8. **Windows-only paths:** code that only compiles on Windows gets extra scrutiny because the author could not compile it in the build container.
+10. **Desktop shell (apps/desktop/src-tauri):** confirm the capability file grants no fs or shell permission, no command can write, and the live events cannot place an entry outside the scanned folder.
 9. **Graph view (apps/desktop/):** confirm the page cannot write, delete or send anything; that `checkView` rejects every contradiction; that no file name reaches `innerHTML`; that the level of detail never exceeds the hard cap and sizes add up.
 Report findings as: severity, file:line, what is wrong, a concrete failing scenario, suggested fix.

@@ -27,13 +27,8 @@ pub struct LeftoversArgs {
 
 const REMINDER: &str = "These are suggestions with evidence. Nothing has been or will be deleted by this command, and the registry is never changed.";
 
-pub(crate) fn kind_text(kind: dc_leftovers::Kind) -> &'static str {
-    match kind {
-        dc_leftovers::Kind::MissingApp => "app's program folder is gone",
-        dc_leftovers::Kind::BackupCopy => "old backup copy",
-        dc_leftovers::Kind::KnownAppRemoved => "known app, not installed",
-        dc_leftovers::Kind::UnregisteredProgram => "programs nobody registered",
-    }
+fn kind_text(kind: dc_leftovers::Kind) -> &'static str {
+    dc_api::analysis::leftover_kind_text(kind)
 }
 
 pub fn run(args: &LeftoversArgs) -> Result<ExitCode> {

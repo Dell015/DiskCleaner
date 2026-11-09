@@ -4,7 +4,21 @@ The disk as a graph: every folder is a node sized by the space it takes. It grow
 you can drag it and zoom from the whole disk down to single files, and findings are coloured by
 risk with their evidence. **Read-only:** the page cannot delete, move or send anything.
 
-## Run it
+## Run the desktop app (live scanning)
+
+Needs Node.js 20.19 or newer, Rust, and on Windows the WebView2 runtime (part of Windows 11).
+
+```powershell
+cd apps/desktop
+npm install
+npm run tauri dev     # first build takes several minutes; then a window opens
+```
+
+Click **Scan folder** (or one of the suggested folders), and watch the graph grow while the disk is
+read. Findings and app owners appear when the scan is done. **Stop** keeps what was read.
+Nothing is changed or deleted.
+
+## Run it in a browser (view files and the demo)
 
 Needs Node.js 20.19 or newer.
 

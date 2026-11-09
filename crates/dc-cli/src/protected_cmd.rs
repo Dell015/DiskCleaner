@@ -5,26 +5,9 @@ use std::process::ExitCode;
 use anyhow::Result;
 use dc_protected::{FsResolver, ProtectedList, BUILTIN};
 
+/// The protected list with this computer's Windows folders (shared with the desktop app).
 pub fn build_list() -> ProtectedList {
-    let list = ProtectedList::builtin();
-    #[cfg(windows)]
-    let list = {
-        use dc_winmeta::SystemInfoSource;
-        let mut list = list;
-        for folder in dc_winmeta::WindowsSource.known_folders() {
-            if matches!(folder.name.as_str(), "Windows" | "System") {
-                if let Some(path) = folder.path {
-                    list = list.with_extra(
-                        &path,
-                        "known_system_folder",
-                        "Windows system folder on this computer",
-                    );
-                }
-            }
-        }
-        list
-    };
-    list
+    dc_api::system::protected_list()
 }
 
 pub fn run(paths: &[String], list_only: bool) -> Result<ExitCode> {

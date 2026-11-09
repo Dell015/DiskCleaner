@@ -17,7 +17,7 @@ mod walk;
 
 pub use attrs::flags_from_windows_attributes;
 pub use error::ScanError;
-pub use options::{CancelToken, Progress, ProgressFn, ScanOptions};
+pub use options::{CancelToken, Listing, ListingFn, Progress, ProgressFn, ScanOptions};
 #[cfg(unix)]
 pub use probe::UnixProbe;
 pub use probe::{default_probe, FileId, FileProbe, NullProbe, Probe};

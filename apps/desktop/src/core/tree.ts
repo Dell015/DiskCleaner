@@ -55,11 +55,11 @@ export class Tree {
 
   constructor(
     capacity: number,
-    readonly owners: Owner[] = [],
-    readonly marks: Mark[] = [],
+    public owners: Owner[] = [],
+    public marks: Mark[] = [],
     readonly categories: string[] = [],
-    private readonly ownerOf: Map<number, number> = new Map(),
-    private readonly markOf: Map<number, number> = new Map(),
+    private ownerOf: Map<number, number> = new Map(),
+    private markOf: Map<number, number> = new Map(),
   ) {
     const c = Math.max(16, capacity);
     this.cap = c;
@@ -271,6 +271,52 @@ export class Tree {
     if (this.kind[i] !== KIND.dir) return [];
     const s = this.dirSlot[i] * CATS;
     return Array.from(this.catBytes.subarray(s, s + CATS));
+  }
+
+  /**
+   * Set owners and marks after the entries are in (a live scan learns them at the end).
+   * Inheritance (owner of the nearest folder, riskiest mark above) is worked out again.
+   */
+  setAnnotations(owners: Owner[], marks: Mark[], ownerOf: Map<number, number>, markOf: Map<number, number>): void {
+    this.owners = owners;
+    this.marks = marks;
+    this.ownerOf = ownerOf;
+    this.markOf = markOf;
+    for (let i = 0; i < this.n; i++) {
+      const oh = ownerOf.get(i) ?? -1;
+      const mh = markOf.get(i) ?? -1;
+      this.ownerHere[i] = oh;
+      this.markHere[i] = mh;
+      const p = this.parent[i];
+      if (p < 0) {
+        this.owner[i] = oh;
+        this.mark[i] = mh;
+        continue;
+      }
+      this.owner[i] = oh >= 0 ? oh : this.owner[p];
+      const up = this.mark[p];
+      this.mark[i] = mh >= 0 && (up < 0 || markRank(marks[mh]) >= markRank(marks[up])) ? mh : up;
+    }
+    this.version++;
+  }
+
+  /** Stop counting a file's size (a second name of a hard-linked file). */
+  uncount(i: number, flag: number): void {
+    const size = this.own[i];
+    if (size <= 0) return;
+    this.own[i] = 0;
+    this.flags[i] |= flag;
+    for (let p = i; p >= 0; p = this.parent[p]) this.agg[p] -= size;
+    this.version++;
+  }
+
+  /** A child of a folder by name (case ignored, as on Windows), or -1. */
+  childNamed(parent: number, name: string): number {
+    const want = name.toLowerCase();
+    for (let c = this.firstChild[parent]; c >= 0; c = this.nextSibling[c]) {
+      if (this.names[c].toLowerCase() === want) return c;
+    }
+    return -1;
   }
 
   riskOf(i: number): RiskId | null {

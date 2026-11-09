@@ -1,0 +1,26 @@
+[package]
+name = "dc-desktop"
+description = "Desktop window for DiskCleaner: pick a folder, watch the graph grow from a live scan. Read-only."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "diskcleaner"
+path = "src/main.rs"
+
+[dependencies]
+dc-api.workspace = true
+dc-scan.workspace = true
+serde.workspace = true
+tauri = { version = "=2.12.5", features = [] }
+tauri-plugin-dialog = "=2.8.3"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[lints]
+workspace = true
