@@ -28,7 +28,7 @@ const check = (ok, what) => {
   const shot = (name) => page.screenshot({ path: path.join(out, `${name}.png`) });
 
   try {
-    await page.goto(base);
+    await page.goto(base + "?view=map");
     check(await page.isVisible("#empty"), "empty state is shown first");
     await shot("00-empty");
 
@@ -184,7 +184,7 @@ const check = (ok, what) => {
     check((await page.textContent("#drawer h2")).includes("<img"), "odd names are shown as plain text");
 
     // A live scan (simulated in the browser; the desktop app feeds the same code from Rust).
-    await page.goto(base + "?live=40000");
+    await page.goto(base + "?live=40000&view=map");
     await page.click("#emptyScan");
     await page.waitForFunction(() => window.__dc.state.live && window.__dc.state.live.partial.items.length > 5, null, { timeout: 30000 });
     const early = await page.evaluate(() => window.__dc.state.live.partial.items.length);
@@ -200,7 +200,97 @@ const check = (ok, what) => {
     await page.waitForTimeout(800);
     check(await page.isVisible("#drawer.open h2"), "a finding from a live scan opens its details");
 
+
+    // ---------- The list ("Files"): the simple way to look, and the default. ----------
+    await page.goto(base + "?demo=40000&view=files");
+    await page.waitForFunction(() => document.querySelectorAll("#explorer .x-row").length > 3, null, { timeout: 60000 });
+    await shot("20-files");
+    check(await page.isVisible("#explorer") && !(await page.isVisible("#minimap")), "the list shows and the map is out of the way");
+    const sizes = await page.$$eval("#explorer .x-row .c-size", (els) => els.map((e) => e.textContent));
+    check(sizes.length > 3, `the list shows the folder's contents (${sizes.length} rows)`);
+    const f0 = await page.evaluate(() => window.__dc.curFolder());
+    await page.dblclick("#explorer .x-row.dir >> nth=0");
+    await page.waitForTimeout(300);
+    const f1 = await page.evaluate(() => window.__dc.curFolder());
+    check(f1 !== f0 && (await page.textContent("#crumbs")).split("/").length >= 3, "double-click opens a folder and the path grows");
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(200);
+    check((await page.evaluate(() => window.__dc.curFolder())) === f0, "Backspace goes up one folder");
+    await page.click("#explorer .x-row >> nth=1");
+    await page.waitForTimeout(200);
+    check(await page.isVisible("#drawer.open") && (await page.locator("#explorer .x-row.on").count()) === 1, "a click selects the row and shows its details");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+    check(!(await page.isVisible("#drawer.open")) && (await page.locator("#explorer .x-row.on").count()) === 0, "Esc clears the selection");
+    await page.click("#explorer .x-cols button.c-name");
+    await page.waitForTimeout(150);
+    const names = await page.$$eval("#explorer .x-row .nm", (els) => els.map((e) => e.textContent));
+    check(names.length > 1, "sorting by name works");
+    await page.fill("#q", "CrashDumps");
+    await page.waitForTimeout(400);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    const hit = await page.evaluate(() => { const s = window.__dc.state, t = s.tree, i = Number((s.selected || "n-1").slice(1)); return { i, parentShown: i > 0 && t.parent[i] === window.__dc.curFolder(), row: document.querySelectorAll("#explorer .x-row.on").length }; });
+    check(hit.parentShown && hit.row === 1, "a search result opens its folder in the list and selects it");
+    await shot("21-files-search");
+
+    // ---------- Switching to the map and back never leaves a stuck screen. ----------
+    await page.click("#viewSeg button[data-view=map]");
+    await page.waitForTimeout(2500);
+    const m1 = await page.evaluate(() => ({ items: window.__dc.state.vis ? window.__dc.state.vis.items.length : 0, bar: !document.getElementById("selbar").hidden }));
+    check(m1.items > 3 && m1.bar, `the map opens on the same place with a way to clear the highlight (${m1.items} nodes)`);
+    await page.click("#selClear");
+    await page.waitForTimeout(300);
+    const cleared = await page.evaluate(() => ({ sel: window.__dc.state.selected, hl: window.__dc.view.highlight.size, focused: document.querySelector(".graph-host").classList.contains("focused") }));
+    check(cleared.sel === null && cleared.hl === 0 && !cleared.focused, "Clear selection removes every highlight and dimming");
+    // A hover that sigma never reported leaving must not keep the picture dimmed.
+    const hk = await page.evaluate(() => { const v = window.__dc.view; const k = window.__dc.state.vis.items.find((it) => it.node > 1).key; v.hovered = k; v.updateHighlight(); return v.highlight.size; });
+    await page.mouse.move(1200, 400);
+    await page.dispatchEvent(".graph-host .layer:not(.back):not(.fx)", "mouseleave").catch(() => undefined);
+    await page.evaluate(() => window.__dc.view.sigma.getContainer().dispatchEvent(new MouseEvent("mouseleave")));
+    await page.waitForTimeout(100);
+    check(hk > 0 && (await page.evaluate(() => window.__dc.view.highlight.size)) === 0, "leaving the map clears a left-over hover highlight");
+    // Focus a folder, go back to everything, then the map still answers clicks.
+    await page.evaluate(() => { const s = window.__dc.state; const it = s.vis.items.find((x) => x.node > 1 && x.node !== window.__dc.view.rootNode && s.tree.kind[x.node] === 1 && s.tree.childCount[x.node] > 3); window.__dc.reveal(it.node); });
+    await page.waitForTimeout(900);
+    await page.click("#drawer.open button:has-text('Focus here')");
+    await page.waitForTimeout(1500);
+    await page.click("#selClear");
+    await page.waitForTimeout(200);
+    check(!(await page.isVisible("#selbar")) || (await page.textContent("#selClear")) === "Show everything", "after a focus, the bar offers to show everything");
+    await page.click("#crumbs button >> nth=0");
+    await page.waitForTimeout(3000);
+    const back = await page.evaluate(() => ({ focus: window.__dc.state.focusRoot, items: window.__dc.state.vis.items.length, hl: window.__dc.view.highlight.size }));
+    check(back.focus === null && back.items > 50 && back.hl === 0, `going back shows everything, nothing greyed (${back.items} nodes)`);
+    const target = await page.evaluate(() => {
+      const v = window.__dc.view, s = window.__dc.state;
+      let best = null, r0 = -1;
+      for (const it of s.vis.items) { if (it.node < 1 || !v.onScreen(it.key, -30)) continue; const r = v.pixelRadius(it.key); if (r > r0) { r0 = r; best = it.key; } }
+      const a = v.graph.getNodeAttributes(best); const p = v.sigma.graphToViewport({ x: a.x, y: a.y }); return { key: best, x: p.x, y: p.y };
+    });
+    const gb = await page.locator("#graph").boundingBox();
+    await page.mouse.click(gb.x + target.x, gb.y + target.y);
+    await page.waitForTimeout(400);
+    check((await page.evaluate(() => window.__dc.state.selected)) === target.key, "after going back, clicking a node still selects it");
+    await page.mouse.click(gb.x + 30, gb.y + gb.height / 2);
+    await page.waitForTimeout(300);
+    check((await page.evaluate(() => window.__dc.state.selected)) === null && (await page.evaluate(() => window.__dc.view.highlight.size)) === 0, "clicking empty space clears the selection");
+    await page.click("#viewSeg button[data-view=files]");
+    await page.waitForTimeout(300);
+    check(await page.isVisible("#explorer .x-row"), "and back to the list");
+
+    // ---------- A live scan in the list. ----------
+    await page.goto(base + "?live=40000&view=files");
+    await page.click("#emptyScan");
+    await page.waitForFunction(() => document.querySelectorAll("#explorer .x-row").length > 0 && window.__dc.state.live && window.__dc.state.live.active, null, { timeout: 30000 });
+    await shot("22-files-live");
+    check(true, "the list fills while the scan runs");
+    await page.waitForFunction(() => window.__dc.state.live && !window.__dc.state.live.active, null, { timeout: 120000 });
+    await page.waitForTimeout(500);
+    check((await page.locator("#tab-findings .row").count()) > 3 && (await page.locator("#explorer .x-row").count()) > 3, "a live scan in the list ends with findings");
+
     if (viewFile) {
+      await page.goto(base + "?view=map");
       await page.setInputFiles("#file", viewFile);
       await page.waitForFunction(() => window.__dc.state.data && window.__dc.state.data.names.length > 4 && !window.__dc.state.replay.running && window.__dc.state.vis, null, { timeout: 120000 });
       await page.waitForTimeout(4000);

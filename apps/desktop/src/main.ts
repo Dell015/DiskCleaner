@@ -20,6 +20,7 @@ import { type ColorMode } from "./graph/encode";
 import { GraphView, radiusFor } from "./graph/graph";
 import { matchPreset, prefersReducedMotion, PRESET_NAMES, PRESETS, type Quality, type QualityId } from "./graph/quality";
 import { paletteOf, STYLES, type StyleId } from "./graph/style";
+import { ExplorerView } from "./panels/explorer";
 
 /** A folder this big on screen (radius, px) opens when you zoom in; below CLOSE_PX it closes again. */
 const OPEN_PX = 24;
@@ -52,14 +53,19 @@ interface LiveSession {
   dirs: number;
   current: string;
   phase: "reading" | "checking" | "placing";
+  /** The user moved around the map during the scan: stop the paced reveal and show their view. */
+  manual: boolean;
+  lastList: number;
 }
 type Theme = "dark" | "light" | "system";
 
 // ---------- settings (kept in this browser only) ----------
 
-interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean }
+/** "files" is the simple list (the default); "map" is the node graph. */
+type ViewMode = "files" | "map";
+interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode }
 function loadSettings(): Settings {
-  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false };
+  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "files" };
   if (prefersReducedMotion()) base.quality.motion = "reduced";
   try {
     const raw = JSON.parse(localStorage.getItem("dc-settings") ?? "null") as Partial<Settings> | null;
@@ -68,6 +74,7 @@ function loadSettings(): Settings {
       if (raw.theme === "dark" || raw.theme === "light" || raw.theme === "system") base.theme = raw.theme;
       if (raw.quality && typeof raw.quality === "object") base.quality = { ...base.quality, ...raw.quality };
       base.chosen = Boolean(raw.chosen);
+      if (raw.view === "files" || raw.view === "map") base.view = raw.view;
     }
   } catch {
     /* storage may be unavailable; defaults are used */
@@ -76,6 +83,8 @@ function loadSettings(): Settings {
   if (st && st in STYLES) base.style = st as StyleId;
   const th = params.get("theme");
   if (th === "dark" || th === "light" || th === "system") base.theme = th;
+  const vw = params.get("view");
+  if (vw === "files" || vw === "map") base.view = vw;
   const q = params.get("quality");
   if (q && q in PRESETS) base.quality = { ...PRESETS[q as keyof typeof PRESETS] };
   return base;
@@ -112,6 +121,8 @@ const state = {
   findingsShown: 60,
   owner: -1,
   hitIndex: -1,
+  /** The folder the list shows (-1: the top of what was scanned). */
+  folder: -1,
 };
 
 const app = byId("app");
@@ -129,7 +140,20 @@ const view = new GraphView(byId("graph"), {
 });
 view.setStyle(STYLES[settings.style], isDark());
 view.setQuality(settings.quality);
-(window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p) };
+const explorer = new ExplorerView(byId("explorer"), {
+  select: (i) => select(i === null ? null : nodeKey(i)),
+  open: (i) => goFolder(i),
+  up: () => {
+    const tree = state.tree;
+    const f = curFolder();
+    if (tree && f > 0) goFolder(tree.parent[f], f);
+  },
+  context: (i, x, y) => {
+    const r = byId("stage").getBoundingClientRect();
+    contextMenu(nodeKey(i), x - r.left, y - r.top);
+  },
+});
+(window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder() };
 
 // ---------- loading ----------
 
@@ -174,6 +198,7 @@ function start(data: ViewData): void {
   state.selected = null;
   state.focusRoot = null;
   state.owner = -1;
+  state.folder = -1;
   state.findingsShown = 60;
   state.filter = data.marks.some((m) => m.offered) ? "offered" : data.marks.length ? "shown" : "offered";
   clearFocusTimers();
@@ -215,7 +240,8 @@ function prepare(data: ViewData, from: number): void {
   // Outward in rings from the root (folders first in each ring, biggest first): the graph reaches out.
   state.replay.order = target.items.slice().sort((a, b) => depthOf(a) - depthOf(b) || (rank.get(a.key) ?? 0) - (rank.get(b.key) ?? 0));
   state.replay.partial = { items: [], byKey: new Map(), open: new Set(), truncated: false };
-  if (settings.quality.motion !== "full") {
+  // The list has nothing to animate; the map grows ring by ring.
+  if (settings.quality.motion !== "full" || settings.view === "files") {
     finishReplay();
     return;
   }
@@ -393,6 +419,7 @@ function beginLive(starter: (on: (e: LiveEvent) => void) => () => void): void {
   state.selected = null;
   state.focusRoot = null;
   state.owner = -1;
+  state.folder = -1;
   clearFocusTimers();
   closeDrawer();
   view.reset();
@@ -410,7 +437,7 @@ function beginLive(starter: (on: (e: LiveEvent) => void) => () => void): void {
     id, lt: null, active: true, finished: false, summary: null, queue: [], queued: new Set(),
     partial: { items: [], byKey: new Map(), open: new Set(), truncated: false },
     lastTarget: 0, lastSync: 0, last: performance.now(), credit: 0, text: "Starting", cancel: () => undefined,
-    root: "", driveRoot: false, volumeUsed: null, files: 0, dirs: 0, current: "", phase: "reading",
+    root: "", driveRoot: false, volumeUsed: null, files: 0, dirs: 0, current: "", phase: "reading", manual: false, lastList: 0,
   };
   state.live = session;
   session.cancel = starter((e) => onLiveEvent(id, e));
@@ -473,6 +500,21 @@ function liveStep(now: number): void {
     const dt = Math.min(250, now - s.last);
     s.last = now;
     frameTimes.push(Math.min(64, dt));
+    if (settings.view === "files" || s.manual) {
+      // No paced reveal: the list (or the user's own map) updates a few times a second.
+      if (now - s.lastList > 450 || s.finished) {
+        s.lastList = now;
+        liveReadout(s, tree);
+        if (settings.view === "files") renderList();
+        else refresh(true);
+      }
+      if (s.finished) {
+        finishLive();
+        return;
+      }
+      requestAnimationFrame(liveStep);
+      return;
+    }
     if (now - s.lastTarget > 400 || (s.finished && s.queue.length === 0 && now - s.lastTarget > 100)) {
       s.lastTarget = now;
       liveTarget(s, tree);
@@ -481,6 +523,7 @@ function liveStep(now: number): void {
     s.credit += (rate * dt) / 1000;
     let k = Math.floor(s.credit);
     s.credit -= k;
+    const wanted = k;
     let added = 0;
     let head: string | null = null;
     const part = s.partial;
@@ -515,7 +558,8 @@ function liveStep(now: number): void {
       drawMinimap();
       status();
     }
-    if (s.finished && s.queue.length === 0) {
+    // Done, or nothing left that can join (never wait forever on entries whose folder is not shown).
+    if (s.finished && (s.queue.length === 0 || (wanted > 0 && added === 0) || part.items.length >= cap)) {
       finishLive();
       return;
     }
@@ -599,8 +643,13 @@ function selectedNode(): number | null {
 function refresh(animate: boolean): void {
   const tree = state.tree;
   if (!tree || tree.n === 0) return;
-  // While a live scan grows the picture, its own loop owns the graph.
-  if (state.live?.active) return;
+  if (settings.view === "files") {
+    renderList();
+    crumbs();
+    return;
+  }
+  // While a live scan grows the picture, its own loop owns the graph (until the user takes over).
+  if (state.live?.active && !state.live.manual) return;
   const mustShow = new Set<number>();
   const sel = selectedNode();
   const root = pictureRoot();
@@ -619,7 +668,7 @@ function refresh(animate: boolean): void {
 function zoomDetail(): void {
   const tree = state.tree;
   const vis = state.vis;
-  if (!tree || !vis || state.replay.running || state.live?.active) return;
+  if (!tree || !vis || state.replay.running || settings.view === "files" || (state.live?.active && !state.live.manual)) return;
   let changed = false;
   for (const n of [...state.zoomOpened]) {
     const r = view.pixelRadius(nodeKey(n));
@@ -655,6 +704,7 @@ function select(key: string | null): void {
   if (key) openDrawer();
   else closeDrawer();
   crumbs();
+  if (settings.view === "files") renderList();
 }
 
 function openDrawer(): void {
@@ -695,6 +745,11 @@ function toggle(key: string): void {
 function toggleNode(i: number): void {
   const tree = state.tree;
   if (!tree || tree.kind[i] !== KIND.dir) return;
+  if (settings.view === "files") {
+    goFolder(i);
+    return;
+  }
+  takeOver();
   if (state.vis?.open.has(i)) {
     state.closed.add(i);
     state.opened.delete(i);
@@ -720,6 +775,11 @@ function reveal(i: number): void {
   if (state.replay.running) finishReplay();
   const tree = state.tree;
   if (!tree || i < 0 || i >= tree.n) return;
+  if (settings.view === "files") {
+    goFolder(i === 0 ? 0 : tree.parent[i], i);
+    return;
+  }
+  takeOver();
   const root = pictureRoot();
   if (i !== root && !tree.isAncestor(root, i)) state.focusRoot = null;
   // Stop following the growing frame before flying: the target must not move under the camera.
@@ -740,6 +800,11 @@ function reveal(i: number): void {
 function focusOn(i: number | null): void {
   const tree = state.tree;
   if (!tree) return;
+  if (settings.view === "files") {
+    goFolder(i ?? 0);
+    return;
+  }
+  takeOver();
   state.focusRoot = i;
   state.zoomOpened.clear();
   state.wide.clear();
@@ -754,6 +819,122 @@ function focusOn(i: number | null): void {
     openDrawer();
   } else closeDrawer();
   settle();
+}
+
+// ---------- the two ways to look: the list (simple) and the map (graph) ----------
+
+/** The top of what was scanned: a single drive or folder opens straight into it. */
+function listRoot(): number {
+  const tree = state.tree;
+  if (!tree || tree.n < 2) return 0;
+  if (state.live || (state.data && state.data.roots.length === 1)) return 1;
+  return 0;
+}
+
+function curFolder(): number {
+  const tree = state.tree;
+  const f = state.folder;
+  if (tree && f >= 0 && f < tree.n && tree.kind[f] === KIND.dir) return f;
+  return listRoot();
+}
+
+/** Show a folder in the list; `pick` selects one of its entries (for search and findings). */
+function goFolder(i: number, pick: number | null = null): void {
+  const tree = state.tree;
+  if (!tree || i < 0 || i >= tree.n) return;
+  hideMenu();
+  state.folder = i;
+  state.selected = pick === null ? null : nodeKey(pick);
+  view.setSelected(null);
+  if (pick !== null) openDrawer();
+  else closeDrawer();
+  renderList();
+  crumbs();
+  if (pick !== null) explorer.reveal(pick);
+  explorer.focus();
+}
+
+function renderList(): void {
+  const tree = state.tree;
+  if (settings.view !== "files" || !tree || tree.n === 0) return;
+  explorer.show(tree, curFolder(), selectedNode(), view.pal, view.mode);
+}
+
+/** The user moved around the map while a scan runs: from now on show their view, not the paced reveal. */
+function takeOver(): void {
+  const s = state.live;
+  if (s?.active && !s.manual) s.manual = true;
+}
+
+function applyViewMode(): void {
+  const files = settings.view === "files";
+  app.classList.toggle("files", files);
+  byId("explorer").hidden = !files;
+  document.querySelectorAll<HTMLButtonElement>("#viewSeg button").forEach((b) => {
+    const on = b.dataset.view === settings.view;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+}
+
+function setViewMode(m: ViewMode): void {
+  if (settings.view === m) return;
+  settings.view = m;
+  saveSettings();
+  hideMenu();
+  byId("tip").hidden = true;
+  applyViewMode();
+  const tree = state.tree;
+  if (!tree) return;
+  if (m === "files") {
+    // Open the list where the map was looking.
+    const sel = selectedNode();
+    const at = state.focusRoot ?? (sel !== null ? (tree.kind[sel] === KIND.dir ? sel : tree.parent[sel]) : -1);
+    if (at >= 0) state.folder = at;
+    renderList();
+    crumbs();
+    explorer.focus();
+    if (sel !== null) explorer.reveal(sel);
+    return;
+  }
+  // The map: centre it on the folder the list was showing.
+  if (state.replay.running) finishReplay();
+  const f = curFolder();
+  state.focusRoot = f > listRoot() ? f : null;
+  const keep = state.selected;
+  clearFocusTimers();
+  view.reset();
+  userMoved = false;
+  view.freeze(false);
+  if (state.live?.active) state.live.manual = true;
+  refresh(false);
+  if (keep) {
+    state.selected = keep;
+    view.setSelected(keep);
+    openDrawer();
+  }
+  crumbs();
+  settle();
+}
+
+/** The bar that says what is highlighted on the map and how to clear it. */
+function selbar(): void {
+  const bar = byId("selbar");
+  const tree = state.tree;
+  const sel = selectedNode();
+  const focus = state.focusRoot;
+  if (!tree || settings.view !== "map" || (sel === null && focus === null)) {
+    bar.hidden = true;
+    return;
+  }
+  const name = (i: number): string => (i === 0 ? "This PC" : tree.names[i].replace(/[\\/]+$/, "") || tree.names[i]);
+  const text = byId("selText");
+  clear(text);
+  if (sel !== null) text.append("Highlighted: ", h("b", {}, name(sel)), h("span", { class: "quiet" }, " and the way to it; the rest is dimmed."));
+  else if (focus !== null) text.append("Showing only ", h("b", {}, name(focus)), ".");
+  byId("selClear").textContent = sel !== null ? "Clear selection" : "Show everything";
+  byId("selAll").hidden = !(sel !== null && focus !== null);
+  bar.hidden = false;
 }
 
 const actions: PanelActions = {
@@ -786,6 +967,22 @@ function crumbs(): void {
   const tree = state.tree;
   clear(el);
   if (!tree) return;
+  selbar();
+  if (settings.view === "files") {
+    const f = curFolder();
+    const chain = f > 0 ? [...tree.ancestors(f), f].filter((a) => a !== 0) : [];
+    const all = h("button", { onclick: () => goFolder(0) }, "This PC");
+    if (chain.length === 0) all.setAttribute("aria-current", "page");
+    el.append(all);
+    for (const a of chain) {
+      el.append(h("span", { class: "sep", attrs: { "aria-hidden": "true" } }, "/"));
+      const b = h("button", { onclick: () => goFolder(a), title: tree.path(a) }, tree.names[a].replace(/[\\/]+$/, "") || tree.names[a]);
+      if (a === f) b.setAttribute("aria-current", "page");
+      el.append(b);
+    }
+    el.scrollLeft = el.scrollWidth;
+    return;
+  }
   const target = selectedNode() ?? pictureRoot();
   const chain = target > 0 ? [...tree.ancestors(target), target].filter((a) => a !== 0) : [];
   const all = h("button", { onclick: () => (state.focusRoot !== null ? focusOn(null) : select(null)) }, "This PC");
@@ -935,9 +1132,31 @@ function tip(k: string | null, x: number, y: number): void {
 
 function contextMenu(k: string, x: number, y: number): void {
   const tree = state.tree;
-  const item = state.vis?.byKey.get(k);
   const menu = byId("menu");
-  if (!tree || !item) return;
+  if (!tree) return;
+  if (settings.view === "files") {
+    const i = Number(k.slice(1));
+    if (!(i >= 0 && i < tree.n)) return;
+    clear(menu);
+    const add = (label: string, run: () => void): void => {
+      menu.append(h("button", { attrs: { role: "menuitem" }, onclick: () => { hideMenu(); run(); } }, label));
+    };
+    add("Show details", () => select(k));
+    if (tree.kind[i] === KIND.dir && tree.childCount[i] > 0) add("Open folder", () => goFolder(i));
+    add("Show on the map", () => {
+      setViewMode("map");
+      reveal(i);
+    });
+    add("Copy path", () => void navigator.clipboard?.writeText(tree.path(i)));
+    const rect = byId("stage").getBoundingClientRect();
+    menu.hidden = false;
+    menu.style.left = `${Math.min(rect.left + x, window.innerWidth - 200)}px`;
+    menu.style.top = `${Math.min(rect.top + y, window.innerHeight - 200)}px`;
+    (menu.firstElementChild as HTMLElement | null)?.focus();
+    return;
+  }
+  const item = state.vis?.byKey.get(k);
+  if (!item) return;
   clear(menu);
   const add = (label: string, run: () => void): void => {
     menu.append(h("button", { attrs: { role: "menuitem" }, onclick: () => { hideMenu(); run(); } }, label));
@@ -1175,6 +1394,13 @@ function bind(): void {
   });
   byId("skip").addEventListener("click", finishReplay);
   byId("panelToggle").addEventListener("click", () => app.classList.toggle("no-side"));
+  document.querySelectorAll<HTMLButtonElement>("#viewSeg button").forEach((b) =>
+    b.addEventListener("click", () => setViewMode((b.dataset.view ?? "files") as ViewMode)));
+  byId("selClear").addEventListener("click", () => {
+    if (state.selected) select(null);
+    else if (state.focusRoot !== null) focusOn(null);
+  });
+  byId("selAll").addEventListener("click", () => focusOn(null));
   if (window.innerWidth < 900) app.classList.add("no-side");
 
   document.querySelectorAll<HTMLButtonElement>("#controls .seg button").forEach((b) =>
@@ -1183,6 +1409,7 @@ function bind(): void {
       document.querySelectorAll("#controls .seg button").forEach((x) => x.classList.toggle("on", x === b));
       key();
       if (state.selected) renderDrawer();
+      renderList();
       drawMinimap();
     }));
   document.querySelectorAll<HTMLButtonElement>(".tabs button").forEach((b) => b.addEventListener("click", () => {
@@ -1231,14 +1458,22 @@ function bind(): void {
     } else if (e.key === "Escape") {
       hideMenu();
       if (state.selected) select(null);
+      else if (state.focusRoot !== null && settings.view === "map") focusOn(null);
       else if (state.owner >= 0) actions.focusOwner(-1);
       else app.classList.remove("cine");
+    } else if (settings.view === "files" && (e.key === "Backspace" || (e.altKey && e.key === "ArrowUp"))) {
+      if ((e.target as HTMLElement).closest("#explorer")) return;
+      e.preventDefault();
+      const tree = state.tree;
+      const f = curFolder();
+      if (tree && f > 0) goFolder(tree.parent[f], f);
     } else if (e.key === "f" || e.key === "F") view.fit();
     else if (e.key === "h" || e.key === "H") app.classList.toggle("cine");
     else if (e.key === " " && state.replay.running) {
       e.preventDefault();
       byId("pause").click();
     } else if (e.key === "Enter") {
+      if ((e.target as HTMLElement).closest("#explorer, button, a")) return;
       const s = selectedNode();
       if (s !== null && state.tree?.kind[s] === KIND.dir) focusOn(s);
     }
@@ -1277,6 +1512,7 @@ function bind(): void {
 bind();
 bindSettings();
 bindScan();
+applyViewMode();
 document.documentElement.dataset.theme = isDark() ? "dark" : "light";
 // Labels are drawn on a canvas: redraw once the fonts have arrived.
 void document.fonts?.ready.then(() => view.relook());

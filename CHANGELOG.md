@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+### Desktop app - Files view and stuck-highlight fixes
+- New default **Files** view: a simple, sortable folder list (size bars, share of folder, files, last change, verdict, owner); the node graph is now the **Map** view, one click away in the header.
+- The map always shows how to clear a highlight ("Clear selection", "Show everything", Esc, click empty space); left-over hover highlights are cleared.
+- Focusing a folder during or after a live scan no longer leaves an unresponsive screen; a live scan can no longer wait forever to finish.
 ### Phase B5 - Leftovers
 - `dc-leftovers`: finds folders that apps left behind, with evidence and confidence (points: High >= 80, Medium >= 50). Four kinds: data of an app whose program folder is gone, backup-named copies (`X.old`), well-known apps that are not installed (built-in list of 31, validated data file), program files nobody registered. Never `Safe`; weak evidence, personal-looking data, games launchers and protected/Windows/Microsoft/linked folders are shown only or refused. Second look at the real disk (`verify`), `explain`.
 - `dc-cli`: `dc leftovers scan.json --apps apps.json [--limit] [--explain PATH] [--out FILE] [--timing]`.

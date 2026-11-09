@@ -13,6 +13,10 @@
   <header id="bar">
     <span class="mark" aria-hidden="true"></span>
     <nav id="crumbs" aria-label="Where you are"></nav>
+    <div class="seg viewseg" id="viewSeg" role="group" aria-label="How to look">
+      <button data-view="files" title="A simple list of folders and files, biggest first">Files</button>
+      <button data-view="map" title="The node map: every folder as a node, sized by its space">Map</button>
+    </div>
     <div class="search">
       <input id="q" type="search" placeholder="Search names or paths" autocomplete="off" spellcheck="false" aria-label="Search names or paths">
       <kbd>/</kbd>
@@ -29,6 +33,13 @@
   </header>
   <main id="stage">
     <div id="graph"></div>
+    <section id="explorer" aria-label="Files" hidden></section>
+    <div id="selbar" role="status" hidden>
+      <span id="selText"></span>
+      <button id="selAll" hidden>Show everything</button>
+      <button id="selClear" class="primary">Clear selection</button>
+      <kbd>Esc</kbd>
+    </div>
     <section id="scan" aria-live="polite" hidden>
       <div class="scan-top">
         <span id="scanTitle">Reading</span>

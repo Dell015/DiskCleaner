@@ -269,6 +269,16 @@ export class GraphView {
       this.layout.heat(0.05);
     }
     if (!this.frozen) this.fitBox(true);
+    if (this.hovered !== null && (!g.hasNode(this.hovered) || g.getNodeAttribute(this.hovered, "leaving"))) {
+      this.hovered = null;
+      this.on.hover(null, 0, 0);
+    }
+    if (this.selected !== null && !g.hasNode(this.selected)) {
+      // What was selected is no longer drawn: nothing may stay dimmed because of it.
+      this.selected = null;
+      this.host.classList.remove("focused");
+      this.setBack(false);
+    }
     this.updateHighlight();
     this.animate();
     return { added, removed };
@@ -463,6 +473,8 @@ export class GraphView {
 
   setSelected(key: string | null): void {
     this.selected = key;
+    // Clearing the selection also clears a hover that may have been left behind.
+    if (key === null) this.clearHover();
     this.updateHighlight();
     this.host.classList.toggle("focused", key !== null && this.quality.focusBlur);
     this.setBack(key !== null && this.quality.focusBlur);
@@ -481,6 +493,16 @@ export class GraphView {
   setFocusOwner(owner: number): void {
     this.focusOwner = owner;
     this.refreshAll();
+  }
+
+  /** Forget the hovered node (the pointer left it in a way sigma did not report, or it is gone). */
+  clearHover(): void {
+    if (this.hovered === null) return;
+    this.hovered = null;
+    this.updateHighlight();
+    this.refreshAll();
+    this.on.hover(null, 0, 0);
+    this.sigma.getContainer().style.cursor = "";
   }
 
   private updateHighlight(): void {
@@ -730,7 +752,17 @@ export class GraphView {
       e.event.original.preventDefault();
       this.on.context(e.node, e.event.x, e.event.y);
     });
-    s.on("clickStage", () => this.on.select(null));
+    s.on("clickStage", () => {
+      this.clearHover();
+      this.on.select(null);
+    });
+    // The pointer can leave the picture without a "leave node" (onto a panel, out of the window).
+    s.getContainer().addEventListener("mouseleave", () => this.clearHover());
+    window.addEventListener("blur", () => {
+      this.clearHover();
+      drop();
+    });
+    window.addEventListener("mouseup", () => drop());
     s.on("downNode", (e) => {
       this.dragging = e.node;
       this.dragMoved = false;
