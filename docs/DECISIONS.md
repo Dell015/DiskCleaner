@@ -141,6 +141,9 @@ Format: **ID - decision** / why / where it is enforced.
 - **D110** "Last used" comes from Windows' own record of started programs (UserAssist, current user, read-only); a Settings switch turns it off; with no record the app says "not known".
 - **D111** Disk jobs run one at a time per drive (hard disks are much slower with two readers). A folder can be acted on once its whole subtree was read. Live scans read Downloads, Desktop and Documents first.
 
+- **D112** Duplicates are found only on request and only in the last finished scan of this window: same size, then a fingerprint of the first and last 64 KiB, then a full BLAKE3 fingerprint of what is still alike. One file at a time (hard disks), biggest sizes first, cancellable; a new scan stops it. Left out: files under 1 MB, links, cloud placeholders (reading would download them), second names of hard links, system files and Windows' own top folders. Files are opened for reading only. `blake3` (already a workspace dependency, listed in the roadmap) is now used by `dc-api`.
+- **D113** The scanner reads `Users` first at the top of a drive and `Downloads`, `Desktop`, `Documents` first inside a profile. Only the order changes; the result is identical.
+
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.
 1. **Safety first:** search every crate for anything that can delete, move, rename, write or execute (including registry writes, `Command`, `ShellExecute`). Confirm only `dc-quarantine` could ever do it and only behind the feature.

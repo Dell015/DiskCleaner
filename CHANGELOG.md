@@ -4,6 +4,9 @@
 ### Overview (F4, read-only)
 - New **Overview** page, now the default: where the space goes (apps, your files, Windows, everything else); every installed app with size, places, install date and last used (from Windows' record of started programs); programs nobody installed (portable tools, unpacked games); Downloads sorted by type with hints (installers of apps you have, archives already unpacked, untouched for a year); biggest files; files not changed for a year.
 - "Sort this folder" in Files shows any folder (a messy drive) sorted the same way.
+- Duplicate files on request (Overview): exact copies found by reading the files (same size, then the first and last 64 KiB, then the whole file with BLAKE3), biggest first, one file at a time for hard disks, with progress and Stop; for the whole scan or a sorted folder. Each set shows every copy and the space the extra copies take.
+- Scans read Users first at the top of a drive, and Downloads, Desktop and Documents first in a profile (same result, sooner where it matters).
+- Settings, Privacy: "Show when apps were last used" can be switched off.
 - Backend: `dc-winmeta` reads Windows' record of started programs (UserAssist, current user, read-only; decoding tested, the Windows read itself unverified here); `dc-api` lists every installed app with version, install date, stated size, uninstaller and last use.
 - Plans written: `docs/phases/f4-overview/plan.md`, `docs/phases/b9-cleaning/plan.md`.
 ### Desktop app - Files view and stuck-highlight fixes

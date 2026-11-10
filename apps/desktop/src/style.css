@@ -356,3 +356,18 @@ button.ov-app:hover { background: var(--panel-2); }
   .ov-app > :nth-child(4), .ov-app > :nth-child(5) { display: none; }
 }
 .x-sortbtn { flex: none; }
+
+/* Overview: duplicates. */
+.ov-dup-run { display: grid; gap: 5px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.ov-dup-run .row1 { display: flex; align-items: center; gap: 12px; }
+.ov-dup-run .row1 b { flex: 1; }
+.ov-dup-run .row1 span { font-variant-numeric: tabular-nums; font-weight: 650; }
+.ov-dup-run .path { font-size: var(--t1); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-progress { height: 4px; border-radius: 2px; background: var(--panel-2); overflow: hidden; }
+.ov-progress > span { display: block; height: 100%; background: var(--accent); transition: width 200ms linear; }
+.ov-row.dup.on { background: var(--panel-2); }
+.ov-row.copy { padding-left: 26px; }
+.ov-row.copy .path { grid-column: 1 / -1; }
+.ov-row[aria-disabled="true"] { cursor: default; }
+.ov-sec .lead { margin: 4px 0 0; }
+.warn { color: var(--probably); }

@@ -1,5 +1,8 @@
 # F4: Overview, sorted views, duplicates (read-only)
 
+Status: built (2026-11-10). Steps 1-3 done; the job "queue" is one disk job at a time (a new
+scan stops a duplicate search).
+
 Goal (owner, 2026-11-09): after a scan, the app tells you everything on the PC: every app
 (installed or just downloaded and run), what it takes, when it was last used; your Downloads and
 other messy folders sorted so they are easy to judge; big, old and duplicate files. "Much better

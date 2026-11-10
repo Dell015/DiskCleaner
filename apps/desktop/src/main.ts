@@ -11,7 +11,8 @@ import type { Tree } from "./core/tree";
 import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
-import { cancelScan, confirmDrive, isDesktop, isDriveRoot, pickFolder, saveScan, startScan, suggestedFolders } from "./platform";
+import { cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, pickFolder, saveScan, startScan, suggestedFolders } from "./platform";
+import { applyDupEvent, emptyDups, pathFinder, simulateDups, type DupEvent, type DupState } from "./core/dupes";
 import { makeDemo } from "./core/demo";
 import { checkView } from "./core/format";
 import { byId, clear, h } from "./panels/dom";
@@ -65,9 +66,9 @@ type Theme = "dark" | "light" | "system";
 /** "overview" is everything at a glance (the default), "files" the simple list, "map" the node graph. */
 type ViewMode = "overview" | "files" | "map";
 const VIEW_MODES: ViewMode[] = ["overview", "files", "map"];
-interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits }
+interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean }
 function loadSettings(): Settings {
-  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows" };
+  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true };
   if (prefersReducedMotion()) base.quality.motion = "reduced";
   try {
     const raw = JSON.parse(localStorage.getItem("dc-settings") ?? "null") as Partial<Settings> | null;
@@ -78,6 +79,7 @@ function loadSettings(): Settings {
       base.chosen = Boolean(raw.chosen);
       if (raw.view && VIEW_MODES.includes(raw.view)) base.view = raw.view;
       if (raw.units && SIZE_UNITS.includes(raw.units)) base.units = raw.units;
+      if (typeof raw.lastUsed === "boolean") base.lastUsed = raw.lastUsed;
     }
   } catch {
     /* storage may be unavailable; defaults are used */
@@ -134,6 +136,8 @@ const state = {
   folder: -1,
   /** A folder the user asked to see sorted in the Overview (-1: Downloads). */
   sortRoot: -1,
+  /** The duplicate search for this scan. */
+  dups: emptyDups() as DupState,
 };
 
 const app = byId("app");
@@ -179,8 +183,12 @@ const overview = new OverviewView(byId("overview"), {
     state.sortRoot = -1;
     renderFlat();
   },
+  dups: () => state.dups,
+  canFindDups: () => dupsAvailable(),
+  findDups: (within) => startDups(within),
+  cancelDups: () => stopDups(),
 });
-(window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder() };
+(window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder(), findDups: (w: number) => startDups(w) };
 
 // ---------- loading ----------
 
@@ -422,7 +430,7 @@ async function scanFolder(path?: string): Promise<void> {
     }
     beginLive((on) => {
       if (desktop) {
-        startScan(target, allow, on).catch((e) => on({ type: "failed", message: String(e) }));
+        startScan(target, allow, settings.lastUsed, on).catch((e) => on({ type: "failed", message: String(e) }));
         return () => void cancelScan();
       }
       // Browser checks: pretend to scan the demo disk.
@@ -468,7 +476,7 @@ function beginLive(starter: (on: (e: LiveEvent) => void) => () => void): void {
     id, lt: null, active: true, finished: false, summary: null, queue: [], queued: new Set(),
     partial: { items: [], byKey: new Map(), open: new Set(), truncated: false },
     lastTarget: 0, lastSync: 0, last: performance.now(), credit: 0, text: "Starting", cancel: () => undefined,
-    root: "", driveRoot: false, volumeUsed: null, files: 0, dirs: 0, current: "", phase: "reading", manual: false, lastList: 0,
+    root: "", driveRoot: false, volumeUsed: null, files: 0, dirs: 0, current: "", phase: "reading", manual: false, lastList: -1e9,
   };
   state.live = session;
   session.cancel = starter((e) => onLiveEvent(id, e));
@@ -1093,8 +1101,56 @@ function renderUnreadable(): void {
   if (n > state.unreadable.length) el.append(h("p", { class: "quiet" }, `The first ${count(state.unreadable.length)} are listed.`));
 }
 
+// ---------- duplicates (on request, after a scan) ----------
+
+let dupsCancel: (() => void) | null = null;
+let dupsDraw = 0;
+
+/** Why duplicates cannot be looked for now, or "" if they can. */
+function dupsAvailable(): string {
+  if (state.live?.active) return "Available when the scan is done.";
+  if (isDesktop()) return state.live?.finished && state.live.summary?.status !== "cancelled" ? "" : "Scan a folder in this window first; duplicates are checked against the files themselves.";
+  // The browser has no files to read: the demo pretends.
+  return state.tree ? "" : "Open the demo or scan a folder first.";
+}
+
+function startDups(within: number): void {
+  const tree = state.tree;
+  if (!tree || dupsAvailable()) return;
+  stopDups();
+  const s: DupState = { ...emptyDups(), status: "running", within };
+  state.dups = s;
+  const find = state.live?.lt ? (p: string): number => state.live?.lt?.find(p) ?? -1 : pathFinder(tree);
+  const on = (e: DupEvent): void => {
+    if (state.dups !== s) return;
+    applyDupEvent(s, e, find);
+    if (e.type === "finished") dupsCancel = null;
+    // Redraw at most a few times a second.
+    if (!dupsDraw) dupsDraw = window.setTimeout(() => { dupsDraw = 0; renderOverview(true); }, e.type === "finished" ? 0 : 300);
+  };
+  if (isDesktop()) {
+    dupsCancel = () => void cancelDupes();
+    findDupes(within >= 0 ? tree.path(within) : null, on).catch((err) => {
+      s.status = "failed";
+      s.message = String(err);
+      renderOverview(true);
+    });
+  } else {
+    const sim = simulateDups(tree, within, on);
+    dupsCancel = () => sim.cancel();
+  }
+  renderOverview(true);
+}
+
+function stopDups(): void {
+  dupsCancel?.();
+  dupsCancel = null;
+}
+
 /** Clear what belongs to the previous scan or file. */
 function resetScanExtras(): void {
+  stopDups();
+  state.dups = emptyDups();
   state.unreadable = [];
   state.unreadableCount = 0;
   byId("unreadTab").hidden = true;
@@ -1352,6 +1408,7 @@ function renderSettings(): void {
     } }, sw, h("span", {}, h("b", {}, st.name), h("span", { class: "s" }, st.summary))));
   }
   document.querySelectorAll<HTMLButtonElement>("#themes button").forEach((b) => b.classList.toggle("on", b.dataset.theme === settings.theme));
+  byId<HTMLInputElement>("lastUsed").checked = settings.lastUsed;
   document.querySelectorAll<HTMLButtonElement>("#units button").forEach((b) => {
     const on = b.dataset.units === settings.units;
     b.classList.toggle("on", on);
@@ -1449,6 +1506,10 @@ function bindSettings(): void {
     settings.quality = { ...settings.quality, labels: Number((e.target as HTMLInputElement).value) };
     settings.chosen = true;
     applyQuality();
+  });
+  byId<HTMLInputElement>("lastUsed").addEventListener("change", (e) => {
+    settings.lastUsed = (e.target as HTMLInputElement).checked;
+    saveSettings();
   });
   byId("savePic").addEventListener("click", () => {
     const url = view.snapshot();

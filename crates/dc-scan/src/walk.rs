@@ -267,12 +267,35 @@ fn scan_dir(dir: &Path, depth: u32, shared: &Shared<'_>) -> Vec<Raw> {
         }
     }
 
-    raws.par_iter_mut().for_each(|raw| {
-        if raw.node.kind == Kind::Dir {
+    // Folders where people decide most (Users at the top of a drive; Downloads, Desktop and
+    // Documents in a profile) are read first, so they are complete early. The result is the same.
+    let first = |raw: &Raw| raw.node.kind == Kind::Dir && read_first(dir, &raw.node.name);
+    raws.par_iter_mut()
+        .filter(|raw| first(raw))
+        .for_each(|raw| {
             raw.children = scan_dir(&dir.join(&raw.os_name), depth + 1, shared);
-        }
-    });
+        });
+    raws.par_iter_mut()
+        .filter(|raw| raw.node.kind == Kind::Dir && !first(raw))
+        .for_each(|raw| {
+            raw.children = scan_dir(&dir.join(&raw.os_name), depth + 1, shared);
+        });
     raws
+}
+
+/// Is `name` (inside `dir`) one of the folders read before its siblings?
+pub(crate) fn read_first(dir: &Path, name: &str) -> bool {
+    let lower = name.to_lowercase();
+    // The top of a drive (or file-system root): Users first.
+    if dir.parent().is_none() {
+        return lower == "users";
+    }
+    // A profile (`...\Users\<name>`): the folders people sort through.
+    let in_profile = dir
+        .parent()
+        .and_then(Path::file_name)
+        .is_some_and(|p| p.to_string_lossy().eq_ignore_ascii_case("users"));
+    in_profile && matches!(lower.as_str(), "downloads" | "desktop" | "documents")
 }
 
 /// Describe one directory entry (not what is inside it).
@@ -375,4 +398,23 @@ fn assemble(root: Node, children: Vec<Raw>) -> Result<(Tree, u64), ScanError> {
         }
     }
     Ok((tree, extra))
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::read_first;
+    use std::path::Path;
+
+    #[test]
+    fn users_and_the_profile_folders_people_sort_come_first() {
+        let root = if cfg!(windows) { r"C:\" } else { "/" };
+        assert!(read_first(Path::new(root), "Users"));
+        assert!(!read_first(Path::new(root), "Windows"));
+        let profile = Path::new(root).join("Users").join("bob");
+        for name in ["Downloads", "desktop", "Documents"] {
+            assert!(read_first(&profile, name), "{name}");
+        }
+        assert!(!read_first(&profile, "AppData"));
+        assert!(!read_first(&Path::new(root).join("Data"), "Downloads"));
+    }
 }

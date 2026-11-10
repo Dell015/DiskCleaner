@@ -28,22 +28,23 @@ pub fn protected_list() -> ProtectedList {
     list
 }
 
-/// Installed apps from the Windows registry (read-only). `None` on other systems.
+/// Installed apps from the Windows registry (read-only). With `read_usage`, also Windows' record
+/// of started programs (for "last used"). `None` on other systems.
 #[must_use]
-pub fn installed_apps(verify_signatures: bool) -> Option<AppSnapshot> {
+pub fn installed_apps(verify_signatures: bool, read_usage: bool) -> Option<AppSnapshot> {
     #[cfg(windows)]
     {
         Some(dc_winmeta::build_snapshot_with(
             &dc_winmeta::WindowsSource,
             &dc_winmeta::BuildOptions {
                 verify_signatures,
-                read_usage: true,
+                read_usage,
             },
         ))
     }
     #[cfg(not(windows))]
     {
-        let _ = verify_signatures;
+        let _ = (verify_signatures, read_usage);
         None
     }
 }

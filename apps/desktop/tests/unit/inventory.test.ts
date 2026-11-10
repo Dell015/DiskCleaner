@@ -99,3 +99,33 @@ describe("the overview of the demo disk", () => {
     expect(ago(NOW - 800 * 86_400, NOW)).toBe("2 years ago");
   });
 });
+
+describe("duplicates", () => {
+  it("the browser stand-in groups copies, biggest extra space first, and can stop", async () => {
+    const { simulateDups, applyDupEvent, emptyDups, pathFinder, extra } = await import("../../src/core/dupes");
+    const s = { ...emptyDups(), status: "running" as const };
+    const find = pathFinder(tree);
+    await new Promise<void>((done) => {
+      simulateDups(tree, -1, (e) => {
+        applyDupEvent(s, e, find);
+        if (e.type === "finished") done();
+      });
+    });
+    expect(s.status).toBe("done");
+    const holiday = s.groups.find((g) => g.paths.some((p) => p.endsWith("holiday-2024.mp4")));
+    expect(holiday?.paths.length).toBe(3);
+    expect(holiday?.nodes.every((n) => n > 0)).toBe(true);
+    for (let k = 1; k < s.groups.length; k++) expect(extra(s.groups[k - 1])).toBeGreaterThanOrEqual(extra(s.groups[k]));
+    expect(s.done).toBe(s.total);
+
+    const stopped = { ...emptyDups(), status: "running" as const };
+    await new Promise<void>((done) => {
+      const sim = simulateDups(tree, -1, (e) => {
+        applyDupEvent(stopped, e, find);
+        if (e.type === "finished") done();
+      });
+      sim.cancel();
+    });
+    expect(stopped.status).toBe("cancelled");
+  });
+});

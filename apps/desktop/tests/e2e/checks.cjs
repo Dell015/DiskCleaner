@@ -342,9 +342,25 @@ const check = (ok, what) => {
     await page.waitForTimeout(500);
     check((await page.evaluate(() => window.__dc.settings.view)) === "overview" && (await page.textContent("#overview")).includes("Sorted:"), "Sort this folder shows any folder sorted by type");
     await shot("31-sorted-folder");
+    // Duplicates on request (the browser pretends: same size and type count as copies).
+    await page.click("#overview .ov-sec:has(#ov-dups) button:has-text('Back to Downloads')").catch(() => undefined);
+    await page.waitForTimeout(200);
+    await page.locator("#overview .ov-sec:has(#ov-dups) button:has-text('Find duplicate files')").click();
+    await page.waitForFunction(() => document.querySelector("#overview .ov-dup-run") !== null, null, { timeout: 5000 });
+    check(true, "a duplicate search shows its progress and can be stopped");
+    await page.waitForFunction(() => window.__dc.state.dups.status === "done", null, { timeout: 60000 });
+    await page.waitForTimeout(300);
+    const dups = await page.evaluate(() => ({ groups: window.__dc.state.dups.groups.length, rows: document.querySelectorAll("#overview .ov-row.dup").length, lead: document.querySelector("#overview .ov-sec:has(#ov-dups) .lead")?.textContent }));
+    check(dups.groups >= 2 && dups.rows >= 2 && /identical files/.test(dups.lead), `duplicates are listed with the space the extra copies take (${dups.groups} sets)`);
+    await page.locator("#overview .ov-row.dup").first().click();
+    await page.waitForTimeout(200);
+    check((await page.locator("#overview .ov-row.copy").count()) >= 2, "a set opens to show every copy");
+    await shot("32-duplicates");
     // A live scan opens on the Overview and finishes there.
     await page.goto(base + "?live=40000&view=overview");
     await page.click("#emptyScan");
+    await page.waitForTimeout(300);
+    check(await page.locator("#overview .ov-sec:has(#ov-dups) button[disabled]").count() > 0, "duplicates wait until the scan is done");
     await page.waitForFunction(() => window.__dc.state.live && window.__dc.state.live.finished && !window.__dc.state.live.active, null, { timeout: 120000 });
     await page.waitForTimeout(600);
     check((await page.locator("#overview .ov-group").count()) >= 3, "the Overview fills in from a live scan");

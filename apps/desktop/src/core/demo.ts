@@ -260,6 +260,13 @@ export function makeDemo(target = 150_000, seed = 42, now = 1_762_000_000): View
   b.push(dl, "speedtest.exe", 0, 4_000_000, 40, CAT.exe);
   b.files(dl, n(200), CAT.document, 1_000_000, 300, 1.5);
   b.push(dl, "Win11_23H2_x64.iso", 0, 6_800_000_000, 700, CAT.archive);
+  // Copies: the same video in three places and a backup of the Windows image (duplicates).
+  const backup = b.dir(docs, "Backup", 200);
+  for (const at of [vids, backup, dl]) b.push(at, at === dl ? "holiday-2024 (1).mp4" : "holiday-2024.mp4", 0, 4_200_000_000, 300, CAT.video);
+  b.push(backup, "Win11_23H2_x64.iso", 0, 6_800_000_000, 650, CAT.archive);
+  b.push(backup, "thesis-final.pdf", 0, 48_000_000, 800, CAT.document);
+  b.push(docs, "thesis-final.pdf", 0, 48_000_000, 790, CAT.document);
+
   // Tools unpacked from the internet, outside Program Files: nobody installed them.
   const tools = b.dir(c, "Tools", 300);
   for (const [dir, exe] of [["Rufus", "rufus-4.5.exe"], ["CPU-Z", "cpuz_x64.exe"], ["platform-tools", "adb.exe"]]) {

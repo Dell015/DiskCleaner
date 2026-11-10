@@ -1,8 +1,8 @@
 //! The DiskCleaner desktop window.
 //!
-//! It shows the graph view (the web app in `apps/desktop`) and gives it five commands:
-//! start a live scan, stop it, ask whether a path is a whole drive, suggest folders, and save
-//! the finished scan as a view file.
+//! It shows the views (the web app in `apps/desktop`) and gives them these commands: start a
+//! live scan, stop it, ask whether a path is a whole drive, suggest folders, save the finished
+//! scan as a view file, and look for duplicate files in the finished scan (reads files only).
 //! Nothing is ever moved, changed or deleted. The only write is "save scan": it creates one new
 //! file the user picked in a save dialog, and never replaces an existing file. There is no
 //! file-system or shell plugin; the only plugin is the dialogs.
@@ -16,20 +16,25 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use dc_api::dupes::{find_duplicates, DupEvent, DupOptions};
 use dc_api::live::{run_keep, LiveEvent, LiveOptions, LiveResult};
 use dc_scan::CancelToken;
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::State;
 
-/// The scan that is running, if any (only one at a time).
+/// The disk jobs that are running: a scan and a duplicate search (one of each at a time; a new
+/// scan stops a duplicate search, so the disk is read by one job at a time).
 #[derive(Default)]
-struct Running(Mutex<Option<CancelToken>>);
+struct Running {
+    scan: Mutex<Option<CancelToken>>,
+    dupes: Mutex<Option<CancelToken>>,
+}
 
 /// The last finished scan, kept so it can be saved.
 #[derive(Default)]
 struct LastScan {
-    result: Arc<Mutex<Option<LiveResult>>>,
+    result: Arc<Mutex<Option<Arc<LiveResult>>>>,
 }
 
 /// The newest scan's number: a scan thread keeps its result only if no newer scan started.
@@ -42,10 +47,17 @@ fn start_scan(
     path: String,
     allow_drive_root: bool,
     with_apps: bool,
+    with_usage: bool,
     on_event: Channel<LiveEvent>,
     running: State<'_, Running>,
     last: State<'_, LastScan>,
 ) -> Result<(), String> {
+    // One disk job at a time: a new scan stops a duplicate search.
+    if let Ok(mut slot) = running.dupes.lock() {
+        if let Some(c) = slot.take() {
+            c.cancel();
+        }
+    }
     // A new scan replaces what could be saved.
     let generation = NEWEST_SCAN.fetch_add(1, Ordering::SeqCst) + 1;
     if let Ok(mut slot) = last.result.lock() {
@@ -55,7 +67,7 @@ fn start_scan(
     let cancel = CancelToken::new();
     {
         let mut slot = running
-            .0
+            .scan
             .lock()
             .map_err(|_| "the app is in a bad state; restart it".to_owned())?;
         if let Some(old) = slot.take() {
@@ -68,7 +80,10 @@ fn start_scan(
     opts.cancel = cancel;
     if with_apps {
         // Read-only registry read, on its own thread while the disk is read.
-        opts.apps = Some(Box::new(|| dc_api::system::installed_apps(false)));
+        // "Last used" reads Windows' record of started programs, unless switched off in Settings.
+        opts.apps = Some(Box::new(move || {
+            dc_api::system::installed_apps(false, with_usage)
+        }));
     }
     std::thread::spawn(move || {
         // If the window went away, sending fails; the scan result is simply dropped.
@@ -79,12 +94,71 @@ fn start_scan(
             if let Ok(mut slot) = keep.lock() {
                 // Keep it unless a newer scan has started meanwhile.
                 if NEWEST_SCAN.load(Ordering::SeqCst) == generation {
-                    *slot = Some(result);
+                    *slot = Some(Arc::new(result));
                 }
             }
         }
     });
     Ok(())
+}
+
+/// Look for identical files in the last finished scan (only below `within`, if given). Files are
+/// read, never changed. A new search stops the previous one.
+#[tauri::command]
+fn find_dupes(
+    within: Option<String>,
+    on_event: Channel<DupEvent>,
+    last: State<'_, LastScan>,
+    running: State<'_, Running>,
+) -> Result<(), String> {
+    // Only the finished scan is checked (its numbers are final). The scan is shared, not
+    // locked, so a new scan or a save can start meanwhile.
+    let kept = last
+        .result
+        .lock()
+        .map_err(|_| "the app is in a bad state; restart it".to_owned())?
+        .clone()
+        .ok_or_else(|| "There is no finished scan yet. Scan a folder first.".to_owned())?;
+    let cancel = CancelToken::new();
+    {
+        let mut slot = running
+            .dupes
+            .lock()
+            .map_err(|_| "the app is in a bad state; restart it".to_owned())?;
+        if let Some(old) = slot.take() {
+            old.cancel();
+        }
+        *slot = Some(cancel.clone());
+    }
+    std::thread::spawn(move || {
+        let opts = DupOptions {
+            within,
+            cancel,
+            ..DupOptions::default()
+        };
+        let result = find_duplicates(&kept.scan, &opts, |e| {
+            let _ = on_event.send(e);
+        });
+        if result.is_err() {
+            let _ = on_event.send(DupEvent::Finished {
+                status: "cancelled",
+                groups: 0,
+                wasted: 0,
+                unreadable: 0,
+            });
+        }
+    });
+    Ok(())
+}
+
+/// Stop the duplicate search.
+#[tauri::command]
+fn cancel_dupes(running: State<'_, Running>) {
+    if let Ok(mut slot) = running.dupes.lock() {
+        if let Some(c) = slot.take() {
+            c.cancel();
+        }
+    }
 }
 
 /// What was saved.
@@ -106,16 +180,13 @@ fn save_scan(path: String, last: State<'_, LastScan>) -> Result<Saved, String> {
     {
         return Err("The file name must end in .json.".to_owned());
     }
-    let view = {
-        let slot = last
-            .result
-            .lock()
-            .map_err(|_| "the app is in a bad state; restart it".to_owned())?;
-        let Some(kept) = slot.as_ref() else {
-            return Err("There is no finished scan to save yet.".to_owned());
-        };
-        dc_api::view::build(&kept.scan, kept.apps.as_ref()).map_err(|e| e.to_string())?
-    };
+    let kept = last
+        .result
+        .lock()
+        .map_err(|_| "the app is in a bad state; restart it".to_owned())?
+        .clone()
+        .ok_or_else(|| "There is no finished scan to save yet.".to_owned())?;
+    let view = dc_api::view::build(&kept.scan, kept.apps.as_ref()).map_err(|e| e.to_string())?;
     let file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -144,7 +215,7 @@ fn save_scan(path: String, last: State<'_, LastScan>) -> Result<Saved, String> {
 /// Stop the running scan (what was read so far stays on screen).
 #[tauri::command]
 fn cancel_scan(running: State<'_, Running>) {
-    if let Ok(mut slot) = running.0.lock() {
+    if let Ok(mut slot) = running.scan.lock() {
         if let Some(c) = slot.take() {
             c.cancel();
         }
@@ -214,6 +285,8 @@ fn main() {
             is_drive_root,
             suggested_folders,
             save_scan,
+            find_dupes,
+            cancel_dupes,
             smoke_report
         ])
         .run(tauri::generate_context!());
@@ -245,7 +318,7 @@ fn smoke(app: &tauri::App) {
         for _ in 0..60 {
             std::thread::sleep(std::time::Duration::from_secs(2));
             let _ = window.eval(
-                "(() => { const s = window.__dc.state; const inv = window.__TAURI_INTERNALS__.invoke; if (s.live && s.live.finished && !s.live.active && window.__smokeSave && !window.__saved) { window.__saved = 1; inv('save_scan', { path: window.__smokeSave }).then((r) => inv('smoke_report', { report: 'SAVED ' + JSON.stringify(r) }), (e) => inv('smoke_report', { report: 'SAVE FAILED ' + e })); } const l = s.live; window.__TAURI_INTERNALS__.invoke('smoke_report', { report: JSON.stringify({ entries: s.tree ? s.tree.n : 0, shown: l ? l.partial.items.length : 0, active: l ? l.active : null, finished: l ? l.finished : null, marks: s.tree ? s.tree.marks.length : 0, visible: s.vis ? s.vis.items.length : 0, error: document.getElementById('error').hidden ? null : document.getElementById('errorText').textContent }) }); })()",
+                "(() => { const s = window.__dc.state; const inv = window.__TAURI_INTERNALS__.invoke; if (s.live && s.live.finished && !s.live.active && window.__smokeSave && !window.__saved) { window.__saved = 1; inv('save_scan', { path: window.__smokeSave }).then((r) => inv('smoke_report', { report: 'SAVED ' + JSON.stringify(r) }), (e) => inv('smoke_report', { report: 'SAVE FAILED ' + e })); } if (s.live && s.live.finished && !s.live.active && !window.__dupsAsked) { window.__dupsAsked = 1; window.__dc.findDups(-1); } const d = s.dups; inv('smoke_report', { report: 'DUPS ' + JSON.stringify({ status: d.status, groups: d.groups.length, total: d.total, found: d.groups.map((g) => g.nodes.filter((n) => n >= 0).length) }) }); const l = s.live; window.__TAURI_INTERNALS__.invoke('smoke_report', { report: JSON.stringify({ entries: s.tree ? s.tree.n : 0, shown: l ? l.partial.items.length : 0, active: l ? l.active : null, finished: l ? l.finished : null, marks: s.tree ? s.tree.marks.length : 0, visible: s.vis ? s.vis.items.length : 0, error: document.getElementById('error').hidden ? null : document.getElementById('errorText').textContent }) }); })()",
             );
         }
     });

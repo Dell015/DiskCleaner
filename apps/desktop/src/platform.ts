@@ -4,6 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import type { LiveEvent } from "./live";
+import type { DupEvent } from "./core/dupes";
 
 export function isDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -29,10 +30,21 @@ export async function confirmDrive(path: string): Promise<boolean> {
   return ask(`${path} is a whole drive. Reading every folder on it can take a few minutes. Nothing is changed or deleted. Scan it?`, { title: "Scan a whole drive?", kind: "warning", okLabel: "Scan the drive", cancelLabel: "Cancel" });
 }
 
-export async function startScan(path: string, allowDriveRoot: boolean, onEvent: (e: LiveEvent) => void): Promise<void> {
+export async function startScan(path: string, allowDriveRoot: boolean, withUsage: boolean, onEvent: (e: LiveEvent) => void): Promise<void> {
   const channel = new Channel<LiveEvent>();
   channel.onmessage = onEvent;
-  await invoke("start_scan", { path, allowDriveRoot, withApps: true, onEvent: channel });
+  await invoke("start_scan", { path, allowDriveRoot, withApps: true, withUsage, onEvent: channel });
+}
+
+/** Look for identical files in the last finished scan (below `within`, if given). Reads only. */
+export async function findDupes(within: string | null, onEvent: (e: DupEvent) => void): Promise<void> {
+  const channel = new Channel<DupEvent>();
+  channel.onmessage = onEvent;
+  await invoke("find_dupes", { within, onEvent: channel });
+}
+
+export async function cancelDupes(): Promise<void> {
+  await invoke("cancel_dupes");
 }
 
 export interface Saved { path: string; entries: number; bytes: number }

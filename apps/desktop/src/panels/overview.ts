@@ -5,6 +5,7 @@
 import { KIND } from "../core/format";
 import { ago, appRows, bigFiles, BUCKETS, portablePrograms, sortFolder, spaceBuckets, userFolders, type AppRow, type Bucket, type Sorted } from "../core/inventory";
 import type { Tree } from "../core/tree";
+import { extra, type DupState } from "../core/dupes";
 import { count, human } from "../core/util";
 import { clear, h } from "./dom";
 import { placeKind } from "./panels";
@@ -14,6 +15,12 @@ export interface OverviewHandlers {
   open(node: number): void;
   /** Stop sorting a folder of your choice (back to Downloads). */
   clearSort(): void;
+  /** The duplicate search, as it stands. */
+  dups(): DupState;
+  /** Why duplicates cannot be looked for now ("" if they can). */
+  canFindDups(): string;
+  findDups(within: number): void;
+  cancelDups(): void;
 }
 
 type AppSort = "size" | "used" | "name";
@@ -50,6 +57,7 @@ export class OverviewView {
     if (live) page.append(h("p", { class: "ov-note" }, "The scan is still running. Apps, their sizes and the findings arrive when it is done; nothing is changed meanwhile."));
     const sorts: number[] = sortRoot >= 0 ? [sortRoot] : userFolders(tree).filter((f) => tree.names[f].toLowerCase() === "downloads");
     for (const f of sorts) page.append(this.sorted(tree, sortFolder(tree, f, now), sortRoot >= 0));
+    page.append(this.duplicates(tree, sortRoot));
     if (!live) page.append(this.apps(tree, now));
     page.append(this.portable(tree));
     page.append(this.files(tree, now));
@@ -229,6 +237,72 @@ export class OverviewView {
     hint("untouched", "Not changed for a year or more", "Old downloads and folders nobody has touched.");
     const head = h("div", { class: "ov-head-row" }, h("span", { class: "path" }, tree.path(root)), chosen ? h("button", { onclick: () => this.on.clearSort() }, "Back to Downloads") : null);
     return this.section(`sorted-${root}`, chosen ? `Sorted: ${tree.names[root].replace(/[\\/]+$/, "") || tree.names[root]}` : `${tree.names[root]} (${human(tree.agg[root])})`, head, grid, ...lists, hintBox);
+  }
+
+  // ---------- duplicates ----------
+
+  private duplicates(tree: Tree, sortRoot: number): HTMLElement {
+    const d = this.on.dups();
+    const why = this.on.canFindDups();
+    const scope = (i: number): string => (i < 0 ? "everything scanned" : tree.names[i].replace(/[\\/]+$/, "") || tree.names[i]);
+    const starters = h("div", { class: "ov-tools" });
+    const start = (within: number, label: string, primary: boolean): void => {
+      const b = h("button", { class: primary ? "primary" : "", onclick: () => this.on.findDups(within) }, label);
+      if (why || d.status === "running") b.setAttribute("disabled", "");
+      starters.append(b);
+    };
+    if (d.status !== "running") {
+      // A folder inside the scan (not the scan itself) can be checked on its own.
+      if (sortRoot > 0 && tree.parent[sortRoot] > 0) start(sortRoot, `Find duplicates in ${scope(sortRoot)}`, true);
+      start(-1, d.status === "idle" ? "Find duplicate files" : "Look again", sortRoot < 0);
+      if (why) starters.append(h("span", { class: "quiet" }, why));
+    }
+    const body: (Node | null)[] = [starters];
+    if (d.status === "running") {
+      const pct = d.total > 0 ? Math.min(100, (d.done / d.total) * 100) : 0;
+      const bar = h("div", { class: "ov-progress", attrs: { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.floor(pct)) } }, h("span", {}));
+      (bar.firstElementChild as HTMLElement).style.width = `${pct}%`;
+      body.push(h("div", { class: "ov-dup-run" },
+        h("div", { class: "row1" }, h("b", {}, `Checking ${scope(d.within)}`), h("span", {}, `${Math.floor(pct)}%`), h("button", { onclick: () => this.on.cancelDups() }, "Stop")),
+        bar,
+        h("span", { class: "quiet" }, d.total ? `${human(d.done)} of up to ${human(d.total)} read · ${count(d.files)} files share a size with another file` : "Finding files of the same size"),
+        h("span", { class: "path" }, d.current)));
+    }
+    if (d.status === "failed") body.push(h("p", { class: "warn" }, d.message));
+    if (d.status === "done" || d.status === "cancelled" || (d.status === "running" && d.groups.length)) {
+      const wasted = d.groups.reduce((a, g) => a + extra(g), 0);
+      const head = d.status === "done" && d.groups.length === 0
+        ? "No identical files found."
+        : `${count(d.groups.length)} set${d.groups.length === 1 ? "" : "s"} of identical files · ${human(wasted)} in extra copies${d.status === "cancelled" ? " (stopped early)" : ""}`;
+      body.push(h("p", { class: "lead" }, head));
+      if (d.unreadable) body.push(h("p", { class: "quiet" }, `${count(d.unreadable)} files could not be read (in use, or no access) and were left out.`));
+      const list = h("div", { class: "ov-list" });
+      const shown = this.open.has("dups:all") ? 300 : 12;
+      for (const g of d.groups.slice(0, shown)) {
+        const id = `dup:${g.paths[0]}`;
+        const opened = this.open.has(id);
+        const name = g.paths[0].split(/[\\/]/).pop() ?? g.paths[0];
+        list.append(h("button", { class: `ov-row dup${opened ? " on" : ""}`, attrs: { "aria-expanded": String(opened) }, onclick: () => { if (opened) this.open.delete(id); else this.open.add(id); this.redraw(); } },
+          h("span", { class: "nm" }, name),
+          h("span", { class: "sz" }, `${human(extra(g))} extra`),
+          h("span", { class: "meta" }, `${count(g.paths.length)} copies of ${human(g.size)}`)));
+        if (opened) {
+          for (let k = 0; k < g.paths.length; k++) {
+            const node = g.nodes[k];
+            const b = h("button", { class: "ov-row copy", title: g.paths[k], onclick: () => { if (node >= 0) this.on.open(node); } },
+              h("span", { class: "path" }, g.paths[k]),
+              node >= 0 ? h("span", { class: "meta" }, `changed ${ago(tree.mtime[node], this.now)}`) : null);
+            if (node < 0) b.setAttribute("aria-disabled", "true");
+            list.append(b);
+          }
+        }
+      }
+      if (d.groups.length > 12) list.append(h("button", { class: "ov-more", onclick: () => { if (this.open.has("dups:all")) this.open.delete("dups:all"); else this.open.add("dups:all"); this.redraw(); } }, shown > 12 ? "Show fewer" : `Show all ${count(Math.min(300, d.groups.length))}`));
+      body.push(list);
+    }
+    return this.section("dups", "Duplicate files",
+      "Exact copies: the same bytes in two or more places, checked by reading the files (nothing is changed). Files under 1 MB, links, cloud-only files and Windows' own folders are left out. On a hard disk this can take a while; you can stop it any time.",
+      ...body);
   }
 
   // ---------- big and old files ----------
