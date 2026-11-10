@@ -129,6 +129,32 @@
       <fieldset><legend>Privacy</legend>
         <label class="opt"><input type="checkbox" id="lastUsed"> Show when apps were last used</label>
         <p class="quiet">Reads Windows' own record of programs you started from the Start menu, the taskbar or Explorer. Read-only; it never leaves this computer. Applies to the next scan.</p>
+        <label class="opt"><input type="checkbox" id="keepReport"> Keep a report of my latest scan</label>
+        <p class="quiet">A summary page (sizes, owners, verdicts; never what is inside your files) kept in DiskCleaner's own folder, for you and, if you allow it below, your AI assistant.</p>
+      </fieldset>
+      <fieldset id="aiBox"><legend>AI assistant</legend>
+        <p class="quiet">Ask your own AI about your disk: "is this safe to delete?", "what breaks if I move this?", "which apps don't I use?". It reads the latest scan report; it can never delete or move anything. No account or API key needed in DiskCleaner.</p>
+        <div id="aiDesktop">
+          <label class="opt"><input type="checkbox" id="aiAccess"> Let my AI assistant read my latest scan</label>
+          <details class="ai-setup">
+            <summary>Connect Claude Desktop, Claude Code or another MCP app</summary>
+            <p class="quiet">Claude Desktop: Settings, Developer, Edit Config, then add this inside "mcpServers" and restart Claude:</p>
+            <pre class="cmd" id="aiDesktopConfig"></pre>
+            <button type="button" data-copy="aiDesktopConfig">Copy</button>
+            <p class="quiet">Claude Code (in a terminal):</p>
+            <pre class="cmd" id="aiCodeCmd"></pre>
+            <button type="button" data-copy="aiCodeCmd">Copy</button>
+            <p class="quiet">Other apps with MCP support (Cursor, VS Code, LM Studio, ...): add a "stdio" server that runs the program above with the argument --mcp.</p>
+          </details>
+          <p class="quiet">Any other AI (ChatGPT, Gemini, ...): copy the report and paste it into the chat.</p>
+          <button type="button" id="copyReport">Copy the scan report</button>
+          <p class="quiet" id="aiReportNote"></p>
+          <details class="ai-log">
+            <summary>What your AI asked</summary>
+            <ol id="aiLog"></ol>
+          </details>
+        </div>
+        <p class="quiet" id="aiBrowser" hidden>Available in the desktop app.</p>
       </fieldset>
       <fieldset><legend>Picture</legend>
         <button type="button" id="savePic">Save picture of the graph</button>

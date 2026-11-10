@@ -30,10 +30,33 @@ export async function confirmDrive(path: string): Promise<boolean> {
   return ask(`${path} is a whole drive. Reading every folder on it can take a few minutes. Nothing is changed or deleted. Scan it?`, { title: "Scan a whole drive?", kind: "warning", okLabel: "Scan the drive", cancelLabel: "Cancel" });
 }
 
-export async function startScan(path: string, allowDriveRoot: boolean, withUsage: boolean, onEvent: (e: LiveEvent) => void): Promise<void> {
+export interface ScanChoices { withUsage: boolean; keepReport: boolean }
+
+export async function startScan(path: string, allowDriveRoot: boolean, choices: ScanChoices, onEvent: (e: LiveEvent) => void): Promise<void> {
   const channel = new Channel<LiveEvent>();
   channel.onmessage = onEvent;
-  await invoke("start_scan", { path, allowDriveRoot, withApps: true, withUsage, onEvent: channel });
+  await invoke("start_scan", { options: { path, allowDriveRoot, withApps: true, ...choices }, onEvent: channel });
+}
+
+export interface AiStatus {
+  enabled: boolean;
+  folder: string;
+  report_time: number | null;
+  program: string;
+  log: { time: number; tool: string; args: Record<string, unknown>; ok: boolean }[];
+}
+
+export async function aiStatus(): Promise<AiStatus> {
+  return invoke<AiStatus>("ai_status");
+}
+
+export async function setAiAccess(enabled: boolean): Promise<void> {
+  await invoke("set_ai_access", { enabled });
+}
+
+/** The latest scan report (Markdown), to paste into any AI chat. */
+export async function latestReport(): Promise<string> {
+  return invoke<string>("latest_report");
 }
 
 /** Look for identical files in the last finished scan (below `within`, if given). Reads only. */

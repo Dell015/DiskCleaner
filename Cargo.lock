@@ -883,6 +883,7 @@ name = "dc-desktop"
 version = "0.0.0"
 dependencies = [
  "dc-api",
+ "dc-core",
  "dc-scan",
  "serde",
  "serde_json",

@@ -11,7 +11,7 @@ import type { Tree } from "./core/tree";
 import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
-import { cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, pickFolder, saveScan, startScan, suggestedFolders } from "./platform";
+import { aiStatus, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
 import { applyDupEvent, emptyDups, pathFinder, simulateDups, type DupEvent, type DupState } from "./core/dupes";
 import { makeDemo } from "./core/demo";
 import { checkView } from "./core/format";
@@ -66,9 +66,9 @@ type Theme = "dark" | "light" | "system";
 /** "overview" is everything at a glance (the default), "files" the simple list, "map" the node graph. */
 type ViewMode = "overview" | "files" | "map";
 const VIEW_MODES: ViewMode[] = ["overview", "files", "map"];
-interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean }
+interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean }
 function loadSettings(): Settings {
-  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true };
+  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true, keepReport: true };
   if (prefersReducedMotion()) base.quality.motion = "reduced";
   try {
     const raw = JSON.parse(localStorage.getItem("dc-settings") ?? "null") as Partial<Settings> | null;
@@ -80,6 +80,7 @@ function loadSettings(): Settings {
       if (raw.view && VIEW_MODES.includes(raw.view)) base.view = raw.view;
       if (raw.units && SIZE_UNITS.includes(raw.units)) base.units = raw.units;
       if (typeof raw.lastUsed === "boolean") base.lastUsed = raw.lastUsed;
+      if (typeof raw.keepReport === "boolean") base.keepReport = raw.keepReport;
     }
   } catch {
     /* storage may be unavailable; defaults are used */
@@ -430,7 +431,7 @@ async function scanFolder(path?: string): Promise<void> {
     }
     beginLive((on) => {
       if (desktop) {
-        startScan(target, allow, settings.lastUsed, on).catch((e) => on({ type: "failed", message: String(e) }));
+        startScan(target, allow, { withUsage: settings.lastUsed, keepReport: settings.keepReport }, on).catch((e) => on({ type: "failed", message: String(e) }));
         return () => void cancelScan();
       }
       // Browser checks: pretend to scan the demo disk.
@@ -1101,6 +1102,34 @@ function renderUnreadable(): void {
   if (n > state.unreadable.length) el.append(h("p", { class: "quiet" }, `The first ${count(state.unreadable.length)} are listed.`));
 }
 
+// ---------- AI assistant (desktop app only) ----------
+
+async function renderAi(): Promise<void> {
+  const desktop = isDesktop();
+  byId("aiDesktop").hidden = !desktop;
+  byId("aiBrowser").hidden = desktop;
+  if (!desktop) return;
+  try {
+    const st = await aiStatus();
+    byId<HTMLInputElement>("aiAccess").checked = st.enabled;
+    const program = st.program || "diskcleaner.exe";
+    byId("aiDesktopConfig").textContent = JSON.stringify({ diskcleaner: { command: program, args: ["--mcp"] } }, null, 2);
+    byId("aiCodeCmd").textContent = `claude mcp add diskcleaner -- "${program}" --mcp`;
+    byId("aiReportNote").textContent = st.report_time
+      ? `Latest report: ${new Date(st.report_time * 1000).toLocaleString()}. Kept in ${st.folder}.`
+      : "No report yet: scan a drive or folder first.";
+    const log = byId("aiLog");
+    clear(log);
+    if (st.log.length === 0) log.append(h("li", { class: "quiet" }, "Nothing asked yet."));
+    for (const e of st.log.slice().reverse()) {
+      const what = typeof e.args?.path === "string" ? ` ${e.args.path}` : typeof e.args?.query === "string" ? ` "${e.args.query}"` : "";
+      log.append(h("li", {}, h("span", { class: "quiet" }, new Date(e.time * 1000).toLocaleString()), ` ${e.tool.replace(/_/g, " ")}${what}`, e.ok ? "" : " (not answered)"));
+    }
+  } catch (err) {
+    byId("aiReportNote").textContent = String(err);
+  }
+}
+
 // ---------- duplicates (on request, after a scan) ----------
 
 let dupsCancel: (() => void) | null = null;
@@ -1409,6 +1438,8 @@ function renderSettings(): void {
   }
   document.querySelectorAll<HTMLButtonElement>("#themes button").forEach((b) => b.classList.toggle("on", b.dataset.theme === settings.theme));
   byId<HTMLInputElement>("lastUsed").checked = settings.lastUsed;
+  byId<HTMLInputElement>("keepReport").checked = settings.keepReport;
+  void renderAi();
   document.querySelectorAll<HTMLButtonElement>("#units button").forEach((b) => {
     const on = b.dataset.units === settings.units;
     b.classList.toggle("on", on);
@@ -1511,6 +1542,23 @@ function bindSettings(): void {
     settings.lastUsed = (e.target as HTMLInputElement).checked;
     saveSettings();
   });
+  byId<HTMLInputElement>("keepReport").addEventListener("change", (e) => {
+    settings.keepReport = (e.target as HTMLInputElement).checked;
+    saveSettings();
+  });
+  byId<HTMLInputElement>("aiAccess").addEventListener("change", (e) => {
+    const on = (e.target as HTMLInputElement).checked;
+    setAiAccess(on).then(() => renderAi()).catch((err) => showError(String(err)));
+  });
+  byId("copyReport").addEventListener("click", () => {
+    latestReport()
+      .then((md) => navigator.clipboard.writeText(md))
+      .then(() => toast("Scan report copied. Paste it into your AI chat."))
+      .catch((err) => toast(String(err)));
+  });
+  document.querySelectorAll<HTMLButtonElement>("#aiBox [data-copy]").forEach((b) => b.addEventListener("click", () => {
+    void navigator.clipboard.writeText(byId(b.dataset.copy ?? "").textContent ?? "").then(() => toast("Copied."));
+  }));
   byId("savePic").addEventListener("click", () => {
     const url = view.snapshot();
     if (!url) return;

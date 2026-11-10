@@ -7,13 +7,24 @@
 //! - [`system`]: things read from this computer (protected list, installed apps).
 //! - [`dupes`]: exact duplicate files in a finished scan, on request (reads files, changes nothing).
 //!
-//! Read-only: nothing here deletes, moves or writes anything on disk.
+//! - [`inspect`], [`advice`], [`report`]: questions about a finished scan, answered from its view
+//!   file, and the scan report.
+//! - [`mcp`]: a Model Context Protocol server so a person's own AI assistant can read the scan.
+//! - [`datadir`]: DiskCleaner's own data folder (latest scan, report, AI access, AI log).
+//!
+//! Read-only on everything scanned: nothing here deletes, moves or changes a scanned file. The
+//! only writes are inside DiskCleaner's own data folder ([`datadir`]).
 
 #![forbid(unsafe_code)]
 
+pub mod advice;
 pub mod analysis;
+pub mod datadir;
 pub mod dupes;
+pub mod inspect;
 pub mod live;
+pub mod mcp;
+pub mod report;
 pub mod system;
 pub mod view;
 

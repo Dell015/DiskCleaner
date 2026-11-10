@@ -2,9 +2,15 @@
 //!
 //! It shows the views (the web app in `apps/desktop`) and gives them these commands: start a
 //! live scan, stop it, ask whether a path is a whole drive, suggest folders, save the finished
-//! scan as a view file, and look for duplicate files in the finished scan (reads files only).
-//! Nothing is ever moved, changed or deleted. The only write is "save scan": it creates one new
-//! file the user picked in a save dialog, and never replaces an existing file. There is no
+//! scan as a view file, look for duplicate files in the finished scan (reads files only), and
+//! the AI-assistant settings (allow access, show what was asked, copy the report).
+//!
+//! Started with `--mcp`, it opens no window and serves the latest scan to an AI app over MCP
+//! (read-only; see `dc_api::mcp`).
+//!
+//! Nothing scanned is ever moved, changed or deleted. The writes are: "save scan" (one new file
+//! the user picked in a save dialog, never replacing an existing file), and DiskCleaner's own
+//! data folder (latest scan, its report, the AI-access switch, the AI log). There is no
 //! file-system or shell plugin; the only plugin is the dialogs.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -40,14 +46,25 @@ struct LastScan {
 /// The newest scan's number: a scan thread keeps its result only if no newer scan started.
 static NEWEST_SCAN: AtomicU64 = AtomicU64::new(0);
 
-/// Start scanning `path`; events arrive on `on_event` until `finished` or `failed`.
-/// A new scan stops the previous one.
-#[tauri::command]
-fn start_scan(
+/// What to scan and how.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanRequest {
     path: String,
     allow_drive_root: bool,
     with_apps: bool,
+    /// Read Windows' record of started programs ("last used").
     with_usage: bool,
+    /// Keep the latest scan and its report in DiskCleaner's data folder (for the person and
+    /// for their AI assistant, if they allow it).
+    keep_report: bool,
+}
+
+/// Start scanning; events arrive on `on_event` until `finished` or `failed`.
+/// A new scan stops the previous one.
+#[tauri::command]
+fn start_scan(
+    options: ScanRequest,
     on_event: Channel<LiveEvent>,
     running: State<'_, Running>,
     last: State<'_, LastScan>,
@@ -75,6 +92,13 @@ fn start_scan(
         }
         *slot = Some(cancel.clone());
     }
+    let ScanRequest {
+        path,
+        allow_drive_root,
+        with_apps,
+        with_usage,
+        keep_report,
+    } = options;
     let mut opts = LiveOptions::new(PathBuf::from(path));
     opts.allow_drive_root = allow_drive_root;
     opts.cancel = cancel;
@@ -91,15 +115,82 @@ fn start_scan(
             let _ = on_event.send(event);
         });
         if let Ok(result) = result {
+            let result = Arc::new(result);
             if let Ok(mut slot) = keep.lock() {
                 // Keep it unless a newer scan has started meanwhile.
                 if NEWEST_SCAN.load(Ordering::SeqCst) == generation {
-                    *slot = Some(Arc::new(result));
+                    *slot = Some(Arc::clone(&result));
                 }
+            }
+            // The scan report (and the scan behind it), for the person and their AI assistant.
+            // A stopped scan is incomplete, so it does not replace the last good one.
+            if keep_report && result.scan.status != dc_core::ScanStatus::Cancelled {
+                let _ = write_latest(&result);
             }
         }
     });
     Ok(())
+}
+
+/// Write the latest scan and its report into DiskCleaner's data folder.
+fn write_latest(result: &LiveResult) -> Result<(), String> {
+    let dir = dc_api::datadir::default_dir().ok_or("no data folder")?;
+    let view =
+        dc_api::view::build(&result.scan, result.apps.as_ref()).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string(&view).map_err(|e| e.to_string())?;
+    let ins = dc_api::inspect::Inspector::from_json(&json).map_err(|e| e.to_string())?;
+    let report = dc_api::report::markdown(&ins);
+    dc_api::datadir::save_latest(&dir, &json, &report).map_err(|e| e.to_string())
+}
+
+/// What the AI-assistant settings show.
+#[derive(Serialize)]
+struct AiStatus {
+    /// AI assistants may read the latest scan.
+    enabled: bool,
+    /// DiskCleaner's data folder.
+    folder: String,
+    /// When the latest report was written (Unix seconds), if there is one.
+    report_time: Option<u64>,
+    /// This program, for the AI app's settings (it serves MCP when started with `--mcp`).
+    program: String,
+    /// The latest questions, newest last.
+    log: Vec<serde_json::Value>,
+}
+
+/// The AI-assistant settings and the latest questions asked.
+#[tauri::command]
+fn ai_status() -> Result<AiStatus, String> {
+    let dir = dc_api::datadir::default_dir().ok_or("no data folder")?;
+    let report_time = std::fs::metadata(dir.join(dc_api::datadir::LATEST_REPORT))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    Ok(AiStatus {
+        enabled: dc_api::datadir::access(&dir).enabled,
+        folder: dir.to_string_lossy().into_owned(),
+        report_time,
+        program: std::env::current_exe()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        log: dc_api::datadir::read_log(&dir, 30),
+    })
+}
+
+/// Allow or stop AI assistants reading the latest scan.
+#[tauri::command]
+fn set_ai_access(enabled: bool) -> Result<(), String> {
+    let dir = dc_api::datadir::default_dir().ok_or("no data folder")?;
+    dc_api::datadir::set_access(&dir, enabled).map_err(|e| e.to_string())
+}
+
+/// The latest scan report (Markdown), to copy into any AI chat.
+#[tauri::command]
+fn latest_report() -> Result<String, String> {
+    let dir = dc_api::datadir::default_dir().ok_or("no data folder")?;
+    std::fs::read_to_string(dir.join(dc_api::datadir::LATEST_REPORT))
+        .map_err(|_| "There is no report yet: scan a folder first.".to_owned())
 }
 
 /// Look for identical files in the last finished scan (only below `within`, if given). Files are
@@ -271,6 +362,23 @@ fn smoke_report(report: String) {
 fn smoke_report(_report: String) {}
 
 fn main() {
+    // Started by an AI app as its MCP server: answer on standard input and output, no window.
+    if std::env::args().any(|a| a == "--mcp") {
+        let code = match dc_api::datadir::default_dir() {
+            Some(dir) => match dc_api::datadir::serve_stdio(dir) {
+                Ok(()) => 0,
+                Err(e) => {
+                    eprintln!("DiskCleaner MCP server stopped: {e}");
+                    1
+                }
+            },
+            None => {
+                eprintln!("DiskCleaner cannot find its data folder");
+                1
+            }
+        };
+        std::process::exit(code);
+    }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Running::default())
@@ -287,6 +395,9 @@ fn main() {
             save_scan,
             find_dupes,
             cancel_dupes,
+            ai_status,
+            set_ai_access,
+            latest_report,
             smoke_report
         ])
         .run(tauri::generate_context!());

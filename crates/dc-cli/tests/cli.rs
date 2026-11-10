@@ -616,3 +616,65 @@ fn view_data_writes_a_consistent_columnar_file_and_never_overwrites() {
     assert!(!again.status.success());
     assert_eq!(std::fs::read(&view).unwrap(), before);
 }
+
+#[test]
+fn report_and_mcp_read_a_view_file() {
+    use std::io::Write;
+    let (dir, tree, _manifest) = fixture();
+    let scan = dir.path().join("scan.json");
+    assert!(dc(&[
+        "scan",
+        tree.to_str().unwrap(),
+        "--out",
+        scan.to_str().unwrap()
+    ])
+    .status
+    .success());
+    let view = dir.path().join("view.json");
+    assert!(dc(&[
+        "view-data",
+        scan.to_str().unwrap(),
+        "--out",
+        view.to_str().unwrap()
+    ])
+    .status
+    .success());
+    let report = dc(&["report", view.to_str().unwrap()]);
+    assert!(report.status.success());
+    assert!(text(&report.stdout).starts_with("# DiskCleaner scan report"));
+
+    // The MCP server serves the data folder only when access is switched on.
+    let data = dir.path().join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::copy(&view, data.join("latest-scan.dcview.json")).unwrap();
+    let ask = |input: &str| {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_dc"))
+            .args(["mcp", "--data", data.to_str().unwrap()])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.as_bytes())
+            .unwrap();
+        text(&child.wait_with_output().unwrap().stdout)
+    };
+    let call = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\"}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"storage_overview\",\"arguments\":{}}}\n";
+    let off = ask(call);
+    assert!(
+        off.contains("\"serverInfo\"") && off.contains("does not allow"),
+        "{off}"
+    );
+    std::fs::write(data.join("ai-access.json"), "{\"enabled\":true}").unwrap();
+    let on = ask(call);
+    assert!(
+        on.contains("biggest_folders") && !on.contains("\"isError\":true"),
+        "{on}"
+    );
+    assert!(std::fs::read_to_string(data.join("ai-log.jsonl"))
+        .unwrap()
+        .contains("storage_overview"));
+}

@@ -23,7 +23,7 @@ mod view_cmd;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{ArgGroup, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -148,6 +148,19 @@ enum Command {
         /// Print how long each step took (to standard error).
         #[arg(long)]
         timing: bool,
+    },
+    /// Print the scan report (Markdown) of a view file (read-only).
+    Report {
+        /// A view file (from `dc view-data`, the desktop app's "Save scan", or its latest scan).
+        file: PathBuf,
+    },
+    /// Let an AI assistant read DiskCleaner's latest scan: an MCP server on standard input and
+    /// output (read-only; the assistant can never delete or move anything). Start it from the AI
+    /// app's MCP settings, not by hand.
+    Mcp {
+        /// DiskCleaner's data folder (default: the desktop app's).
+        #[arg(long, value_name = "DIR")]
+        data: Option<PathBuf>,
     },
     /// Show or check cleanup rule packs (read-only).
     #[command(group(ArgGroup::new("what").required(true).args(["list", "check"])))]
@@ -276,6 +289,21 @@ fn run() -> Result<ExitCode> {
             out,
             timing,
         }),
+        Command::Report { file } => {
+            let text = std::fs::read_to_string(&file)
+                .with_context(|| format!("cannot read {}", file.display()))?;
+            let ins = dc_api::inspect::Inspector::from_json(&text)
+                .with_context(|| format!("{} is not a usable view file", file.display()))?;
+            print!("{}", dc_api::report::markdown(&ins));
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Mcp { data } => {
+            let dir = data
+                .or_else(dc_api::datadir::default_dir)
+                .context("cannot find DiskCleaner's data folder; pass --data")?;
+            dc_api::datadir::serve_stdio(dir)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Rules { list, check } => rules_cmd::run(list, check.as_deref()),
         Command::Protected { paths, list } => protected_cmd::run(&paths, list),
         Command::Top {

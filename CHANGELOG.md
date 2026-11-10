@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+### Your own AI as storage advisor (MCP) and scan reports
+- Each finished scan writes a report (`latest-report.md`) and the scan behind it into DiskCleaner's own data folder; `dc report <view file>` prints the same report.
+- `diskcleaner.exe --mcp` (and `dc mcp`): a read-only MCP server so Claude Desktop, Claude Code or any MCP app can answer "is this safe to delete?", "what breaks if I move this?", "which apps don't I use?", "where are my projects?" from the latest scan. Off until switched on in Settings, every question logged; any other AI can be given the report by copy and paste.
+- `dc-api`: `inspect` (index over a view file), `advice` (explanations: owner, verdict, what deleting or moving would do, projects, apps), `report`, `mcp`, `datadir`.
 ### Overview (F4, read-only)
 - New **Overview** page, now the default: where the space goes (apps, your files, Windows, everything else); every installed app with size, places, install date and last used (from Windows' record of started programs); programs nobody installed (portable tools, unpacked games); Downloads sorted by type with hints (installers of apps you have, archives already unpacked, untouched for a year); biggest files; files not changed for a year.
 - "Sort this folder" in Files shows any folder (a messy drive) sorted the same way.

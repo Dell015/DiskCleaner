@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 dc-api.workspace = true
+dc-core.workspace = true
 dc-scan.workspace = true
 serde.workspace = true
 serde_json.workspace = true

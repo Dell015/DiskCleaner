@@ -371,3 +371,10 @@ button.ov-app:hover { background: var(--panel-2); }
 .ov-row[aria-disabled="true"] { cursor: default; }
 .ov-sec .lead { margin: 4px 0 0; }
 .warn { color: var(--probably); }
+
+/* Settings: AI assistant. */
+.ai-setup, .ai-log { margin: 8px 0; }
+.ai-setup summary, .ai-log summary { cursor: pointer; color: var(--text); }
+.ai-setup pre.cmd { white-space: pre-wrap; margin: 4px 0; user-select: all; }
+.ai-log ol { margin: 6px 0; padding-left: 18px; max-height: 180px; overflow: auto; font-size: var(--t1); }
+.ai-log li { margin: 2px 0; overflow-wrap: anywhere; }
