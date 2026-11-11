@@ -41,6 +41,8 @@ struct Running {
 #[derive(Default)]
 struct LastScan {
     result: Arc<Mutex<Option<Arc<LiveResult>>>>,
+    /// The same scan with its checks, indexed for questions (built just after it finishes).
+    inspector: Arc<Mutex<Option<Arc<dc_api::inspect::Inspector>>>>,
 }
 
 /// The newest scan's number: a scan thread keeps its result only if no newer scan started.
@@ -81,6 +83,10 @@ fn start_scan(
         *slot = None;
     }
     let keep = Arc::clone(&last.result);
+    let keep_ins = Arc::clone(&last.inspector);
+    if let Ok(mut slot) = keep_ins.lock() {
+        *slot = None;
+    }
     let cancel = CancelToken::new();
     {
         let mut slot = running
@@ -122,10 +128,19 @@ fn start_scan(
                     *slot = Some(Arc::clone(&result));
                 }
             }
-            // The scan report (and the scan behind it), for the person and their AI assistant.
-            // A stopped scan is incomplete, so it does not replace the last good one.
-            if keep_report && result.scan.status != dc_core::ScanStatus::Cancelled {
-                let _ = write_latest(&result);
+            // A stopped scan is incomplete: no checks, no report, nothing to remove from.
+            if result.scan.status != dc_core::ScanStatus::Cancelled {
+                if let Ok((json, ins)) = index(&result) {
+                    if let Ok(mut slot) = keep_ins.lock() {
+                        if NEWEST_SCAN.load(Ordering::SeqCst) == generation {
+                            *slot = Some(Arc::clone(&ins));
+                        }
+                    }
+                    // The scan report (and the scan behind it), for the person and their AI.
+                    if keep_report {
+                        let _ = write_latest(&json, &ins);
+                    }
+                }
             }
         }
     });
@@ -133,14 +148,260 @@ fn start_scan(
 }
 
 /// Write the latest scan and its report into DiskCleaner's data folder.
-fn write_latest(result: &LiveResult) -> Result<(), String> {
+fn write_latest(json: &str, ins: &dc_api::inspect::Inspector) -> Result<(), String> {
     let dir = dc_api::datadir::default_dir().ok_or("no data folder")?;
+    let report = dc_api::report::markdown(ins);
+    dc_api::datadir::save_latest(&dir, json, &report).map_err(|e| e.to_string())
+}
+
+/// The finished scan with its checks: as view-file text and indexed for questions.
+fn index(result: &LiveResult) -> Result<(String, Arc<dc_api::inspect::Inspector>), String> {
     let view =
         dc_api::view::build(&result.scan, result.apps.as_ref()).map_err(|e| e.to_string())?;
     let json = serde_json::to_string(&view).map_err(|e| e.to_string())?;
     let ins = dc_api::inspect::Inspector::from_json(&json).map_err(|e| e.to_string())?;
-    let report = dc_api::report::markdown(&ins);
-    dc_api::datadir::save_latest(&dir, &json, &report).map_err(|e| e.to_string())
+    Ok((json, Arc::new(ins)))
+}
+
+/// Removing (B9). Only in a build made with `--features cleaning`; otherwise every command says
+/// it is not available. The removal engine (`dc-quarantine`) checks each item on the disk again.
+mod cleaning {
+    use super::{LastScan, Running};
+    use serde::{Deserialize, Serialize};
+    use tauri::ipc::Channel;
+    use tauri::State;
+
+    /// One picked item and the person's consent for it.
+    #[derive(Deserialize)]
+    #[cfg_attr(not(feature = "cleaning"), allow(dead_code))]
+    #[serde(rename_all = "camelCase")]
+    pub struct Pick {
+        path: String,
+        /// "I checked this" (Probably safe items).
+        checked: bool,
+        /// "I understand these are my own files" (Your call items).
+        understood: bool,
+    }
+
+    /// What happened.
+    #[derive(Serialize, Default)]
+    pub struct Removal {
+        /// Cleanup id ("" if nothing moved).
+        id: String,
+        /// (path, bytes) of what is now held.
+        held: Vec<(String, u64)>,
+        /// (path, why) of what was not removed (or not completely).
+        skipped: Vec<(String, String)>,
+    }
+
+    #[cfg(feature = "cleaning")]
+    mod on {
+        use std::path::{Path, PathBuf};
+
+        use dc_quarantine::{Engine, Places, ProtectedGuard, RealOps};
+
+        /// Off Windows (development only): one holding folder in the data folder.
+        struct DataPlaces(PathBuf);
+        impl Places for DataPlaces {
+            fn holding_root(&self, _item: &Path) -> Option<PathBuf> {
+                Some(self.0.clone())
+            }
+        }
+
+        pub fn with_engine<T>(run: impl FnOnce(&Engine<'_>) -> T) -> Result<T, String> {
+            let data = dc_api::datadir::default_dir()
+                .ok_or("DiskCleaner's data folder cannot be found")?;
+            let guard = ProtectedGuard::default();
+            let places: Box<dyn Places> = if cfg!(windows) {
+                let local = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA is not set")?;
+                Box::new(dc_quarantine::WindowsPlaces::new(Path::new(&local)))
+            } else {
+                Box::new(DataPlaces(data.join("Holding")))
+            };
+            let engine = Engine::new(data, places.as_ref(), &guard, &RealOps);
+            Ok(run(&engine))
+        }
+    }
+
+    /// Is removing in this build?
+    #[tauri::command]
+    pub fn cleaning_available() -> bool {
+        cfg!(feature = "cleaning")
+    }
+
+    #[cfg(not(feature = "cleaning"))]
+    const OFF: &str = "Removing is not in this build of DiskCleaner yet.";
+
+    /// Remove picked items: each is grouped again from the latest scan, then the engine checks
+    /// the disk and moves it into its holding folder. `on_progress` gets (done, total).
+    #[tauri::command]
+    pub async fn remove_items(
+        picks: Vec<Pick>,
+        on_progress: Channel<(usize, usize)>,
+        last: State<'_, LastScan>,
+        running: State<'_, Running>,
+    ) -> Result<Removal, String> {
+        let ins = last
+            .inspector
+            .lock()
+            .map_err(|_| "the app is in a bad state; restart it".to_owned())?
+            .clone()
+            .ok_or_else(|| {
+                "The latest scan is still being prepared (or there is none). Try again in a moment."
+                    .to_owned()
+            })?;
+        // One disk job at a time.
+        if let Ok(mut slot) = running.dupes.lock() {
+            if let Some(c) = slot.take() {
+                c.cancel();
+            }
+        }
+        #[cfg(not(feature = "cleaning"))]
+        {
+            let _ = (picks, on_progress, ins);
+            Err(OFF.to_owned())
+        }
+        #[cfg(feature = "cleaning")]
+        {
+            use dc_api::cleanup::{eligibility, Eligibility};
+            use dc_quarantine::{Group, Item};
+            tauri::async_runtime::spawn_blocking(move || {
+                let mut out = Removal::default();
+                let mut items = Vec::new();
+                for p in picks {
+                    let group = match eligibility(&ins, &p.path) {
+                        Eligibility::Never { why } => {
+                            out.skipped.push((p.path, why));
+                            continue;
+                        }
+                        Eligibility::Safe { .. } => Group::Safe,
+                        Eligibility::ProbablySafe { .. } => {
+                            Group::ProbablySafe { checked: p.checked }
+                        }
+                        Eligibility::YourCall => Group::YourCall {
+                            understood: p.understood,
+                        },
+                    };
+                    let (title, reason) = match eligibility(&ins, &p.path) {
+                        Eligibility::Safe { title, reason }
+                        | Eligibility::ProbablySafe { title, reason } => (title, reason),
+                        _ => ("Your own files".to_owned(), "your_call".to_owned()),
+                    };
+                    let newest = ins.find(&p.path).map_or(0, |i| ins.changed(i));
+                    items.push(Item {
+                        path: std::path::PathBuf::from(&p.path),
+                        group,
+                        title,
+                        reason,
+                        newest_at_scan: newest,
+                    });
+                }
+                let outcome = on::with_engine(|e| {
+                    e.remove(&items, |done, total| {
+                        let _ = on_progress.send((done, total));
+                    })
+                })?;
+                out.id = outcome.id;
+                out.held = outcome
+                    .held
+                    .iter()
+                    .map(|h| {
+                        (
+                            h.record.original.to_string_lossy().into_owned(),
+                            h.record.bytes,
+                        )
+                    })
+                    .collect();
+                out.skipped.extend(
+                    outcome
+                        .skipped
+                        .into_iter()
+                        .map(|s| (s.path.to_string_lossy().into_owned(), s.why)),
+                );
+                Ok(out)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+    }
+
+    /// Every cleanup, newest first (with each held item).
+    #[tauri::command]
+    pub fn list_cleanups() -> Result<serde_json::Value, String> {
+        #[cfg(not(feature = "cleaning"))]
+        {
+            Err(OFF.to_owned())
+        }
+        #[cfg(feature = "cleaning")]
+        {
+            let list = on::with_engine(|e| e.cleanups())?;
+            serde_json::to_value(list).map_err(|e| e.to_string())
+        }
+    }
+
+    /// Put back a cleanup's held items (all, or the (holding folder, number) pairs given).
+    #[tauri::command]
+    pub async fn restore_items(
+        id: String,
+        only: Option<Vec<(String, u32)>>,
+    ) -> Result<serde_json::Value, String> {
+        #[cfg(not(feature = "cleaning"))]
+        {
+            let _ = (id, only);
+            Err(OFF.to_owned())
+        }
+        #[cfg(feature = "cleaning")]
+        {
+            tauri::async_runtime::spawn_blocking(move || {
+                let only: Option<Vec<(std::path::PathBuf, u32)>> = only.map(|v| {
+                    v.into_iter()
+                        .map(|(r, n)| (std::path::PathBuf::from(r), n))
+                        .collect()
+                });
+                let r = on::with_engine(|e| e.restore(&id, only.as_deref()))?;
+                serde_json::to_value(r).map_err(|e| e.to_string())
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+    }
+
+    /// Delete a cleanup's held items for good. Returns the bytes freed.
+    #[tauri::command]
+    pub async fn empty_cleanup(id: String) -> Result<u64, String> {
+        #[cfg(not(feature = "cleaning"))]
+        {
+            let _ = id;
+            Err(OFF.to_owned())
+        }
+        #[cfg(feature = "cleaning")]
+        {
+            tauri::async_runtime::spawn_blocking(move || on::with_engine(|e| e.empty(&id))?)
+                .await
+                .map_err(|e| e.to_string())?
+        }
+    }
+
+    /// Empty every cleanup older than `days`. Returns (id, bytes freed) for each.
+    #[tauri::command]
+    pub async fn empty_expired(days: u32) -> Result<Vec<(String, u64)>, String> {
+        #[cfg(not(feature = "cleaning"))]
+        {
+            let _ = days;
+            Ok(Vec::new())
+        }
+        #[cfg(feature = "cleaning")]
+        {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
+            tauri::async_runtime::spawn_blocking(move || {
+                on::with_engine(|e| e.empty_expired(days.clamp(1, 365), now))
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+    }
 }
 
 /// What the AI-assistant settings show.
@@ -398,6 +659,12 @@ fn main() {
             ai_status,
             set_ai_access,
             latest_report,
+            cleaning::cleaning_available,
+            cleaning::remove_items,
+            cleaning::list_cleanups,
+            cleaning::restore_items,
+            cleaning::empty_cleanup,
+            cleaning::empty_expired,
             smoke_report
         ])
         .run(tauri::generate_context!());
@@ -422,6 +689,10 @@ fn smoke(app: &tauri::App) {
         std::thread::sleep(std::time::Duration::from_secs(4));
         let arg = format!("{folder:?}");
         // With DC_SMOKE_SAVE=<new file.json>, the finished scan is also saved there.
+        if let Ok(paths) = std::env::var("DC_SMOKE_REMOVE") {
+            let list: Vec<&str> = paths.split(';').collect();
+            let _ = window.eval(format!("window.__smokeRemove = {}", serde_json::to_string(&list).unwrap_or_default()));
+        }
         if let Ok(save) = std::env::var("DC_SMOKE_SAVE") {
             let _ = window.eval(format!("window.__smokeSave = {save:?}"));
         }
@@ -429,7 +700,7 @@ fn smoke(app: &tauri::App) {
         for _ in 0..60 {
             std::thread::sleep(std::time::Duration::from_secs(2));
             let _ = window.eval(
-                "(() => { const s = window.__dc.state; const inv = window.__TAURI_INTERNALS__.invoke; if (s.live && s.live.finished && !s.live.active && window.__smokeSave && !window.__saved) { window.__saved = 1; inv('save_scan', { path: window.__smokeSave }).then((r) => inv('smoke_report', { report: 'SAVED ' + JSON.stringify(r) }), (e) => inv('smoke_report', { report: 'SAVE FAILED ' + e })); } if (s.live && s.live.finished && !s.live.active && !window.__dupsAsked) { window.__dupsAsked = 1; window.__dc.findDups(-1); } const d = s.dups; inv('smoke_report', { report: 'DUPS ' + JSON.stringify({ status: d.status, groups: d.groups.length, total: d.total, found: d.groups.map((g) => g.nodes.filter((n) => n >= 0).length) }) }); const l = s.live; window.__TAURI_INTERNALS__.invoke('smoke_report', { report: JSON.stringify({ entries: s.tree ? s.tree.n : 0, shown: l ? l.partial.items.length : 0, active: l ? l.active : null, finished: l ? l.finished : null, marks: s.tree ? s.tree.marks.length : 0, visible: s.vis ? s.vis.items.length : 0, error: document.getElementById('error').hidden ? null : document.getElementById('errorText').textContent }) }); })()",
+                "(() => { const s = window.__dc.state; const inv = window.__TAURI_INTERNALS__.invoke; if (s.live && s.live.finished && !s.live.active && window.__smokeSave && !window.__saved) { window.__saved = 1; inv('save_scan', { path: window.__smokeSave }).then((r) => inv('smoke_report', { report: 'SAVED ' + JSON.stringify(r) }), (e) => inv('smoke_report', { report: 'SAVE FAILED ' + e })); } if (s.live && s.live.finished && !s.live.active && !window.__dupsAsked) { window.__dupsAsked = 1; window.__dc.findDups(-1); } if (window.__smokeRemove && s.live && s.live.finished && !s.live.active && !window.__removeAsked) { window.__removeAsked = 1; setTimeout(() => window.__dcRemove(window.__smokeRemove).then((r) => inv('smoke_report', { report: 'REMOVE ' + JSON.stringify(r) }), (e) => inv('smoke_report', { report: 'REMOVE FAILED ' + e })), 1500); } const d = s.dups; inv('smoke_report', { report: 'DUPS ' + JSON.stringify({ status: d.status, groups: d.groups.length, total: d.total, found: d.groups.map((g) => g.nodes.filter((n) => n >= 0).length) }) }); const l = s.live; window.__TAURI_INTERNALS__.invoke('smoke_report', { report: JSON.stringify({ entries: s.tree ? s.tree.n : 0, shown: l ? l.partial.items.length : 0, active: l ? l.active : null, finished: l ? l.finished : null, marks: s.tree ? s.tree.marks.length : 0, visible: s.vis ? s.vis.items.length : 0, error: document.getElementById('error').hidden ? null : document.getElementById('errorText').textContent }) }); })()",
             );
         }
     });

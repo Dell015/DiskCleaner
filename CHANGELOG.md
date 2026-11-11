@@ -4,6 +4,7 @@
 ### Phase B9 - Removing safely (step 1: the engine)
 - `dc-quarantine` (feature `destructive-actions`, off by default): remove moves items into a holding folder on the same drive after re-checking each one; restore (keep both on a name clash, parent folders made again); empty only inside the holding folder; empty after the retention time; an append-only journal that survives crashes; folders with files in use moved file by file. Tested on temporary folders only, with injected crashes, full disk and access errors. Not used by the app yet.
 - The scanner skips DiskCleaner's holding folders.
+- Step 2, the screens (only with `--features cleaning`): tick boxes in Files, Findings and duplicates; the selection bar; the review screen with per-item ticks for Probably safe items and hold-to-confirm for your own files; Undo; the Removed tab (restore, empty now); retention in Settings. `dc_api::cleanup` decides each pick's group from the latest scan.
 ### Your own AI as storage advisor (MCP) and scan reports
 - Each finished scan writes a report (`latest-report.md`) and the scan behind it into DiskCleaner's own data folder; `dc report <view file>` prints the same report.
 - `diskcleaner.exe --mcp` (and `dc mcp`): a read-only MCP server so Claude Desktop, Claude Code or any MCP app can answer "is this safe to delete?", "what breaks if I move this?", "which apps don't I use?", "where are my projects?" from the latest scan. Off until switched on in Settings, every question logged; any other AI can be given the report by copy and paste.

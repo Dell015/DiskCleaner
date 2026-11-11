@@ -150,6 +150,8 @@ Format: **ID - decision** / why / where it is enforced.
 
 - **D117** B9 engine (owner approved the design, 2026-11-11): the journal is the only record of a cleanup (no separate manifest); every disk change goes through the `Ops` trait so tests can inject a crash, a full disk or access denied at any step; no copying between drives; a folder with files in use is moved file by file and the files in use stay; holding folders are skipped by the scanner. The engine needs `--features destructive-actions`; nothing in the app uses it yet.
 
+- **D118** B9 step 2 (screens): the group of every pick is decided twice, in the page (to show it on the review screen, `core/cleanup.ts`) and in Rust from the latest scan (`dc_api::cleanup`, authoritative); the engine then checks the disk. Anything inside Program Files or an app's registered install folder points to the app's uninstaller. The screens exist only in a build with `--features cleaning` (Rust) and appear only for a finished, not stopped, scan made in this window. The browser checks use a pretend engine (`?cleaning`) that judges paths with the same page rules and touches nothing.
+
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.
 1. **Safety first:** search every crate for anything that can delete, move, rename, write or execute (including registry writes, `Command`, `ShellExecute`). Confirm only `dc-quarantine` could ever do it and only behind the feature.

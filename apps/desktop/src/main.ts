@@ -11,6 +11,9 @@ import type { Tree } from "./core/tree";
 import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
+import { cleaningAvailable, emptyCleanup, emptyExpired, listCleanups, removeItems, restoreItems, usePretendCleaning, type CleanupInfo } from "./platform";
+import { attach, daysLeft, detach, eligibility, outermost } from "./core/cleanup";
+import type { PickHandlers } from "./panels/explorer";
 import { aiStatus, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
 import { applyDupEvent, emptyDups, pathFinder, simulateDups, type DupEvent, type DupState } from "./core/dupes";
 import { makeDemo } from "./core/demo";
@@ -30,7 +33,7 @@ const CLOSE_PX = 9;
 /** How long the picture takes to build, per speed setting (slowest first). */
 const REPLAY_SECONDS = [18, 11, 7, 4, 2];
 
-type Tab = "findings" | "apps" | "unread";
+type Tab = "findings" | "apps" | "unread" | "removed";
 
 /** A live scan in progress (or just finished). */
 interface LiveSession {
@@ -66,9 +69,9 @@ type Theme = "dark" | "light" | "system";
 /** "overview" is everything at a glance (the default), "files" the simple list, "map" the node graph. */
 type ViewMode = "overview" | "files" | "map";
 const VIEW_MODES: ViewMode[] = ["overview", "files", "map"];
-interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean }
+interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean; retention: number }
 function loadSettings(): Settings {
-  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true, keepReport: true };
+  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true, keepReport: true, retention: 30 };
   if (prefersReducedMotion()) base.quality.motion = "reduced";
   try {
     const raw = JSON.parse(localStorage.getItem("dc-settings") ?? "null") as Partial<Settings> | null;
@@ -81,6 +84,7 @@ function loadSettings(): Settings {
       if (raw.units && SIZE_UNITS.includes(raw.units)) base.units = raw.units;
       if (typeof raw.lastUsed === "boolean") base.lastUsed = raw.lastUsed;
       if (typeof raw.keepReport === "boolean") base.keepReport = raw.keepReport;
+      if (typeof raw.retention === "number" && [7, 14, 30, 60].includes(raw.retention)) base.retention = raw.retention;
     }
   } catch {
     /* storage may be unavailable; defaults are used */
@@ -142,6 +146,39 @@ const state = {
 };
 
 const app = byId("app");
+
+// ---------- removing: picks (filled in further down) ----------
+
+/** Picked entries, and the "I checked this" tick of Probably safe ones. */
+const picks = new Map<number, boolean>();
+/** Removing is available (a desktop build with it, or the browser stand-in). */
+let cleaningOn = false;
+/** Entries taken out of the picture per cleanup, so Undo can put them back. */
+const removedNodes = new Map<string, number[]>();
+
+function canPickNow(): boolean {
+  if (!cleaningOn || !state.tree) return false;
+  if (!isDesktop()) return !state.live?.active;
+  // The desktop app removes from its last finished scan only.
+  const s = state.live;
+  return Boolean(s && s.finished && !s.active && s.summary?.status !== "cancelled");
+}
+
+const picking: PickHandlers = {
+  enabled: () => canPickNow(),
+  picked: (i) => picks.has(i),
+  why: (i) => {
+    const t = state.tree;
+    if (!t) return "there is no scan";
+    const e = eligibility(t, i);
+    return e.group === "never" ? e.why : "";
+  },
+  toggle: (i) => {
+    if (picks.has(i)) picks.delete(i);
+    else picks.set(i, false);
+    pickbar();
+  },
+};
 let userMoved = false;
 const view = new GraphView(byId("graph"), {
   select: (key) => select(key),
@@ -172,6 +209,7 @@ const explorer = new ExplorerView(byId("explorer"), {
     state.sortRoot = f;
     setViewMode("overview");
   },
+  pick: picking,
 });
 const overview = new OverviewView(byId("overview"), {
   open: (i) => {
@@ -188,8 +226,11 @@ const overview = new OverviewView(byId("overview"), {
   canFindDups: () => dupsAvailable(),
   findDups: (within) => startDups(within),
   cancelDups: () => stopDups(),
+  pick: picking,
 });
 (window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder(), findDups: (w: number) => startDups(w) };
+// Development builds only: the smoke test calls the real removal path without clicking.
+if (import.meta.env.DEV) (window as unknown as { __dcRemove: unknown }).__dcRemove = (paths: string[]) => removeItems(paths.map((path) => ({ path, checked: true, understood: true })), () => undefined);
 
 // ---------- loading ----------
 
@@ -1037,6 +1078,7 @@ const actions: PanelActions = {
     renderSide();
   },
   close: () => select(null),
+  pick: picking,
 };
 
 // ---------- header: where you are ----------
@@ -1100,6 +1142,322 @@ function renderUnreadable(): void {
   }
   el.append(ol);
   if (n > state.unreadable.length) el.append(h("p", { class: "quiet" }, `The first ${count(state.unreadable.length)} are listed.`));
+}
+
+// ---------- removing: the selection bar, the review, the Removed tab ----------
+
+function pickedNodes(): number[] {
+  const t = state.tree;
+  if (!t) return [];
+  return outermost(t, [...picks.keys()].filter((i) => i > 0 && i < t.n));
+}
+
+function pickbar(): void {
+  const bar = byId("pickbar");
+  const t = state.tree;
+  const nodes = pickedNodes();
+  if (!t || nodes.length === 0 || !canPickNow()) {
+    bar.hidden = true;
+    return;
+  }
+  const bytes = nodes.reduce((a, i) => a + t.agg[i], 0);
+  byId("pickText").textContent = `${count(nodes.length)} selected · ${human(bytes)}`;
+  bar.hidden = false;
+}
+
+const GROUP_LABEL: Record<string, string> = {
+  safe: "Safe: rebuilds itself or is never needed again",
+  probably_safe: "Probably safe: tick each one you have checked",
+  your_call: "Your own files",
+  never: "Will not be removed",
+};
+
+let holdTimer = 0;
+
+function reviewReady(): { ok: boolean; own: boolean } {
+  const t = state.tree;
+  if (!t) return { ok: false, own: false };
+  let any = false;
+  let own = false;
+  let unticked = false;
+  for (const i of pickedNodes()) {
+    const g = eligibility(t, i).group;
+    if (g === "never") continue;
+    any = true;
+    if (g === "your_call") own = true;
+    if (g === "probably_safe" && !picks.get(i)) unticked = true;
+  }
+  const ok = any && !unticked && (!own || byId<HTMLInputElement>("ownOk").checked);
+  return { ok, own };
+}
+
+function renderReview(): void {
+  const t = state.tree;
+  const list = byId("reviewList");
+  clear(list);
+  if (!t) return;
+  const nodes = pickedNodes();
+  const groups = new Map<string, number[]>();
+  for (const i of nodes) {
+    const g = eligibility(t, i).group;
+    groups.set(g, [...(groups.get(g) ?? []), i]);
+  }
+  let total = 0;
+  for (const g of ["safe", "probably_safe", "your_call", "never"]) {
+    const items = groups.get(g);
+    if (!items?.length) continue;
+    const bytes = items.reduce((a, i) => a + t.agg[i], 0);
+    if (g !== "never") total += bytes;
+    const sec = h("section", { class: `rv-group rv-${g}` }, h("h3", {}, GROUP_LABEL[g], h("span", { class: "quiet" }, ` ${count(items.length)} · ${human(bytes)}`)));
+    for (const i of items.sort((a, b) => t.agg[b] - t.agg[a])) {
+      const e = eligibility(t, i);
+      const row = h("div", { class: "rv-row" },
+        g === "probably_safe" ? (() => {
+          const c = h("input", { attrs: { type: "checkbox", "aria-label": `I checked ${t.names[i]}` } });
+          c.checked = Boolean(picks.get(i));
+          c.addEventListener("change", () => { picks.set(i, c.checked); updateReviewButton(); });
+          return h("label", { class: "rv-tick", title: "I checked this" }, c, "checked");
+        })() : null,
+        h("div", { class: "rv-main" },
+          h("b", {}, t.names[i]),
+          h("span", { class: "path" }, t.path(i)),
+          h("span", { class: "quiet" }, g === "never" ? e.why : g === "your_call" ? "Your own file or folder: DiskCleaner has no opinion on it." : e.why)),
+        h("span", { class: "rv-size" }, human(t.agg[i])),
+        h("button", { class: "rv-x", title: "Leave it out", attrs: { "aria-label": `Leave ${t.names[i]} out` }, onclick: () => { picks.delete(i); pickbar(); renderReview(); renderFlat(); renderSide(); } }, "×"));
+      sec.append(row);
+    }
+    list.append(sec);
+  }
+  byId("reviewTotal").textContent = `${human(total)} will be removed`;
+  byId("reviewNote").textContent = `Nothing is deleted now: removed items move to a holding folder on the same drive and are deleted for good after ${settings.retention} days. You can restore them from the Removed tab until then. Each item is checked again right before it moves; anything that changed or is in use is skipped.`;
+  byId("ownBox").hidden = !groups.get("your_call")?.length;
+  updateReviewButton();
+}
+
+function updateReviewButton(): void {
+  const { ok, own } = reviewReady();
+  const go = byId<HTMLButtonElement>("reviewGo");
+  go.disabled = !ok;
+  go.classList.toggle("hold", own);
+  go.querySelector(".label")!.textContent = own ? "Hold to remove" : "Remove";
+  go.title = own ? "Press and hold for 1.5 seconds" : "";
+}
+
+function openReview(): void {
+  byId<HTMLInputElement>("ownOk").checked = false;
+  byId("reviewProgress").hidden = true;
+  byId("reviewResult").hidden = true;
+  for (const id of ["reviewList", "reviewNote"]) byId(id).hidden = false;
+  byId<HTMLButtonElement>("reviewGo").hidden = false;
+  byId<HTMLButtonElement>("reviewCancel").textContent = "Cancel";
+  renderReview();
+  byId<HTMLDialogElement>("review").showModal();
+}
+
+async function doRemove(): Promise<void> {
+  const t = state.tree;
+  if (!t || !reviewReady().ok) return;
+  const nodes = pickedNodes().filter((i) => eligibility(t, i).group !== "never");
+  const byPath = new Map(nodes.map((i) => [t.path(i).toLowerCase(), i]));
+  const understood = byId<HTMLInputElement>("ownOk").checked;
+  const requests = nodes.map((i) => ({ path: t.path(i), checked: Boolean(picks.get(i)), understood }));
+  byId<HTMLButtonElement>("reviewGo").hidden = true;
+  byId("reviewProgress").hidden = false;
+  byId("reviewStep").textContent = "Checking and moving…";
+  try {
+    const r = await removeItems(requests, (d, n) => {
+      byId("reviewFill").style.width = `${n ? (d / n) * 100 : 100}%`;
+      byId("reviewStep").textContent = `${count(d)} of ${count(n)}`;
+    });
+    const gone: number[] = [];
+    for (const [p] of r.held) {
+      const i = byPath.get(p.toLowerCase());
+      if (i !== undefined) gone.push(i);
+    }
+    for (const i of gone) detach(t, i);
+    if (r.id) removedNodes.set(r.id, gone);
+    picks.clear();
+    const freed = r.held.reduce((a, [, b]) => a + b, 0);
+    const res = byId("reviewResult");
+    clear(res);
+    res.append(h("p", { class: "lead" }, r.held.length ? `Removed ${count(r.held.length)} item${r.held.length === 1 ? "" : "s"} (${human(freed)}).` : "Nothing was removed."));
+    if (r.held.length) res.append(h("p", { class: "quiet" }, `They wait in the holding folder for ${settings.retention} days; restore them from the Removed tab.`));
+    if (r.skipped.length) {
+      res.append(h("p", {}, `${count(r.skipped.length)} skipped:`));
+      const ul = h("ul", { class: "rv-skipped" });
+      for (const [p, why] of r.skipped.slice(0, 100)) ul.append(h("li", {}, h("span", { class: "path" }, p), h("span", { class: "quiet" }, why)));
+      res.append(ul);
+    }
+    res.hidden = false;
+    byId("reviewProgress").hidden = true;
+    for (const id of ["reviewList", "reviewNote", "ownBox"]) byId(id).hidden = true;
+    byId<HTMLButtonElement>("reviewCancel").textContent = "Done";
+    pickbar();
+    renderFlat();
+    refresh(false);
+    renderSide();
+    if (r.id) toastAction(`Removed ${human(freed)}.`, "Undo", () => void undoCleanup(r.id));
+  } catch (err) {
+    byId("reviewProgress").hidden = true;
+    showError(String(err));
+    byId<HTMLButtonElement>("reviewGo").hidden = false;
+  }
+}
+
+async function undoCleanup(id: string, only: [string, number][] | null = null): Promise<void> {
+  try {
+    const r = await restoreItems(id, only);
+    const t = state.tree;
+    if (t && !only) for (const i of removedNodes.get(id) ?? []) attach(t, i);
+    if (!only) removedNodes.delete(id);
+    renderFlat();
+    refresh(false);
+    renderSide();
+    const note = r.problems.length ? ` ${count(r.problems.length)} could not: ${r.problems[0].why}` : "";
+    toast(`Restored ${count(r.back.length)} item${r.back.length === 1 ? "" : "s"}.${only ? " Scan again to see them in the views." : ""}${note}`);
+  } catch (err) {
+    showError(String(err));
+  }
+}
+
+/** A toast with one button (for Undo). */
+function toastAction(message: string, label: string, run: () => void): void {
+  const t = byId("toast");
+  clear(t);
+  t.append(message, " ", h("button", { class: "textlink", onclick: () => { t.hidden = true; run(); } }, label));
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (t.hidden = true), 12000);
+}
+
+/** Hold-to-confirm: the action runs after the button is held for 1.5 s (pointer or keyboard). */
+function bindHold(button: HTMLButtonElement, run: () => void): void {
+  const stop = (): void => {
+    clearTimeout(holdTimer);
+    holdTimer = 0;
+    button.classList.remove("holding");
+  };
+  const start = (): void => {
+    if (button.disabled || holdTimer) return;
+    if (!button.classList.contains("hold")) {
+      run();
+      return;
+    }
+    button.classList.add("holding");
+    holdTimer = window.setTimeout(() => {
+      stop();
+      run();
+    }, 1500);
+  };
+  button.addEventListener("pointerdown", start);
+  button.addEventListener("pointerup", stop);
+  button.addEventListener("pointerleave", stop);
+  button.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+      e.preventDefault();
+      start();
+    }
+  });
+  button.addEventListener("keyup", (e) => {
+    if (e.key === "Enter" || e.key === " ") stop();
+  });
+}
+
+let removedArmed = "";
+
+async function renderRemoved(): Promise<void> {
+  const el = byId("tab-removed");
+  let list: CleanupInfo[] = [];
+  try {
+    list = await listCleanups();
+  } catch (err) {
+    clear(el);
+    el.append(h("p", { class: "quiet" }, String(err)));
+    return;
+  }
+  clear(el);
+  el.append(h("p", { class: "quiet" }, `Removed items wait here for ${settings.retention} days (change it in Settings), then they are deleted for good.`));
+  if (list.length === 0) {
+    el.append(h("p", { class: "lead" }, "Nothing removed yet."));
+    return;
+  }
+  for (const c of list) {
+    const held = c.items.filter((i) => i.state === "held");
+    const bytes = held.reduce((a, i) => a + i.bytes, 0);
+    const when = new Date(c.created * 1000).toLocaleString();
+    const status = held.length ? `${human(bytes)} held · deleted for good in ${daysLeft(c.created, settings.retention)} days` : c.items.some((i) => i.state === "emptied") ? "deleted for good" : "all restored";
+    const sec = h("section", { class: "rm-cleanup" }, h("header", {}, h("b", {}, when), h("span", { class: "quiet" }, ` ${count(c.items.length)} item${c.items.length === 1 ? "" : "s"} · ${status}`)));
+    if (held.length) {
+      const empty = h("button", { class: removedArmed === c.id ? "danger" : "", onclick: () => {
+        if (removedArmed !== c.id) {
+          removedArmed = c.id;
+          void renderRemoved();
+          return;
+        }
+        removedArmed = "";
+        emptyCleanup(c.id).then((b) => { toast(`Deleted for good: ${human(b)} freed.`); removedNodes.delete(c.id); void renderRemoved(); }).catch((err) => showError(String(err)));
+      } }, removedArmed === c.id ? "Click again to delete for good" : "Empty now");
+      sec.append(h("div", { class: "rm-actions" }, h("button", { onclick: () => void undoCleanup(c.id).then(() => renderRemoved()) }, "Restore all"), empty));
+    }
+    const ul = h("ul", { class: "rm-items" });
+    for (const it of c.items.slice(0, 200)) {
+      const name = it.original.split(/[\\/]/).pop() ?? it.original;
+      ul.append(h("li", { class: `rm-${it.state}` },
+        h("div", {}, h("b", {}, name), h("span", { class: "path" }, it.original),
+          h("span", { class: "quiet" }, `${human(it.bytes)} · ${it.state === "held" ? "held" : it.state === "restored" ? `restored${it.to && it.to !== it.original ? ` as ${it.to}` : ""}` : "deleted for good"}`)),
+        it.state === "held" ? h("button", { onclick: () => void undoCleanup(c.id, [[it.root, it.n]]).then(() => renderRemoved()) }, "Restore") : null));
+    }
+    sec.append(ul);
+    el.append(sec);
+  }
+}
+
+function bindRemoving(): void {
+  byId("pickClear").addEventListener("click", () => {
+    picks.clear();
+    pickbar();
+    renderFlat();
+    renderSide();
+  });
+  byId("pickReview").addEventListener("click", openReview);
+  const close = (): void => byId<HTMLDialogElement>("review").close();
+  byId("reviewClose").addEventListener("click", close);
+  byId("reviewCancel").addEventListener("click", close);
+  byId("ownOk").addEventListener("change", updateReviewButton);
+  bindHold(byId<HTMLButtonElement>("reviewGo"), () => void doRemove());
+}
+
+/** Find out whether removing is available, and empty old cleanups. */
+async function setupCleaning(): Promise<void> {
+  if (!isDesktop() && params.has("cleaning")) {
+    // Browser checks: a pretend engine that judges paths like the real one.
+    usePretendCleaning((path) => {
+      const t = state.tree;
+      if (!t) return null;
+      let node = -1;
+      for (let i = 1; i < t.n && node < 0; i++) if (t.path(i).toLowerCase() === path.toLowerCase()) node = i;
+      if (node < 0) return null;
+      const e = eligibility(t, node);
+      return { group: e.group, why: e.why, bytes: t.agg[node], isDir: t.kind[node] === KIND.dir };
+    });
+  }
+  try {
+    cleaningOn = await cleaningAvailable();
+  } catch {
+    cleaningOn = false;
+  }
+  byId("removedTab").hidden = !cleaningOn;
+  byId("removingBox").hidden = !cleaningOn;
+  if (!cleaningOn) return;
+  renderFlat();
+  renderSide();
+  try {
+    const freed = await emptyExpired(settings.retention);
+    const bytes = freed.reduce((a, [, b]) => a + b, 0);
+    if (freed.length) toast(`Deleted for good ${human(bytes)} removed more than ${settings.retention} days ago.`);
+  } catch {
+    /* nothing to empty */
+  }
 }
 
 // ---------- AI assistant (desktop app only) ----------
@@ -1179,6 +1537,8 @@ function stopDups(): void {
 /** Clear what belongs to the previous scan or file. */
 function resetScanExtras(): void {
   stopDups();
+  picks.clear();
+  pickbar();
   state.dups = emptyDups();
   state.unreadable = [];
   state.unreadableCount = 0;
@@ -1210,6 +1570,7 @@ function setTab(t: Tab): void {
   byId("tab-findings").hidden = t !== "findings";
   byId("tab-apps").hidden = t !== "apps";
   byId("tab-unread").hidden = t !== "unread";
+  byId("tab-removed").hidden = t !== "removed";
   renderSide();
 }
 
@@ -1232,6 +1593,7 @@ function renderSide(): void {
       renderSide();
     });
   } else if (state.tab === "apps") renderApps(byId("tab-apps"), tree, view.pal, state.owner, actions);
+  else if (state.tab === "removed") void renderRemoved();
   else renderUnreadable();
   if (state.selected) renderDrawer();
 }
@@ -1351,6 +1713,7 @@ function contextMenu(k: string, x: number, y: number): void {
       setViewMode("map");
       reveal(i);
     });
+    if (picking.enabled() && !picking.why(i)) add(picks.has(i) ? "Unselect for removing" : "Select for removing", () => { picking.toggle(i); renderFlat(); renderSide(); });
     add("Copy path", () => void navigator.clipboard?.writeText(tree.path(i)));
     const rect = byId("stage").getBoundingClientRect();
     menu.hidden = false;
@@ -1373,6 +1736,7 @@ function contextMenu(k: string, x: number, y: number): void {
       add(item.open ? "Close folder" : "Open folder", () => toggleNode(i));
       if (i !== pictureRoot()) add("Focus here", () => focusOn(i));
     }
+    if (picking.enabled() && !picking.why(i)) add(picks.has(i) ? "Unselect for removing" : "Select for removing", () => { picking.toggle(i); renderFlat(); renderSide(); });
     add("Copy path", () => void navigator.clipboard?.writeText(tree.path(i)));
     if (view.isPinned(k)) add("Unpin", () => view.unpin(k));
   }
@@ -1439,6 +1803,7 @@ function renderSettings(): void {
   document.querySelectorAll<HTMLButtonElement>("#themes button").forEach((b) => b.classList.toggle("on", b.dataset.theme === settings.theme));
   byId<HTMLInputElement>("lastUsed").checked = settings.lastUsed;
   byId<HTMLInputElement>("keepReport").checked = settings.keepReport;
+  document.querySelectorAll<HTMLButtonElement>("#retention button").forEach((b) => b.classList.toggle("on", Number(b.dataset.days) === settings.retention));
   void renderAi();
   document.querySelectorAll<HTMLButtonElement>("#units button").forEach((b) => {
     const on = b.dataset.units === settings.units;
@@ -1538,6 +1903,12 @@ function bindSettings(): void {
     settings.chosen = true;
     applyQuality();
   });
+  document.querySelectorAll<HTMLButtonElement>("#retention button").forEach((b) => b.addEventListener("click", () => {
+    settings.retention = Number(b.dataset.days) || 30;
+    saveSettings();
+    renderSettings();
+    if (state.tab === "removed") void renderRemoved();
+  }));
   byId<HTMLInputElement>("lastUsed").addEventListener("change", (e) => {
     settings.lastUsed = (e.target as HTMLInputElement).checked;
     saveSettings();
@@ -1765,6 +2136,8 @@ bind();
 bindSettings();
 bindScan();
 applyViewMode();
+bindRemoving();
+void setupCleaning();
 document.documentElement.dataset.theme = isDark() ? "dark" : "light";
 // Labels are drawn on a canvas: redraw once the fonts have arrived.
 void document.fonts?.ready.then(() => view.relook());

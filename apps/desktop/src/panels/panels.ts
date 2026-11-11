@@ -6,6 +6,7 @@ import { count, date, human } from "../core/util";
 import { groupLook, lookOf, SHAPE_NAMES, type ColorMode, type Look, type Shape } from "../graph/encode";
 import { mix, type Palette } from "../graph/style";
 import { clear, h } from "./dom";
+import { pickBox, type PickHandlers } from "./explorer";
 import { shapeIcon } from "./icons";
 
 export interface PanelActions {
@@ -18,6 +19,8 @@ export interface PanelActions {
   isOpen(node: number): boolean;
   focusOwner(owner: number): void;
   close(): void;
+  /** Picking for removing (only when removing is available). */
+  pick?: PickHandlers;
 }
 
 export type FindingFilter = "offered" | "shown" | "refused";
@@ -87,7 +90,8 @@ export function renderFindings(el: HTMLElement, tree: Tree, p: Palette, filter: 
   }
   const ol = h("ol", { class: "rows" });
   for (const { m } of list.slice(0, shown)) {
-    ol.append(h("li", {}, h("button", { class: "row", onclick: () => act.reveal(m.node), attrs: { "data-node": String(m.node) } },
+    const box = m.source === "refused" ? null : pickBox(act.pick, m.node, m.title);
+    ol.append(h("li", { class: box ? "pickable" : "" }, box, h("button", { class: "row", onclick: () => act.reveal(m.node), attrs: { "data-node": String(m.node) } },
       shapeIcon(markLook(m, p), 14),
       h("span", { class: "title" }, m.title),
       h("span", { class: "size" }, m.source === "refused" ? "" : human(m.bytes)),

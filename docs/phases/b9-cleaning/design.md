@@ -146,3 +146,18 @@ Each check repeats on the disk as it is now; any doubt skips the item (fail clos
 - The scanner skips holding folders.
 - On Windows, the link tests need Developer Mode (or an administrator terminal) to create links;
   without it those checks are skipped and say so.
+
+## 13. Built in step 2 (screens)
+
+- Tick boxes in the Files list, the Findings list and each set of duplicates ("Select the extra
+  copies (keep the oldest)"); "Select for removing" in the right-click menu. Items that can never
+  be removed have a disabled box that says why.
+- The selection bar ("N selected · size · Review and remove…") and the review screen: groups,
+  a tick per Probably safe item, "I understand these are my own files" and hold-to-confirm
+  (1.5 s, mouse or keyboard) when own files are included; progress; a result list of what was
+  skipped and why. Removed items leave the views; "Undo" puts everything back.
+- The Removed tab: every cleanup with what is held and when it will be deleted for good;
+  Restore all, Restore per item, and Empty now (asks twice).
+- Settings, Removing: keep removed items 7, 14, 30 or 60 days. Old cleanups are emptied when the
+  app opens.
+- Only in a build made with `npm run tauri dev -- --features cleaning`.

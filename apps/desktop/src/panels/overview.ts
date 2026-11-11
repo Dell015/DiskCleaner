@@ -9,6 +9,7 @@ import { extra, type DupState } from "../core/dupes";
 import { count, human } from "../core/util";
 import { clear, h } from "./dom";
 import { placeKind } from "./panels";
+import { pickBox, type PickHandlers } from "./explorer";
 
 export interface OverviewHandlers {
   /** Show an entry in the Files view. */
@@ -21,6 +22,8 @@ export interface OverviewHandlers {
   canFindDups(): string;
   findDups(within: number): void;
   cancelDups(): void;
+  /** Picking for removing (only when removing is available). */
+  pick?: PickHandlers;
 }
 
 type AppSort = "size" | "used" | "name";
@@ -287,13 +290,24 @@ export class OverviewView {
           h("span", { class: "sz" }, `${human(extra(g))} extra`),
           h("span", { class: "meta" }, `${count(g.paths.length)} copies of ${human(g.size)}`)));
         if (opened) {
+          const pick = this.on.pick;
+          const known = g.nodes.filter((x) => x >= 0);
+          if (pick?.enabled() && known.length > 1) {
+            // Keep the oldest copy (most likely the original); pick the others.
+            list.append(h("button", { class: "ov-more", onclick: () => {
+              const keep = known.slice().sort((a, b) => tree.mtime[a] - tree.mtime[b] || a - b)[0];
+              for (const x of known) if (x !== keep && !pick.picked(x) && !pick.why(x)) pick.toggle(x);
+              this.redraw();
+            } }, "Select the extra copies (keep the oldest)"));
+          }
           for (let k = 0; k < g.paths.length; k++) {
             const node = g.nodes[k];
             const b = h("button", { class: "ov-row copy", title: g.paths[k], onclick: () => { if (node >= 0) this.on.open(node); } },
               h("span", { class: "path" }, g.paths[k]),
               node >= 0 ? h("span", { class: "meta" }, `changed ${ago(tree.mtime[node], this.now)}`) : null);
             if (node < 0) b.setAttribute("aria-disabled", "true");
-            list.append(b);
+            const box = node >= 0 ? pickBox(pick, node, g.paths[k]) : null;
+            list.append(box ? h("div", { class: "ov-pickrow" }, box, b) : b);
           }
         }
       }

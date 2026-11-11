@@ -19,6 +19,7 @@
 
 pub mod advice;
 pub mod analysis;
+pub mod cleanup;
 pub mod datadir;
 pub mod dupes;
 pub mod inspect;

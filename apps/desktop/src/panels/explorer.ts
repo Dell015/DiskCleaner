@@ -21,6 +21,30 @@ export interface ExplorerHandlers {
   context(node: number, x: number, y: number): void;
   /** Sort this folder by type in the Overview. */
   sort(folder: number): void;
+  /** Picking for removing (only when removing is available). */
+  pick?: PickHandlers;
+}
+
+/** Tick boxes for removing. */
+export interface PickHandlers {
+  enabled(): boolean;
+  picked(node: number): boolean;
+  /** Why it cannot be picked ("" if it can). */
+  why(node: number): string;
+  toggle(node: number): void;
+}
+
+/** A tick box for an entry, or null when picking is off. */
+export function pickBox(pick: PickHandlers | undefined, node: number, label: string): HTMLInputElement | null {
+  if (!pick?.enabled()) return null;
+  const why = pick.why(node);
+  const box = h("input", { class: "pick", title: why ? `Cannot be removed: ${why}` : "Select for removing", attrs: { type: "checkbox", "aria-label": `Select ${label} for removing` } });
+  box.checked = pick.picked(node);
+  if (why) box.disabled = true;
+  box.addEventListener("click", (e) => e.stopPropagation());
+  box.addEventListener("dblclick", (e) => e.stopPropagation());
+  box.addEventListener("change", () => pick.toggle(node));
+  return box;
 }
 
 export class ExplorerView {
@@ -156,7 +180,7 @@ export class ExplorerView {
     const top = this.scroller.scrollTop;
     const first = Math.max(0, Math.floor(top / ROW_H) - 4);
     const last = Math.min(this.rows.length, Math.ceil((top + this.scroller.clientHeight) / ROW_H) + 4);
-    const stamp = `${this.sortedFor}:${t.version}:${p.accent}:${this.mode}:${getSizeUnits()}`;
+    const stamp = `${this.sortedFor}:${t.version}:${p.accent}:${this.mode}:${getSizeUnits()}:${this.on.pick?.enabled() ? 1 : 0}`;
     if (stamp !== this.builtFor) {
       this.builtFor = stamp;
       this.built.clear();
@@ -174,6 +198,8 @@ export class ExplorerView {
       keep.add(i);
       const old = this.built.get(i);
       if (old) {
+        const box = old.querySelector<HTMLInputElement>("input.pick");
+        if (box && this.on.pick) box.checked = this.on.pick.picked(i);
         old.classList.toggle("on", i === this.selected);
         old.setAttribute("aria-selected", String(i === this.selected));
         continue;
@@ -185,7 +211,7 @@ export class ExplorerView {
       const bar = h("span", { class: "x-bar" }, h("span", {}));
       (bar.firstElementChild as HTMLElement).style.width = `${Math.max(share > 0 ? 1 : 0, share * 100)}%`;
       const row = h("div", { class: `x-row${i === this.selected ? " on" : ""}${isDir ? " dir" : ""}`, attrs: { role: "row", "data-node": String(i), "aria-selected": String(i === this.selected) } },
-        h("span", { class: "c-name" }, shapeIcon(lookOf(t, i, false, false, this.mode, p), 13), h("span", { class: "nm" }, t.names[i]), isDir && t.childCount[i] > 0 ? h("span", { class: "chev", attrs: { "aria-hidden": "true" } }, "›") : null),
+        h("span", { class: "c-name" }, pickBox(this.on.pick, i, t.names[i]), shapeIcon(lookOf(t, i, false, false, this.mode, p), 13), h("span", { class: "nm" }, t.names[i]), isDir && t.childCount[i] > 0 ? h("span", { class: "chev", attrs: { "aria-hidden": "true" } }, "›") : null),
         h("span", { class: "c-size" }, human(t.agg[i])),
         h("span", { class: "c-share" }, bar, h("span", { class: "pct" }, share >= 0.001 ? `${(share * 100).toFixed(share < 0.1 ? 1 : 0)}%` : "")),
         h("span", { class: "c-items" }, isDir ? count(t.files[i]) : ""),

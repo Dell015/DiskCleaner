@@ -378,3 +378,51 @@ button.ov-app:hover { background: var(--panel-2); }
 .ai-setup pre.cmd { white-space: pre-wrap; margin: 4px 0; user-select: all; }
 .ai-log ol { margin: 6px 0; padding-left: 18px; max-height: 180px; overflow: auto; font-size: var(--t1); }
 .ai-log li { margin: 2px 0; overflow-wrap: anywhere; }
+
+/* ---------- Removing: tick boxes, the selection bar, the review, the Removed tab ---------- */
+input.pick { margin: 0 2px 0 0; accent-color: var(--accent); cursor: pointer; flex: none; }
+input.pick:disabled { cursor: not-allowed; opacity: 0.35; }
+.rows li.pickable { display: flex; align-items: center; gap: 4px; padding-left: 6px; }
+.rows li.pickable .row { flex: 1; min-width: 0; }
+.ov-pickrow { display: flex; align-items: center; gap: 4px; padding-left: 20px; }
+.ov-pickrow .ov-row.copy { padding-left: 6px; }
+#pickbar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; box-shadow: var(--float-shadow); white-space: nowrap; }
+#pickText { font-weight: 600; font-variant-numeric: tabular-nums; }
+dialog#review { width: min(720px, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); box-shadow: var(--float-shadow); }
+dialog#review::backdrop { background: rgba(0, 0, 0, 0.5); }
+.review-body { padding: 16px 18px 18px; display: grid; gap: 10px; }
+.review-body header { display: flex; justify-content: space-between; align-items: center; }
+.review-body h2 { margin: 0; font-size: var(--t4); }
+.review-body header button { border: 0; font-size: 22px; padding: 0 4px; color: var(--text-2); }
+#reviewList { max-height: 46vh; overflow: auto; display: grid; gap: 12px; }
+.rv-group h3 { margin: 0 0 4px; font-size: var(--t2); }
+.rv-safe h3 { color: var(--safe); }
+.rv-probably_safe h3 { color: var(--probably); }
+.rv-never h3 { color: var(--text-2); }
+.rv-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.rv-never .rv-row { opacity: 0.7; }
+.rv-main { flex: 1; min-width: 0; display: grid; }
+.rv-main b, .rv-main .path, .rv-main .quiet { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+.rv-main .path { font-size: var(--t1); color: var(--text-2); }
+.rv-size { font-variant-numeric: tabular-nums; font-weight: 600; }
+.rv-tick { display: flex; align-items: center; gap: 4px; font-size: var(--t1); color: var(--probably); }
+.rv-x { border: 0; color: var(--text-2); font-size: 18px; padding: 0 6px; }
+.review-actions { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+#reviewTotal { margin-right: auto; font-weight: 650; }
+#reviewGo { position: relative; overflow: hidden; min-width: 150px; }
+#reviewGo .fill { position: absolute; inset: 0; width: 0; background: color-mix(in srgb, var(--text) 30%, transparent); }
+#reviewGo.holding .fill { width: 100%; transition: width 1.5s linear; }
+#reviewGo .label { position: relative; }
+#reviewGo:disabled { opacity: 0.45; cursor: not-allowed; }
+#reviewProgress { display: grid; gap: 6px; }
+.rv-skipped { max-height: 30vh; overflow: auto; padding-left: 18px; font-size: var(--t1); }
+.rv-skipped li { display: grid; margin-bottom: 4px; }
+.rm-cleanup { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; display: grid; gap: 8px; }
+.rm-actions { display: flex; gap: 8px; }
+.rm-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 40vh; overflow: auto; }
+.rm-items li { display: flex; align-items: center; gap: 8px; }
+.rm-items li > div { flex: 1; min-width: 0; display: grid; }
+.rm-items .path { font-size: var(--t1); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-items .quiet { margin: 0; }
+.rm-restored, .rm-emptied { opacity: 0.6; }
+button.danger { background: var(--dont); border-color: var(--dont); color: var(--bg); font-weight: 600; }

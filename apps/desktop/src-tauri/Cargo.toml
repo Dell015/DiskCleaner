@@ -15,11 +15,17 @@ path = "src/main.rs"
 [dependencies]
 dc-api.workspace = true
 dc-core.workspace = true
+dc-quarantine.workspace = true
 dc-scan.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "=2.12.5", features = [] }
 tauri-plugin-dialog = "=2.8.3"
+
+[features]
+# Removing (moving into holding, restore, empty). Off by default until the owner's test on a
+# throwaway folder: `npm run tauri dev -- --features cleaning`.
+cleaning = ["dc-quarantine/destructive-actions"]
 
 [build-dependencies]
 tauri-build = { version = "=2.7.4", features = [] }

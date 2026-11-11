@@ -88,18 +88,40 @@
     <div id="error" role="alert" hidden><span id="errorText"></span><button id="errorClose" aria-label="Close">×</button></div>
     <div id="drop" hidden>Drop the view file to open it</div>
     <div id="toast" role="status" hidden></div>
+    <div id="pickbar" role="region" aria-label="Selected for removing" hidden>
+      <span id="pickText"></span>
+      <button id="pickClear">Clear</button>
+      <button id="pickReview" class="primary">Review and remove…</button>
+    </div>
   </main>
   <aside id="side">
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="findings" class="on" aria-selected="true">Findings</button>
       <button role="tab" data-tab="apps" aria-selected="false">Apps</button>
       <button role="tab" data-tab="unread" aria-selected="false" id="unreadTab" hidden>Not read</button>
+      <button role="tab" data-tab="removed" aria-selected="false" id="removedTab" hidden>Removed</button>
     </nav>
     <div id="tab-findings" class="tab"></div>
     <div id="tab-apps" class="tab" hidden></div>
     <div id="tab-unread" class="tab" hidden></div>
+    <div id="tab-removed" class="tab" hidden></div>
     <section id="drawer" aria-label="Details" aria-hidden="true"></section>
   </aside>
+  <dialog id="review" aria-label="Review before removing">
+    <div class="review-body">
+      <header><h2>Review before removing</h2><button id="reviewClose" aria-label="Close">×</button></header>
+      <div id="reviewList"></div>
+      <p class="quiet" id="reviewNote"></p>
+      <label class="opt" id="ownBox" hidden><input type="checkbox" id="ownOk"> I understand these are my own files, and DiskCleaner cannot know whether I still need them.</label>
+      <div class="review-actions">
+        <span id="reviewTotal"></span>
+        <button id="reviewCancel">Cancel</button>
+        <button id="reviewGo" class="primary hold"><span class="fill" aria-hidden="true"></span><span class="label">Remove</span></button>
+      </div>
+      <div id="reviewProgress" hidden><div class="ov-progress"><span id="reviewFill"></span></div><span id="reviewStep"></span></div>
+      <div id="reviewResult" hidden></div>
+    </div>
+  </dialog>
   <dialog id="settings" aria-label="Settings">
     <form method="dialog" id="settingsForm">
       <header><h2>Settings</h2><button value="close" aria-label="Close">×</button></header>
@@ -125,6 +147,15 @@
         <label class="opt">Motion <select id="q-motion"><option value="full">Full</option><option value="reduced">Reduced</option><option value="off">Off</option></select></label>
         <label class="opt">Detail <input type="range" id="q-budget" min="300" max="5000" step="100"> <output id="q-budget-out"></output></label>
         <label class="opt">Names <input type="range" id="q-labels" min="0.2" max="1" step="0.05"></label>
+      </fieldset>
+      <fieldset id="removingBox" hidden><legend>Removing</legend>
+        <p class="quiet">Removed items wait in a holding folder on the same drive, then are deleted for good after:</p>
+        <div class="seg" id="retention" role="group" aria-label="Keep removed items for">
+          <button type="button" data-days="7">7 days</button>
+          <button type="button" data-days="14">14 days</button>
+          <button type="button" data-days="30">30 days</button>
+          <button type="button" data-days="60">60 days</button>
+        </div>
       </fieldset>
       <fieldset><legend>Privacy</legend>
         <label class="opt"><input type="checkbox" id="lastUsed"> Show when apps were last used</label>
