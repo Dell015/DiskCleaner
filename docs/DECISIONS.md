@@ -148,6 +148,8 @@ Format: **ID - decision** / why / where it is enforced.
 - **D115** Every finished (not stopped) scan in the desktop app is kept in DiskCleaner's own data folder as `latest-scan.dcview.json` plus `latest-report.md` (Markdown: where the space goes, biggest folders, what could go and what deleting it would do, apps and last use, projects). The files are replaced each scan, never deleted (no delete calls outside the quarantine crate). A Settings switch turns this off. `dc report <view file>` prints the same report.
 - **D116** The tidy-up coach (future) shows a count after each scan ("12 things to tidy") and runs only when the user opens it.
 
+- **D117** B9 engine (owner approved the design, 2026-11-11): the journal is the only record of a cleanup (no separate manifest); every disk change goes through the `Ops` trait so tests can inject a crash, a full disk or access denied at any step; no copying between drives; a folder with files in use is moved file by file and the files in use stay; holding folders are skipped by the scanner. The engine needs `--features destructive-actions`; nothing in the app uses it yet.
+
 ## Final QA pass: brief for the reviewer
 Review with fresh eyes, and treat the table above as intentional design unless it is unsafe or wrong.
 1. **Safety first:** search every crate for anything that can delete, move, rename, write or execute (including registry writes, `Command`, `ShellExecute`). Confirm only `dc-quarantine` could ever do it and only behind the feature.
@@ -159,6 +161,7 @@ Review with fresh eyes, and treat the table above as intentional design unless i
 7. **Docs vs code:** requirements and design match what was built; `CHANGELOG.md` is accurate.
 8. **Windows-only paths:** code that only compiles on Windows gets extra scrutiny because the author could not compile it in the build container.
 10. **Desktop shell (apps/desktop/src-tauri):** confirm the capability file grants no fs or shell permission, the only writes are `save_scan` (new `.json` file only, never replaces) and DiskCleaner's own data folder (`dc_api::datadir`), and the live events cannot place an entry outside the scanned folder.
+12. **Removal engine (dc-quarantine, feature destructive-actions):** every way an item could be moved that should not be (links anywhere in or above it, protected paths, DiskCleaner's own folders, a changed "your call" item, missing consent); emptying can only delete inside a holding folder and refuses swapped-in links; a crash or failed write at any step leaves a state the journal and the disk describe exactly.
 11. **MCP server (dc_api::mcp):** confirm no tool can change anything, access is refused unless `ai-access.json` says enabled, malformed input never panics, and answers carry metadata only.
 9. **Graph view (apps/desktop/):** confirm the page cannot write, delete or send anything; that `checkView` rejects every contradiction; that no file name reaches `innerHTML`; that the level of detail never exceeds the hard cap and sizes add up.
 Report findings as: severity, file:line, what is wrong, a concrete failing scenario, suggested fix.

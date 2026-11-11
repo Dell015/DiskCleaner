@@ -1,12 +1,24 @@
 [package]
 name = "dc-quarantine"
-description = "Quarantine and restore: reversible removal with a manifest (feature-gated, off by default)."
+description = "Removing safely: move into a holding folder on the same drive, restore, empty after a retention time. Feature-gated (destructive-actions), off by default."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+
+[features]
+# The only switch that lets DiskCleaner change files. Off by default.
+destructive-actions = []
+
+[dependencies]
+dc-protected.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

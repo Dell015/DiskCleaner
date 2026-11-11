@@ -4,6 +4,10 @@ DiskCleaner inspects entire disks and advises on deletion, so safety rules come 
 
 1. **Read-only until the quarantine phase (B9).** No code path deletes, moves, renames or writes
    to scanned paths. The quarantine crate is behind the `destructive-actions` feature, off by default.
+   Since B9 the removal engine exists there: it only *moves* items into a holding folder on the
+   same drive, re-checks each one first, keeps an append-only journal, and deletes only when a
+   cleanup is emptied, only inside a holding folder. No normal build includes it until the
+   owner's test on a throwaway folder (see `docs/phases/b9-cleaning/design.md`).
 2. **No destructive APIs outside `dc-quarantine`.** A Clippy `disallowed-methods` rule fails the
    build if `remove_file`, `remove_dir`, `remove_dir_all` or `rename` appear.
 3. **Default-deny.** Anything unclassified is `DontTouch`.

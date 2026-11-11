@@ -251,6 +251,9 @@ fn scan_dir(dir: &Path, depth: u32, shared: &Shared<'_>) -> Vec<Raw> {
         }
     }
     names.sort();
+    // DiskCleaner's own holding folders (removed items waiting to be emptied) are not scanned:
+    // what is in them was already removed.
+    names.retain(|name| !is_holding(dir, &name.to_string_lossy()));
 
     let mut raws: Vec<Raw> = names
         .par_iter()
@@ -281,6 +284,22 @@ fn scan_dir(dir: &Path, depth: u32, shared: &Shared<'_>) -> Vec<Raw> {
             raw.children = scan_dir(&dir.join(&raw.os_name), depth + 1, shared);
         });
     raws
+}
+
+/// Is `name` (inside `dir`) one of DiskCleaner's holding folders (`X:\\.diskcleaner-holding`, or
+/// `...\\AppData\\Local\\DiskCleaner\\Holding`)?
+pub(crate) fn is_holding(dir: &Path, name: &str) -> bool {
+    if name.eq_ignore_ascii_case(".diskcleaner-holding") {
+        return true;
+    }
+    name.eq_ignore_ascii_case("holding")
+        && dir
+            .file_name()
+            .is_some_and(|d| d.to_string_lossy().eq_ignore_ascii_case("diskcleaner"))
+        && dir
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|l| l.to_string_lossy().eq_ignore_ascii_case("local"))
 }
 
 /// Is `name` (inside `dir`) one of the folders read before its siblings?
@@ -404,6 +423,21 @@ fn assemble(root: Node, children: Vec<Raw>) -> Result<(Tree, u64), ScanError> {
 mod order_tests {
     use super::read_first;
     use std::path::Path;
+
+    #[test]
+    fn holding_folders_are_recognised() {
+        use super::is_holding;
+        let root = if cfg!(windows) { r"E:\" } else { "/" };
+        assert!(is_holding(Path::new(root), ".diskcleaner-holding"));
+        let local = Path::new(root)
+            .join("Users")
+            .join("me")
+            .join("AppData")
+            .join("Local");
+        assert!(is_holding(&local.join("DiskCleaner"), "Holding"));
+        assert!(!is_holding(&local.join("Other"), "Holding"));
+        assert!(!is_holding(Path::new(root), "Holding"));
+    }
 
     #[test]
     fn users_and_the_profile_folders_people_sort_come_first() {

@@ -923,6 +923,12 @@ dependencies = [
 [[package]]
 name = "dc-quarantine"
 version = "0.0.0"
+dependencies = [
+ "dc-protected",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
 
 [[package]]
 name = "dc-rules"
