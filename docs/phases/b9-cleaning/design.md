@@ -161,3 +161,22 @@ Each check repeats on the disk as it is now; any doubt skips the item (fail clos
 - Settings, Removing: keep removed items 7, 14, 30 or 60 days. Old cleanups are emptied when the
   app opens.
 - Only in a build made with `npm run tauri dev -- --features cleaning`.
+
+## 14. Safety review and fixes (2026-11-14)
+
+A separate review (report only) found these; each is fixed and has a test.
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | A half-written journal line could swallow the next record: an item vanished from the list (and was later deleted unseen), or a cleanup lost its date and was emptied at once | One write per line, a line break first if the file lacks one, a reader that recovers records sharing a line; a cleanup without a date is never emptied automatically |
+| 2 | Emptying on open trusted the clock | Lost or future dates never expire; more than one cleanup or more than 50 GB at once is asked first; a reminder 3 days before |
+| 3 | Scanning `C:\Program Files` itself made its unregistered programs "your own files" | "Your own files" is one rule on the full path (`dc_protected::not_your_own`), used by the rules and by the engine |
+| 4 | A file-by-file restore could not be finished after a crash | Each file's return is recorded; the rest is read back from the disk; a second restore finishes it |
+| 5 | Emptying deleted the whole items folder, recorded or not | Only recorded slots, one by one, each checked on its real path; anything else stops it |
+| 6 | A folder above an item swapped for a junction between the check and the move | Windows: the item is opened, its real location checked, and that open item renamed (`win.rs`); emptying re-checks each slot; new holding folders are owner-only and hidden |
+| 7 | Documents, Desktop, Pictures, Music, Videos offered but always refused | Owner's choice: they stay protected, and are now shown as "Never" up front |
+| 8 | Suggested items judged from an old scan | A scan older than 60 minutes cannot be removed from; leftovers that changed since the scan are skipped |
+| 9 | Restore made folders before checking for links; a move could replace a file; inner and outer picks both moved | Links checked first; moves never replace (by the system call itself); outer picks go first and carry inner ones |
+| 10 | Screen details | "and N more" in the Removed tab; Empty now forgets its first click after 5 s or a tab change; hold-to-confirm stops on cancel or window switch, and a plain Remove is a click; each tick is sent only with its own items; Undo forgets the previous scan; lowering the retention warns; an extra line above 200 GB |
+| 11 | Two windows at once; drive letters that change | One job at a time (lock file); ids carry the process id; restore refuses another drive letter |
+

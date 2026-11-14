@@ -388,8 +388,8 @@ input.pick:disabled { cursor: not-allowed; opacity: 0.35; }
 .ov-pickrow .ov-row.copy { padding-left: 6px; }
 #pickbar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; box-shadow: var(--float-shadow); white-space: nowrap; }
 #pickText { font-weight: 600; font-variant-numeric: tabular-nums; }
-dialog#review { width: min(720px, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); box-shadow: var(--float-shadow); }
-dialog#review::backdrop { background: rgba(0, 0, 0, 0.5); }
+dialog#review, dialog#expire { width: min(720px, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); box-shadow: var(--float-shadow); }
+dialog#review::backdrop, dialog#expire::backdrop { background: rgba(0, 0, 0, 0.5); }
 .review-body { padding: 16px 18px 18px; display: grid; gap: 10px; }
 .review-body header { display: flex; justify-content: space-between; align-items: center; }
 .review-body h2 { margin: 0; font-size: var(--t4); }

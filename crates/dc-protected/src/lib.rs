@@ -11,12 +11,14 @@
 mod check;
 mod list;
 mod normalize;
+mod own;
 mod pattern;
 mod resolve;
 mod verdict;
 
 pub use list::{ProtectedList, Row, Scope, BUILTIN, UPGRADE_LEFTOVERS};
 pub use normalize::{normalize, Invalid, NormalPath};
+pub use own::{not_your_own, SYSTEM_TOP};
 pub use pattern::Pattern;
 pub use resolve::{FakeResolver, FsResolver, PathResolver, Resolution};
 pub use verdict::{Reason, Verdict};

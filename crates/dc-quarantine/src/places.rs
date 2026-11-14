@@ -15,6 +15,9 @@ pub trait Places: Sync {
 pub trait Guard: Sync {
     /// `Some(reason)` if `path` (already resolved, no links) must not be touched.
     fn refuse(&self, path: &Path) -> Option<String>;
+    /// `Some(reason)` if `path` is not in one of the person's own places, so it cannot be removed
+    /// as "your own files" (only as a DiskCleaner finding).
+    fn refuse_own(&self, path: &Path) -> Option<String>;
 }
 
 /// Windows: the profile's drive holds items in `%LOCALAPPDATA%\DiskCleaner\Holding`, every other
@@ -90,6 +93,13 @@ impl Guard for ProtectedGuard {
             )
         })
     }
+
+    fn refuse_own(&self, path: &Path) -> Option<String> {
+        let text = path.to_string_lossy();
+        let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+        dc_protected::not_your_own(text)
+            .map(|why| format!("it is not one of your own files: {why}"))
+    }
 }
 
 #[cfg(test)]
@@ -120,5 +130,26 @@ mod tests {
         assert!(g.refuse(Path::new(r"\\?\C:\Windows")).is_some());
         // Anything the list cannot understand is refused (fail closed).
         assert!(g.refuse(Path::new("/tmp/x")).is_some());
+    }
+
+    #[test]
+    fn program_folders_and_your_protected_folders_are_never_your_own_files() {
+        let g = ProtectedGuard::default();
+        // Finding 3 of the B9 review: a child of Program Files is not "your own".
+        assert!(g
+            .refuse_own(Path::new(r"C:\Program Files\SomeTool"))
+            .is_some());
+        assert!(g.refuse_own(Path::new(r"\\?\C:\ProgramData\X")).is_some());
+        assert!(g
+            .refuse_own(Path::new(r"C:\Users\me\Downloads\a.zip"))
+            .is_none());
+        // Finding 7: Documents, Desktop, Pictures, Music and Videos stay protected.
+        for p in ["Documents", "Desktop", "Pictures", "Music", "Videos"] {
+            let path = format!(r"C:\Users\me\{p}\x.txt");
+            assert!(g.refuse(Path::new(&path)).is_some(), "{path}");
+        }
+        assert!(g
+            .refuse(Path::new(r"C:\Users\me\Downloads\a.zip"))
+            .is_none());
     }
 }

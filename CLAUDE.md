@@ -39,7 +39,7 @@ Ask before adding any dependency not listed; prefer well-maintained, permissivel
 
 ## Code conventions
 - Libraries return typed errors (`thiserror`); no `unwrap`/`expect`/`panic!` in non-test code in safety-critical crates (`dc-protected`, `dc-rules`, `dc-advisor`, `dc-quarantine`).
-- `#![forbid(unsafe_code)]` in every crate except `dc-mft` and `dc-winmeta`. Each `unsafe` block gets a `// SAFETY:` comment.
+- `#![forbid(unsafe_code)]` in every crate except `dc-mft` and `dc-winmeta`, plus the one file `dc-quarantine/src/win.rs` (D119; the crate is `deny(unsafe_code)` with an `allow` on that module only). Each `unsafe` block gets a `// SAFETY:` comment.
 - Win32 access goes through small traits (e.g. `SystemInfoSource`, `VolumeInfo`) with fake implementations for tests.
 - Arena-style trees (Vec + index IDs), not `Rc<RefCell<..>>` graphs.
 - All public types derive `Serialize`/`Deserialize` and carry `schema_version` where persisted or sent over the API.
@@ -105,7 +105,7 @@ This tool will inspect people's entire disks and advise on deletion. A bug here 
 12. **Do not weaken or delete tests** to make them pass. Do not mark safety tests `#[ignore]`. If a safety test fails, fix the code.
 
 ## When to stop and ask the user
-- Any task needs a destructive API, new elevated capability, network access outside `dc-advisor`, or a new `unsafe` block outside `dc-mft`/`dc-winmeta`.
+- Any task needs a destructive API, new elevated capability, network access outside `dc-advisor`, or a new `unsafe` block outside `dc-mft`/`dc-winmeta`/`dc-quarantine/src/win.rs`.
 - A rule you are asked to write would mark user-created data (documents, saves, profiles, photos, source code, VM disks, databases) as anything other than `DontTouch`.
 - You are unsure whether something is safe to delete. When unsure, it is not safe.
 

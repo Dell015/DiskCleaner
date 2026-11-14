@@ -43,7 +43,14 @@ struct LastScan {
     result: Arc<Mutex<Option<Arc<LiveResult>>>>,
     /// The same scan with its checks, indexed for questions (built just after it finishes).
     inspector: Arc<Mutex<Option<Arc<dc_api::inspect::Inspector>>>>,
+    /// When that scan started reading the disk (removing needs a recent scan).
+    read_at: Arc<Mutex<Option<std::time::Instant>>>,
 }
+
+/// Removing is decided from the latest scan; older than this, the disk may have changed too much
+/// (an app installed again, files moved), so a new scan is needed first.
+#[cfg_attr(not(feature = "cleaning"), allow(dead_code))]
+const SCAN_FRESH_FOR: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 /// The newest scan's number: a scan thread keeps its result only if no newer scan started.
 static NEWEST_SCAN: AtomicU64 = AtomicU64::new(0);
@@ -87,6 +94,8 @@ fn start_scan(
     if let Ok(mut slot) = keep_ins.lock() {
         *slot = None;
     }
+    let keep_at = Arc::clone(&last.read_at);
+    let started = std::time::Instant::now();
     let cancel = CancelToken::new();
     {
         let mut slot = running
@@ -134,6 +143,9 @@ fn start_scan(
                     if let Ok(mut slot) = keep_ins.lock() {
                         if NEWEST_SCAN.load(Ordering::SeqCst) == generation {
                             *slot = Some(Arc::clone(&ins));
+                            if let Ok(mut at) = keep_at.lock() {
+                                *at = Some(started);
+                            }
                         }
                     }
                     // The scan report (and the scan behind it), for the person and their AI.
@@ -166,7 +178,7 @@ fn index(result: &LiveResult) -> Result<(String, Arc<dc_api::inspect::Inspector>
 /// Removing (B9). Only in a build made with `--features cleaning`; otherwise every command says
 /// it is not available. The removal engine (`dc-quarantine`) checks each item on the disk again.
 mod cleaning {
-    use super::{LastScan, Running};
+    use super::{LastScan, Running, SCAN_FRESH_FOR};
     use serde::{Deserialize, Serialize};
     use tauri::ipc::Channel;
     use tauri::State;
@@ -250,6 +262,18 @@ mod cleaning {
                 "The latest scan is still being prepared (or there is none). Try again in a moment."
                     .to_owned()
             })?;
+        let age = last
+            .read_at
+            .lock()
+            .ok()
+            .and_then(|at| *at)
+            .map_or(SCAN_FRESH_FOR, |at| at.elapsed());
+        if age >= SCAN_FRESH_FOR {
+            return Err(format!(
+                "The latest scan is {} minutes old. Scan again before removing, so DiskCleaner judges what is on the disk now.",
+                age.as_secs() / 60
+            ));
+        }
         // One disk job at a time.
         if let Ok(mut slot) = running.dupes.lock() {
             if let Some(c) = slot.take() {
@@ -269,23 +293,23 @@ mod cleaning {
                 let mut out = Removal::default();
                 let mut items = Vec::new();
                 for p in picks {
-                    let group = match eligibility(&ins, &p.path) {
+                    // Rust decides the group; the page only brings the person's ticks.
+                    let (group, title, reason) = match eligibility(&ins, &p.path) {
                         Eligibility::Never { why } => {
                             out.skipped.push((p.path, why));
                             continue;
                         }
-                        Eligibility::Safe { .. } => Group::Safe,
-                        Eligibility::ProbablySafe { .. } => {
-                            Group::ProbablySafe { checked: p.checked }
+                        Eligibility::Safe { title, reason } => (Group::Safe, title, reason),
+                        Eligibility::ProbablySafe { title, reason } => {
+                            (Group::ProbablySafe { checked: p.checked }, title, reason)
                         }
-                        Eligibility::YourCall => Group::YourCall {
-                            understood: p.understood,
-                        },
-                    };
-                    let (title, reason) = match eligibility(&ins, &p.path) {
-                        Eligibility::Safe { title, reason }
-                        | Eligibility::ProbablySafe { title, reason } => (title, reason),
-                        _ => ("Your own files".to_owned(), "your_call".to_owned()),
+                        Eligibility::YourCall => (
+                            Group::YourCall {
+                                understood: p.understood,
+                            },
+                            "Your own files".to_owned(),
+                            "your_call".to_owned(),
+                        ),
                     };
                     let newest = ins.find(&p.path).map_or(0, |i| ins.changed(i));
                     items.push(Item {
@@ -382,9 +406,27 @@ mod cleaning {
         }
     }
 
-    /// Empty every cleanup older than `days`. Returns (id, bytes freed) for each.
+    #[cfg(feature = "cleaning")]
+    fn now_secs() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
+    }
+
+    /// A cleanup whose retention time is over.
+    #[derive(Serialize)]
+    pub struct Expired {
+        id: String,
+        /// When it was made (Unix seconds).
+        created: i64,
+        /// Bytes still held.
+        bytes: u64,
+    }
+
+    /// Cleanups older than `days` that still hold something. Never one with an unknown date or
+    /// a date after now (a wrong clock). Nothing is deleted here.
     #[tauri::command]
-    pub async fn empty_expired(days: u32) -> Result<Vec<(String, u64)>, String> {
+    pub fn expired_cleanups(days: u32) -> Result<Vec<Expired>, String> {
         #[cfg(not(feature = "cleaning"))]
         {
             let _ = days;
@@ -392,11 +434,38 @@ mod cleaning {
         }
         #[cfg(feature = "cleaning")]
         {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
+            on::with_engine(|e| {
+                e.expired(days.clamp(1, 365), now_secs())
+                    .into_iter()
+                    .map(|c| Expired {
+                        bytes: c.held_bytes(),
+                        id: c.id,
+                        created: c.created,
+                    })
+                    .collect()
+            })
+        }
+    }
+
+    /// Empty the cleanups `ids`, each only if it is still older than `days`. Returns (id, bytes
+    /// freed) for each one emptied.
+    #[tauri::command]
+    pub async fn empty_expired(days: u32, ids: Vec<String>) -> Result<Vec<(String, u64)>, String> {
+        #[cfg(not(feature = "cleaning"))]
+        {
+            let _ = (days, ids);
+            Ok(Vec::new())
+        }
+        #[cfg(feature = "cleaning")]
+        {
             tauri::async_runtime::spawn_blocking(move || {
-                on::with_engine(|e| e.empty_expired(days.clamp(1, 365), now))
+                on::with_engine(|e| {
+                    e.expired(days.clamp(1, 365), now_secs())
+                        .into_iter()
+                        .filter(|c| ids.contains(&c.id))
+                        .filter_map(|c| e.empty(&c.id).ok().map(|b| (c.id, b)))
+                        .collect()
+                })
             })
             .await
             .map_err(|e| e.to_string())?
@@ -665,6 +734,7 @@ fn main() {
             cleaning::restore_items,
             cleaning::empty_cleanup,
             cleaning::empty_expired,
+            cleaning::expired_cleanups,
             smoke_report
         ])
         .run(tauri::generate_context!());
@@ -691,7 +761,10 @@ fn smoke(app: &tauri::App) {
         // With DC_SMOKE_SAVE=<new file.json>, the finished scan is also saved there.
         if let Ok(paths) = std::env::var("DC_SMOKE_REMOVE") {
             let list: Vec<&str> = paths.split(';').collect();
-            let _ = window.eval(format!("window.__smokeRemove = {}", serde_json::to_string(&list).unwrap_or_default()));
+            let _ = window.eval(format!(
+                "window.__smokeRemove = {}",
+                serde_json::to_string(&list).unwrap_or_default()
+            ));
         }
         if let Ok(save) = std::env::var("DC_SMOKE_SAVE") {
             let _ = window.eval(format!("window.__smokeSave = {save:?}"));

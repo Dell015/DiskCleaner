@@ -370,6 +370,12 @@ const check = (ok, what) => {
     await page.waitForFunction(() => document.querySelectorAll("#explorer .x-row input.pick").length > 3, null, { timeout: 60000 });
     const winBox = await page.evaluate(() => { const r = [...document.querySelectorAll("#explorer .x-row")].find((x) => x.querySelector(".nm").textContent === "Windows"); return r.querySelector("input.pick").disabled; });
     check(winBox, "Windows cannot be picked");
+    const docs = await page.evaluate(() => { const t = window.__dc.state.tree; for (let i = 1; i < t.n; i++) if (/^C:\\Users\\demo\\Documents\\/.test(t.path(i))) return i; return -1; });
+    if (docs > 0) {
+      await page.evaluate((i) => window.__dc.goFolder(window.__dc.state.tree.parent[i]), docs);
+      await page.waitForTimeout(300);
+      check(await page.evaluate(() => [...document.querySelectorAll("#explorer .x-row input.pick")].every((b) => b.disabled)), "nothing in Documents can be picked (DiskCleaner protects it)");
+    }
     const find = (p) => page.evaluate((p) => { const t = window.__dc.state.tree; for (let i = 1; i < t.n; i++) if (t.path(i) === p) return i; return -1; }, p);
     const dl = await find("C:\\Users\\demo\\Downloads");
     await page.evaluate((i) => window.__dc.goFolder(i), dl);
@@ -424,6 +430,12 @@ const check = (ok, what) => {
     await page.click("#reviewCancel");
     await page.click("#removedTab");
     await page.waitForTimeout(300);
+    await page.click("#tab-removed button:has-text('Empty now')");
+    await page.waitForTimeout(200);
+    await page.click(".tabs button[data-tab=findings]");
+    await page.click("#removedTab");
+    await page.waitForTimeout(300);
+    check((await page.locator("#tab-removed button:has-text('Click again')").count()) === 0, "a half-confirmed Empty now is forgotten when you leave the tab");
     await page.click("#tab-removed button:has-text('Empty now')");
     await page.waitForTimeout(200);
     await page.click("#tab-removed button:has-text('Click again')");

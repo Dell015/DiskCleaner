@@ -11,7 +11,7 @@ import type { Tree } from "./core/tree";
 import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
-import { cleaningAvailable, emptyCleanup, emptyExpired, listCleanups, removeItems, restoreItems, usePretendCleaning, type CleanupInfo } from "./platform";
+import { cleaningAvailable, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, removeItems, restoreItems, usePretendCleaning, type CleanupInfo } from "./platform";
 import { attach, daysLeft, detach, eligibility, outermost } from "./core/cleanup";
 import type { PickHandlers } from "./panels/explorer";
 import { aiStatus, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
@@ -61,6 +61,8 @@ interface LiveSession {
   /** The user moved around the map during the scan: stop the paced reveal and show their view. */
   manual: boolean;
   lastList: number;
+  /** When the scan started reading the disk (ms). */
+  startedAt: number;
 }
 type Theme = "dark" | "light" | "system";
 
@@ -162,6 +164,16 @@ function canPickNow(): boolean {
   // The desktop app removes from its last finished scan only.
   const s = state.live;
   return Boolean(s && s.finished && !s.active && s.summary?.status !== "cancelled");
+}
+
+/** Removing needs a recent scan (the desktop app refuses older ones too). */
+const SCAN_FRESH_MINUTES = 60;
+
+/** Minutes since the scan being removed from started (desktop), or 0. */
+function scanAgeMinutes(): number {
+  const s = state.live;
+  if (!isDesktop() || !s) return 0;
+  return Math.floor((Date.now() - s.startedAt) / 60_000);
 }
 
 const picking: PickHandlers = {
@@ -518,7 +530,7 @@ function beginLive(starter: (on: (e: LiveEvent) => void) => () => void): void {
     id, lt: null, active: true, finished: false, summary: null, queue: [], queued: new Set(),
     partial: { items: [], byKey: new Map(), open: new Set(), truncated: false },
     lastTarget: 0, lastSync: 0, last: performance.now(), credit: 0, text: "Starting", cancel: () => undefined,
-    root: "", driveRoot: false, volumeUsed: null, files: 0, dirs: 0, current: "", phase: "reading", manual: false, lastList: -1e9,
+    root: "", driveRoot: false, volumeUsed: null, files: 0, dirs: 0, current: "", phase: "reading", manual: false, lastList: -1e9, startedAt: Date.now(),
   };
   state.live = session;
   session.cancel = starter((e) => onLiveEvent(id, e));
@@ -1187,7 +1199,8 @@ function reviewReady(): { ok: boolean; own: boolean } {
     if (g === "your_call") own = true;
     if (g === "probably_safe" && !picks.get(i)) unticked = true;
   }
-  const ok = any && !unticked && (!own || byId<HTMLInputElement>("ownOk").checked);
+  const fresh = scanAgeMinutes() < SCAN_FRESH_MINUTES;
+  const ok = any && fresh && !unticked && (!own || byId<HTMLInputElement>("ownOk").checked);
   return { ok, own };
 }
 
@@ -1229,6 +1242,14 @@ function renderReview(): void {
     list.append(sec);
   }
   byId("reviewTotal").textContent = `${human(total)} will be removed`;
+  const warn = byId("reviewWarn");
+  const age = scanAgeMinutes();
+  warn.textContent = age >= SCAN_FRESH_MINUTES
+    ? `This scan is ${count(age)} minutes old. Scan again before removing, so DiskCleaner judges what is on the disk now.`
+    : total > 200 * 1e9
+      ? `That is a lot: ${human(total)} in total. Look through the list once more before you go on.`
+      : "";
+  warn.hidden = !warn.textContent;
   byId("reviewNote").textContent = `Nothing is deleted now: removed items move to a holding folder on the same drive and are deleted for good after ${settings.retention} days. You can restore them from the Removed tab until then. Each item is checked again right before it moves; anything that changed or is in use is skipped.`;
   byId("ownBox").hidden = !groups.get("your_call")?.length;
   updateReviewButton();
@@ -1259,8 +1280,12 @@ async function doRemove(): Promise<void> {
   if (!t || !reviewReady().ok) return;
   const nodes = pickedNodes().filter((i) => eligibility(t, i).group !== "never");
   const byPath = new Map(nodes.map((i) => [t.path(i).toLowerCase(), i]));
-  const understood = byId<HTMLInputElement>("ownOk").checked;
-  const requests = nodes.map((i) => ({ path: t.path(i), checked: Boolean(picks.get(i)), understood }));
+  const ownOk = byId<HTMLInputElement>("ownOk").checked;
+  // Each tick goes only with the items it was given for.
+  const requests = nodes.map((i) => {
+    const g = eligibility(t, i).group;
+    return { path: t.path(i), checked: g === "probably_safe" && Boolean(picks.get(i)), understood: g === "your_call" && ownOk };
+  });
   byId<HTMLButtonElement>("reviewGo").hidden = true;
   byId("reviewProgress").hidden = false;
   byId("reviewStep").textContent = "Checking and moving…";
@@ -1330,33 +1355,37 @@ function toastAction(message: string, label: string, run: () => void): void {
   toastTimer = window.setTimeout(() => (t.hidden = true), 12000);
 }
 
-/** Hold-to-confirm: the action runs after the button is held for 1.5 s (pointer or keyboard). */
+/**
+ * Hold-to-confirm: with own files included, the action runs after the button is held for 1.5 s
+ * (pointer or keyboard); letting go, leaving the button, a cancelled touch or switching windows
+ * stops it. Otherwise it is an ordinary click (a press can still be cancelled by moving off).
+ */
 function bindHold(button: HTMLButtonElement, run: () => void): void {
+  const holding = (): boolean => button.classList.contains("hold");
   const stop = (): void => {
     clearTimeout(holdTimer);
     holdTimer = 0;
     button.classList.remove("holding");
   };
   const start = (): void => {
-    if (button.disabled || holdTimer) return;
-    if (!button.classList.contains("hold")) {
-      run();
-      return;
-    }
+    if (button.disabled || holdTimer || !holding()) return;
     button.classList.add("holding");
     holdTimer = window.setTimeout(() => {
       stop();
-      run();
+      if (!button.disabled) run();
     }, 1500);
   };
+  button.addEventListener("click", () => {
+    if (!holding() && !button.disabled) run();
+  });
   button.addEventListener("pointerdown", start);
-  button.addEventListener("pointerup", stop);
-  button.addEventListener("pointerleave", stop);
+  for (const ev of ["pointerup", "pointerleave", "pointercancel", "lostpointercapture", "blur"]) button.addEventListener(ev, stop);
+  window.addEventListener("blur", stop);
+  document.addEventListener("visibilitychange", stop);
   button.addEventListener("keydown", (e) => {
-    if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
-      e.preventDefault();
-      start();
-    }
+    if (!holding() || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    if (!e.repeat) start();
   });
   button.addEventListener("keyup", (e) => {
     if (e.key === "Enter" || e.key === " ") stop();
@@ -1364,6 +1393,32 @@ function bindHold(button: HTMLButtonElement, run: () => void): void {
 }
 
 let removedArmed = "";
+let removedArmTimer = 0;
+
+/** "Empty now" asks twice; the second click must come within 5 seconds. */
+function armEmpty(id: string): void {
+  removedArmed = id;
+  clearTimeout(removedArmTimer);
+  removedArmTimer = window.setTimeout(() => {
+    removedArmed = "";
+    if (state.tab === "removed") void renderRemoved();
+  }, 5000);
+}
+
+function disarmEmpty(): void {
+  removedArmed = "";
+  clearTimeout(removedArmTimer);
+}
+
+/** Bytes still held in a cleanup. */
+function heldBytes(c: CleanupInfo): number {
+  return c.items.filter((i) => i.state === "held").reduce((a, i) => a + i.bytes, 0);
+}
+
+/** Cleanups (with something held) that will be deleted for good within `days` days. */
+function endingSoon(list: CleanupInfo[], days: number): CleanupInfo[] {
+  return list.filter((c) => c.created > 0 && heldBytes(c) > 0 && daysLeft(c.created, settings.retention) <= days);
+}
 
 async function renderRemoved(): Promise<void> {
   const el = byId("tab-removed");
@@ -1381,26 +1436,31 @@ async function renderRemoved(): Promise<void> {
     el.append(h("p", { class: "lead" }, "Nothing removed yet."));
     return;
   }
+  const soon = endingSoon(list, 3);
+  if (soon.length) el.append(h("p", { class: "warn" }, `${human(soon.reduce((a, c) => a + heldBytes(c), 0))} will be deleted for good within 3 days. Restore anything you still need.`));
   for (const c of list) {
     const held = c.items.filter((i) => i.state === "held");
     const bytes = held.reduce((a, i) => a + i.bytes, 0);
-    const when = new Date(c.created * 1000).toLocaleString();
-    const status = held.length ? `${human(bytes)} held · deleted for good in ${daysLeft(c.created, settings.retention)} days` : c.items.some((i) => i.state === "emptied") ? "deleted for good" : "all restored";
+    // A cleanup whose date was lost is never deleted automatically.
+    const when = c.created > 0 ? new Date(c.created * 1000).toLocaleString() : "Date unknown";
+    const left = c.created > 0 ? `deleted for good in ${daysLeft(c.created, settings.retention)} days` : "kept until you empty it";
+    const status = held.length ? `${human(bytes)} held · ${left}` : c.items.some((i) => i.state === "emptied") ? "deleted for good" : "all restored";
     const sec = h("section", { class: "rm-cleanup" }, h("header", {}, h("b", {}, when), h("span", { class: "quiet" }, ` ${count(c.items.length)} item${c.items.length === 1 ? "" : "s"} · ${status}`)));
     if (held.length) {
       const empty = h("button", { class: removedArmed === c.id ? "danger" : "", onclick: () => {
         if (removedArmed !== c.id) {
-          removedArmed = c.id;
+          armEmpty(c.id);
           void renderRemoved();
           return;
         }
-        removedArmed = "";
+        disarmEmpty();
         emptyCleanup(c.id).then((b) => { toast(`Deleted for good: ${human(b)} freed.`); removedNodes.delete(c.id); void renderRemoved(); }).catch((err) => showError(String(err)));
       } }, removedArmed === c.id ? "Click again to delete for good" : "Empty now");
       sec.append(h("div", { class: "rm-actions" }, h("button", { onclick: () => void undoCleanup(c.id).then(() => renderRemoved()) }, "Restore all"), empty));
     }
     const ul = h("ul", { class: "rm-items" });
-    for (const it of c.items.slice(0, 200)) {
+    const SHOWN = 200;
+    for (const it of c.items.slice(0, SHOWN)) {
       const name = it.original.split(/[\\/]/).pop() ?? it.original;
       ul.append(h("li", { class: `rm-${it.state}` },
         h("div", {}, h("b", {}, name), h("span", { class: "path" }, it.original),
@@ -1408,6 +1468,7 @@ async function renderRemoved(): Promise<void> {
         it.state === "held" ? h("button", { onclick: () => void undoCleanup(c.id, [[it.root, it.n]]).then(() => renderRemoved()) }, "Restore") : null));
     }
     sec.append(ul);
+    if (c.items.length > SHOWN) sec.append(h("p", { class: "quiet" }, `…and ${count(c.items.length - SHOWN)} more (${count(c.items.filter((i) => i.state === "held").length)} held in all). "Restore all" includes them.`));
     el.append(sec);
   }
 }
@@ -1452,12 +1513,41 @@ async function setupCleaning(): Promise<void> {
   renderFlat();
   renderSide();
   try {
-    const freed = await emptyExpired(settings.retention);
-    const bytes = freed.reduce((a, [, b]) => a + b, 0);
-    if (freed.length) toast(`Deleted for good ${human(bytes)} removed more than ${settings.retention} days ago.`);
+    await emptyOld();
   } catch {
     /* nothing to empty */
   }
+}
+
+/** Above this, or with more than one cleanup at once (a clock that jumped?), ask first. */
+const ASK_ABOVE_BYTES = 50 * 1e9;
+
+/**
+ * When DiskCleaner opens: delete for good what was removed more than the retention time ago.
+ * One small cleanup goes quietly (with a note); several at once, or a lot of space, is asked
+ * first. Cleanups ending within 3 days get a reminder.
+ */
+async function emptyOld(): Promise<void> {
+  const days = settings.retention;
+  const old = await expiredCleanups(days);
+  const bytes = old.reduce((a, c) => a + c.bytes, 0);
+  const run = async (): Promise<void> => {
+    const freed = await emptyExpired(days, old.map((c) => c.id));
+    const done = freed.reduce((a, [, b]) => a + b, 0);
+    if (freed.length) toast(`Deleted for good ${human(done)} removed more than ${days} days ago.`);
+    if (state.tab === "removed") void renderRemoved();
+  };
+  if (old.length === 1 && bytes <= ASK_ABOVE_BYTES) await run();
+  else if (old.length) {
+    const dlg = byId<HTMLDialogElement>("expire");
+    byId("expireText").textContent = `${count(old.length)} earlier removal${old.length === 1 ? " is" : "s are"} older than ${days} days: ${human(bytes)} in all, first removed on ${new Date(Math.min(...old.map((c) => c.created)) * 1000).toLocaleDateString()}. Delete ${old.length === 1 ? "it" : "them"} for good now? If the date looks wrong, check your computer's clock and choose Not now. You can restore anything you need from the Removed tab first.`;
+    byId("expireGo").onclick = () => { dlg.close(); void run().catch((e) => showError(String(e))); };
+    byId("expireLater").onclick = () => dlg.close();
+    dlg.showModal();
+    return;
+  }
+  const soon = endingSoon(await listCleanups(), 3);
+  if (soon.length) toast(`${human(soon.reduce((a, c) => a + heldBytes(c), 0))} of removed items will be deleted for good within 3 days. Restore anything you need from the Removed tab.`);
 }
 
 // ---------- AI assistant (desktop app only) ----------
@@ -1538,6 +1628,8 @@ function stopDups(): void {
 function resetScanExtras(): void {
   stopDups();
   picks.clear();
+  // Undo puts entries back into the picture they were taken from; a new picture has its own.
+  removedNodes.clear();
   pickbar();
   state.dups = emptyDups();
   state.unreadable = [];
@@ -1561,6 +1653,7 @@ async function saveCurrentScan(): Promise<void> {
 }
 
 function setTab(t: Tab): void {
+  if (t !== state.tab) disarmEmpty();
   state.tab = t;
   document.querySelectorAll<HTMLButtonElement>(".tabs button").forEach((b) => {
     const on = b.dataset.tab === t;
@@ -1903,11 +1996,28 @@ function bindSettings(): void {
     settings.chosen = true;
     applyQuality();
   });
+  let retentionArmed = 0;
   document.querySelectorAll<HTMLButtonElement>("#retention button").forEach((b) => b.addEventListener("click", () => {
-    settings.retention = Number(b.dataset.days) || 30;
-    saveSettings();
-    renderSettings();
-    if (state.tab === "removed") void renderRemoved();
+    const days = Number(b.dataset.days) || 30;
+    const note = byId("retentionNote");
+    const apply = (): void => {
+      retentionArmed = 0;
+      note.hidden = true;
+      settings.retention = days;
+      saveSettings();
+      renderSettings();
+      if (state.tab === "removed") void renderRemoved();
+    };
+    if (days >= settings.retention || retentionArmed === days) return apply();
+    // Fewer days: say what that deletes for good the next time DiskCleaner opens, and ask again.
+    void listCleanups().then((list) => {
+      const now = Date.now() / 1000;
+      const hit = list.filter((c) => c.created > 0 && heldBytes(c) > 0 && c.created <= now - days * 86_400);
+      if (!hit.length) return apply();
+      retentionArmed = days;
+      note.textContent = `With ${days} days, ${count(hit.length)} earlier removal${hit.length === 1 ? "" : "s"} (${human(hit.reduce((a, c) => a + heldBytes(c), 0))}) will be deleted for good the next time DiskCleaner opens. Click ${days} days again to confirm.`;
+      note.hidden = false;
+    }).catch(apply);
   }));
   byId<HTMLInputElement>("lastUsed").addEventListener("change", (e) => {
     settings.lastUsed = (e.target as HTMLInputElement).checked;

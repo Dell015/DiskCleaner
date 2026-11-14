@@ -80,6 +80,13 @@ pub enum Line {
         /// Where to.
         to: PathBuf,
     },
+    /// One file of a split item is back (path relative to the item).
+    FileRestored {
+        /// Item number.
+        n: u32,
+        /// Relative path.
+        rel: String,
+    },
     /// Item `n` is back.
     Restored {
         /// Item number.
@@ -99,17 +106,71 @@ pub enum Line {
     },
 }
 
-/// Read a journal. Lines that cannot be read (a crash in the middle of a write) are ignored:
-/// the step they announced is then judged by looking at the disk.
+/// Read a journal. Every record that can be read is kept, even when a damaged write left two
+/// records on one line (a lost line break) or a half-written record in front of a good one.
+/// Pieces that cannot be read are skipped: the step they announced is judged by the disk.
 pub fn read(path: &Path) -> Vec<Line> {
-    std::fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .filter_map(|l| serde_json::from_str(l).ok())
-        .collect()
+    let text = std::fs::read(path).unwrap_or_default();
+    parse(&String::from_utf8_lossy(&text))
+}
+
+/// The records in a journal's text (see [`read`]).
+pub fn parse(text: &str) -> Vec<Line> {
+    // Every record starts with `{"op":` (the tag is written first). That text cannot appear
+    // inside a record: quotes inside strings are escaped.
+    const START: &str = "{\"op\":";
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let mut at = 0;
+        while let Some(found) = line[at..].find(START) {
+            let begin = at + found;
+            let mut stream = serde_json::Deserializer::from_str(&line[begin..]).into_iter::<Line>();
+            match stream.next() {
+                Some(Ok(record)) => {
+                    out.push(record);
+                    at = begin + stream.byte_offset();
+                }
+                _ => at = begin + START.len(),
+            }
+        }
+    }
+    out
 }
 
 /// A line as text.
 pub fn text(line: &Line) -> String {
     serde_json::to_string(line).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn records_survive_a_lost_line_break_and_a_torn_write() {
+        let a = text(&Line::Start { time: 7 });
+        let b = text(&Line::Held { n: 1 });
+        let c = text(&Line::Hold {
+            n: 2,
+            record: Record {
+                original: PathBuf::from(r#"C:\x\{"op":odd}"#),
+                held: PathBuf::from(r"C:\h\2\y"),
+                is_dir: false,
+                bytes: 1,
+                files: 1,
+                group: "safe".into(),
+                title: "t".into(),
+                reason: "r".into(),
+            },
+        });
+        // b lost its line break; a half record sits in front of c.
+        let joined = format!("{a}\n{b}{c}\n{{\"op\":\"held\",\"n\"{c}\n");
+        let lines = parse(&joined);
+        assert_eq!(lines.len(), 4, "{lines:?}");
+        assert_eq!(lines[0], Line::Start { time: 7 });
+        assert_eq!(lines[1], Line::Held { n: 1 });
+        assert!(matches!(lines[2], Line::Hold { n: 2, .. }));
+        assert!(matches!(lines[3], Line::Hold { n: 2, .. }));
+        assert!(parse("garbage\n{\"op\":\n").is_empty());
+    }
 }

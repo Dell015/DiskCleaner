@@ -112,6 +112,7 @@
       <header><h2>Review before removing</h2><button id="reviewClose" aria-label="Close">×</button></header>
       <div id="reviewList"></div>
       <p class="quiet" id="reviewNote"></p>
+      <p class="warn" id="reviewWarn" hidden></p>
       <label class="opt" id="ownBox" hidden><input type="checkbox" id="ownOk"> I understand these are my own files, and DiskCleaner cannot know whether I still need them.</label>
       <div class="review-actions">
         <span id="reviewTotal"></span>
@@ -120,6 +121,17 @@
       </div>
       <div id="reviewProgress" hidden><div class="ov-progress"><span id="reviewFill"></span></div><span id="reviewStep"></span></div>
       <div id="reviewResult" hidden></div>
+    </div>
+  </dialog>
+  <dialog id="expire" aria-label="Delete old removed items for good">
+    <div class="review-body">
+      <header><h2>Delete old removed items for good?</h2></header>
+      <p id="expireText"></p>
+      <div class="review-actions">
+        <span></span>
+        <button id="expireLater">Not now</button>
+        <button id="expireGo" class="danger">Delete for good</button>
+      </div>
     </div>
   </dialog>
   <dialog id="settings" aria-label="Settings">
@@ -156,6 +168,7 @@
           <button type="button" data-days="30">30 days</button>
           <button type="button" data-days="60">60 days</button>
         </div>
+        <p class="warn" id="retentionNote" hidden></p>
       </fieldset>
       <fieldset><legend>Privacy</legend>
         <label class="opt"><input type="checkbox" id="lastUsed"> Show when apps were last used</label>

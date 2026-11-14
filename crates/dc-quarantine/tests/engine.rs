@@ -30,13 +30,18 @@ impl Places for Here {
     }
 }
 
-/// Refuses anything with "protected" in its path.
+/// Refuses anything with "protected" in its path; "Program Files" is not your own.
 struct NameGuard;
 impl Guard for NameGuard {
     fn refuse(&self, path: &Path) -> Option<String> {
         path.to_string_lossy()
             .contains("protected")
             .then(|| "it is protected".to_owned())
+    }
+    fn refuse_own(&self, path: &Path) -> Option<String> {
+        path.to_string_lossy()
+            .contains("Program Files")
+            .then(|| "it is not one of your own files".to_owned())
     }
 }
 
@@ -52,6 +57,9 @@ struct Faults {
     crash_after_rename: Option<usize>,
     /// Fail every append after this many.
     appends_ok: Option<usize>,
+    /// Write this append (1-based) torn: only its first half, no line break (a crash or a full
+    /// disk in the middle of a write).
+    torn_append: Option<usize>,
 }
 
 impl Ops for Faults {
@@ -89,10 +97,22 @@ impl Ops for Faults {
         if self.appends_ok.is_some_and(|ok| k > ok) {
             return Err(io::Error::other("disk full"));
         }
+        if self.torn_append == Some(k) {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)?;
+            f.write_all(&line.as_bytes()[..line.len() / 2])?;
+            return Err(io::Error::other("disk full half-way"));
+        }
         RealOps.append_line(path, line)
     }
     fn remove_tree(&self, path: &Path) -> io::Result<()> {
         RealOps.remove_tree(path)
+    }
+    fn protect_dir(&self, path: &Path) -> io::Result<()> {
+        RealOps.protect_dir(path)
     }
 }
 
@@ -412,7 +432,8 @@ fn a_crash_right_after_a_move_is_read_back_from_the_disk() {
     let items = [
         item(w.disk.join("Downloads/setup.exe"), Group::Safe),
         item(w.disk.join("Downloads/old.zip"), Group::Safe),
-        item(w.disk.join("Cache"), Group::Safe),
+        // Same depth, so the order stays as given (outer items go first).
+        item(w.disk.join("Cache/a.bin"), Group::Safe),
     ];
     let crashed =
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.remove(&items, |_, _| {})));
@@ -516,7 +537,22 @@ fn only_the_ops_file_may_call_rename_or_remove() {
     for entry in std::fs::read_dir(src).unwrap() {
         let path = entry.unwrap().path();
         let text = std::fs::read_to_string(&path).unwrap();
-        if path.file_name().unwrap() == "ops.rs" {
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        // `unsafe` lives only in win.rs, and only ops.rs calls into it (D119).
+        if name != "win.rs" {
+            assert!(!text.contains("unsafe {"), "{name} contains unsafe");
+            for call in [
+                "MoveFileExW",
+                "SetFileInformationByHandle",
+                "SetFileSecurityW",
+            ] {
+                assert!(!text.contains(call), "{name} contains {call}");
+            }
+        }
+        if name != "ops.rs" {
+            assert!(!text.contains("win::"), "{name} calls win.rs");
+        }
+        if name == "ops.rs" {
             continue;
         }
         for banned in [
@@ -535,4 +571,273 @@ fn only_the_ops_file_may_call_rename_or_remove() {
             );
         }
     }
+}
+
+// ---- Findings of the B9 safety review (2026-11-14) ----
+
+fn names(e: &Engine) -> Vec<String> {
+    e.cleanups()
+        .iter()
+        .flat_map(|c| c.items.iter())
+        .filter(|i| i.state == State::Held)
+        .map(|i| {
+            i.record
+                .original
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn a_torn_journal_line_loses_no_other_record() {
+    // Finding 1: the "moved" line of the first item is torn (half written, no line break).
+    // Before the fix the next item's record was swallowed with it and its files were invisible.
+    let w = world();
+    let places = Here(w.holding.clone());
+    // Appends: 1 start, 2 holding list, 3 hold #1, 4 held #1 (torn), 5 log, 6 hold #2, ...
+    let ops = Faults {
+        torn_append: Some(4),
+        ..Faults::default()
+    };
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &ops);
+    let out = e.remove(
+        &[
+            item(w.disk.join("Downloads/setup.exe"), Group::Safe),
+            item(w.disk.join("Downloads/old.zip"), Group::Safe),
+        ],
+        |_, _| {},
+    );
+    assert_eq!(out.held.len(), 2);
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    assert_eq!(names(&e), ["setup.exe", "old.zip"], "both are listed");
+    assert_eq!(e.restore(&out.id, None).back.len(), 2, "and both come back");
+    assert!(w.disk.join("Downloads/old.zip").exists());
+}
+
+#[test]
+fn a_cleanup_with_a_lost_start_time_is_never_emptied_automatically() {
+    // Findings 1 and 2: the start record is torn, so the cleanup's age is unknown.
+    let w = world();
+    let places = Here(w.holding.clone());
+    let ops = Faults {
+        torn_append: Some(1),
+        ..Faults::default()
+    };
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &ops);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    // The start could not be written, so nothing was moved at all.
+    assert!(out.held.is_empty());
+    assert!(w.disk.join("Cache/a.bin").exists());
+
+    // A journal damaged later (by hand here) still never expires.
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    let journal = w.holding.join(&out.id).join("journal.jsonl");
+    let text = std::fs::read_to_string(&journal).unwrap();
+    let (first, rest) = text.split_once('\n').unwrap();
+    std::fs::write(&journal, format!("{}{rest}", &first[..first.len() / 2])).unwrap();
+    let list = e.cleanups();
+    assert_eq!(list[0].created, 0, "unknown");
+    assert_eq!(list[0].items.len(), 1, "the item is still listed");
+    let far_future = 4_000_000_000;
+    assert!(e.expired(30, far_future).is_empty());
+    assert!(e.empty_expired(30, far_future).is_empty());
+    assert!(w.holding.join(&out.id).join("items/1/Cache/a.bin").exists());
+}
+
+#[test]
+fn a_clock_that_went_back_or_forward_by_mistake_is_not_trusted_blindly() {
+    // Finding 2: a cleanup "made in the future" (the clock was wrong then, or is wrong now).
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    let created = e.cleanups()[0].created;
+    assert!(e.empty_expired(30, created - 1).is_empty());
+    assert!(e.empty_expired(0, created - 86_400).is_empty());
+    assert_eq!(e.expired(30, created + 30 * 86_400).len(), 1);
+    assert!(w.holding.join(&out.id).join("items").exists());
+}
+
+#[test]
+fn emptying_refuses_anything_the_record_does_not_describe() {
+    // Finding 5: a stray folder in the items folder is never deleted unseen.
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    let stray = w.holding.join(&out.id).join("items/99/stray.txt");
+    std::fs::create_dir_all(stray.parent().unwrap()).unwrap();
+    std::fs::write(&stray, "not in the record").unwrap();
+    let err = e.empty(&out.id).unwrap_err();
+    assert!(err.contains("not in DiskCleaner's record"), "{err}");
+    assert!(stray.exists());
+    assert!(w.holding.join(&out.id).join("items/1/Cache/a.bin").exists());
+    std::fs::remove_dir_all(stray.parent().unwrap()).unwrap();
+    assert_eq!(e.empty(&out.id).unwrap(), 11);
+}
+
+#[test]
+fn a_file_by_file_restore_that_stops_part_way_can_be_finished() {
+    // Finding 4: crash after the first file went back.
+    let w = world();
+    let places = Here(w.holding.clone());
+    let ops = Faults {
+        fail_rename: Some((1, io::ErrorKind::PermissionDenied)),
+        ..Faults::default()
+    };
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &ops);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    assert_eq!(out.held[0].only_files.as_ref().unwrap().len(), 3);
+    let crash = Faults {
+        crash_after_rename: Some(1),
+        ..Faults::default()
+    };
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &crash);
+    let crashed =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.restore(&out.id, None)));
+    assert!(crashed.is_err());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let item = e.cleanups()[0].items[0].clone();
+    assert_eq!(item.state, State::Held);
+    assert_eq!(
+        item.only_files.as_ref().unwrap().len(),
+        2,
+        "one file is back"
+    );
+    assert_eq!(item.record.files, 2);
+    let back = e.restore(&out.id, None);
+    assert!(back.problems.is_empty(), "{:?}", back.problems);
+    assert!(matches!(
+        e.cleanups()[0].items[0].state,
+        State::Restored { .. }
+    ));
+    for f in ["Cache/a.bin", "Cache/sub/b.bin", "Cache/sub/deeper/c.bin"] {
+        assert!(w.disk.join(f).exists(), "{f}");
+    }
+}
+
+#[test]
+fn program_folders_are_never_your_own_files_but_findings_there_still_move() {
+    // Finding 3, the engine's own last check.
+    let w = world();
+    let tool = w.disk.join("Program Files/SomeTool");
+    std::fs::create_dir_all(&tool).unwrap();
+    std::fs::write(tool.join("tool.exe"), "exe").unwrap();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(
+        &[item(tool.clone(), Group::YourCall { understood: true })],
+        |_, _| {},
+    );
+    assert!(out.skipped[0].why.contains("not one of your own"));
+    assert!(tool.join("tool.exe").exists());
+    let out = e.remove(&[item(tool.clone(), Group::Safe)], |_, _| {});
+    assert_eq!(out.held.len(), 1, "a finding there is decided by its rule");
+}
+
+#[test]
+fn leftovers_that_changed_after_the_scan_are_skipped() {
+    // Finding 8: leftovers of an app that is in use again.
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let mut left = item(w.disk.join("Cache"), Group::Safe);
+    left.reason = "leftover_missing_app".into();
+    left.newest_at_scan = 1_000_000_000;
+    let out = e.remove(&[left], |_, _| {});
+    assert!(out.held.is_empty());
+    assert!(out.skipped[0].why.contains("changed after the scan"));
+}
+
+#[test]
+fn an_item_inside_another_moves_with_it_whatever_the_order() {
+    // Finding 9: inner picked before outer.
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(
+        &[
+            item(w.disk.join("Cache/sub"), Group::Safe),
+            item(w.disk.join("Cache"), Group::Safe),
+            item(w.disk.join("Cache"), Group::Safe),
+        ],
+        |_, _| {},
+    );
+    assert_eq!(out.held.len(), 1);
+    assert_eq!(out.held[0].record.files, 3);
+    assert!(out.skipped.is_empty());
+    let back = e.restore(&out.id, None);
+    assert_eq!(back.back.len(), 1);
+    assert!(w.disk.join("Cache/sub/deeper/c.bin").exists());
+    assert!(!w.disk.join("Cache (restored)").exists());
+}
+
+#[test]
+fn only_one_removal_restore_or_emptying_runs_at_a_time() {
+    // Finding 11.
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    let other = std::fs::OpenOptions::new()
+        .write(true)
+        .open(w.data.join("cleaning.lock"))
+        .unwrap();
+    other.lock().unwrap();
+    let busy = e.remove(
+        &[item(w.disk.join("Downloads/old.zip"), Group::Safe)],
+        |_, _| {},
+    );
+    assert!(busy.skipped[0].why.contains("another removal"));
+    assert!(e.restore(&out.id, None).problems[0]
+        .why
+        .contains("another removal"));
+    assert!(e.empty(&out.id).unwrap_err().contains("another removal"));
+    assert!(w.disk.join("Downloads/old.zip").exists());
+    drop(other);
+    assert_eq!(e.restore(&out.id, None).back.len(), 1);
+    // Ids are unique per process too.
+    assert!(out.id.ends_with(&format!("-{}", std::process::id())));
+}
+
+#[test]
+fn moving_never_replaces_anything() {
+    // Finding 9: the move itself refuses a taken name (not only the free-name check before it).
+    let w = world();
+    let a = w.disk.join("Downloads/old.zip");
+    let b = w.disk.join("Downloads/setup.exe");
+    let err = RealOps.rename(&a, &b).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "installer bytes");
+    assert_eq!(std::fs::read_to_string(&a).unwrap(), "zip");
+}
+
+#[test]
+fn restoring_never_makes_folders_inside_a_link() {
+    // Finding 9: the missing parent is under a folder that became a link.
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(
+        &[item(w.disk.join("Cache/sub/deeper"), Group::Safe)],
+        |_, _| {},
+    );
+    std::fs::rename(w.disk.join("Cache"), w.disk.join("Cache-moved")).unwrap();
+    let target = w.disk.join("Elsewhere");
+    std::fs::create_dir_all(&target).unwrap();
+    if !link_dir(&target, &w.disk.join("Cache")) {
+        eprintln!("links cannot be made here: test skipped");
+        return;
+    }
+    let back = e.restore(&out.id, None);
+    assert!(back.back.is_empty());
+    assert!(back.problems[0].why.contains("link"));
+    assert!(
+        std::fs::read_dir(&target).unwrap().next().is_none(),
+        "nothing was made inside the link's target"
+    );
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTree } from "../../src/core/build";
 import { checkView } from "../../src/core/format";
 import { makeDemo } from "../../src/core/demo";
-import { attach, daysLeft, detach, eligibility, outermost } from "../../src/core/cleanup";
+import { attach, daysLeft, detach, eligibility, notYourOwn, outermost } from "../../src/core/cleanup";
 
 const tree = buildTree(checkView(makeDemo(20_000, 42, 1_762_000_000)));
 const find = (p: string): number => {
@@ -24,6 +24,29 @@ describe("which group a pick is in (same rules as the Rust side)", () => {
     expect(group("C:\\Users\\demo\\OneDrive")).toBe("never");
     expect(eligibility(tree, 1).group).toBe("never");
     expect(eligibility(tree, 0).group).toBe("never");
+  });
+
+  it("your own places: the same table as dc_protected::not_your_own", () => {
+    for (const own of ["C:\\Users\\me\\Downloads\\a.zip", "C:\\Users\\me\\Saved Games\\x", "C:\\Tools\\thing", "E:\\Movies\\old", "E:\\Users\\backup-of-me\\x"]) {
+      expect(notYourOwn(own), own).toBeNull();
+    }
+    for (const never of [
+      "C:\\Program Files\\SomeTool", "C:\\Program Files (x86)\\Game\\x", "C:\\ProgramData\\Thing", "C:\\Windows\\System32",
+      "C:\\$Recycle.Bin\\x", "C:\\Users", "C:\\Users\\me", "C:\\Users\\Default\\Desktop", "C:\\Users\\me\\AppData\\Local\\x",
+      "C:\\Users\\me\\.ssh", "C:\\Users\\me\\NTUSER.DAT", "C:\\Users\\me\\OneDrive - Work\\a", "E:\\stuff\\AppData\\x", "C:\\",
+      "\\\\server\\share\\x", "relative", "/tmp/x",
+    ]) {
+      expect(notYourOwn(never), never).not.toBeNull();
+    }
+  });
+
+  it("Documents, Desktop, Pictures, Music and Videos are never offered (the engine protects them)", () => {
+    for (let i = 1; i < tree.n; i++) {
+      const p = tree.path(i).toLowerCase();
+      if (/^c:\\users\\[^\\]+\\(documents|desktop|pictures|music|videos)(\\|$)/.test(p)) {
+        expect(eligibility(tree, i).group, p).toBe("never");
+      }
+    }
   });
 });
 

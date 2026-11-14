@@ -10,8 +10,10 @@
 //! - Every step is written to an append-only journal *before* it happens; the journal is the only
 //!   record, so a crash at any point leaves a state that can be read back exactly.
 //! - No `unwrap`, `expect` or `panic!` outside tests.
+//! - `unsafe` only in `win.rs` (Windows calls for checked moves and protected holding folders,
+//!   D119), each block with a `// SAFETY:` note.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 #[cfg(feature = "destructive-actions")]
@@ -24,6 +26,9 @@ mod journal;
 mod ops;
 #[cfg(feature = "destructive-actions")]
 mod places;
+#[cfg(all(windows, feature = "destructive-actions"))]
+#[allow(unsafe_code)]
+mod win;
 
 #[cfg(feature = "destructive-actions")]
 pub use engine::{Cleanup, Engine, Group, HeldItem, Item, Outcome, Restored, Skipped, State};

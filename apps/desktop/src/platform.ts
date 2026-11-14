@@ -183,7 +183,26 @@ export async function emptyCleanup(id: string): Promise<number> {
   return invoke<number>("empty_cleanup", { id });
 }
 
-export async function emptyExpired(days: number): Promise<[string, number][]> {
-  if (pretend) return [];
-  return invoke<[string, number][]>("empty_expired", { days });
+/** A cleanup whose retention time is over (nothing is deleted by asking). */
+export interface ExpiredInfo { id: string; created: number; bytes: number }
+
+export async function expiredCleanups(days: number): Promise<ExpiredInfo[]> {
+  if (pretend) {
+    const limit = Date.now() / 1000 - days * 86_400;
+    return pretend.cleanups
+      .filter((c) => c.created > 0 && c.created <= limit && c.items.some((i) => i.state === "held"))
+      .map((c) => ({ id: c.id, created: c.created, bytes: c.items.filter((i) => i.state === "held").reduce((a, i) => a + i.bytes, 0) }));
+  }
+  return invoke<ExpiredInfo[]>("expired_cleanups", { days });
+}
+
+/** Empty the cleanups `ids`, each only if it is still older than `days`. */
+export async function emptyExpired(days: number, ids: string[]): Promise<[string, number][]> {
+  if (pretend) {
+    const old = new Set((await expiredCleanups(days)).map((c) => c.id));
+    const out: [string, number][] = [];
+    for (const id of ids) if (old.has(id)) out.push([id, await emptyCleanup(id)]);
+    return out;
+  }
+  return invoke<[string, number][]>("empty_expired", { days, ids });
 }
