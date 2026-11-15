@@ -200,3 +200,37 @@ fn splitting_the_work_never_changes_the_answer() {
         assert_eq!(divided, one_thread, "split at {split}");
     }
 }
+
+#[test]
+fn a_dont_touch_folder_inside_blocks_the_whole_folder() {
+    // QA finding 3: Teams' cache folder is offered, but the person's uploaded backgrounds
+    // inside it are a Don't touch rule. The folder as a whole must not be offered.
+    let r = run(&[
+        f(
+            r"Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\a",
+            1000,
+            1,
+        ),
+        f(
+            r"Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Backgrounds\Uploads\me.jpg",
+            500,
+            1,
+        ),
+    ]);
+    // The rest (the web view cache next to it) is still offered on its own.
+    assert!(
+        r.items
+            .iter()
+            .all(|i| !i.path.ends_with(r"\MSTeams") && !i.path.contains("Backgrounds")),
+        "{:?}",
+        r.items
+    );
+    assert_eq!(r.items.iter().map(|i| i.sizes.files).sum::<u64>(), 1);
+    assert!(
+        r.blocked
+            .iter()
+            .any(|b| b.because.contains("Don't touch") && b.because.contains("Backgrounds")),
+        "{:?}",
+        r.blocked
+    );
+}

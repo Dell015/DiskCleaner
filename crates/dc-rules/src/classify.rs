@@ -131,6 +131,17 @@ impl Classifier {
         }
     }
 
+    /// The first `DontTouch` rule that names this path (by its typed spelling), if any. Used
+    /// to look inside a folder a rule would offer: a "don't touch" folder inside stops the offer.
+    pub fn dont_touch_rule(&self, path: &str, facts: &NodeFacts, now: i64) -> Option<&str> {
+        let typed = normalize(path).ok()?;
+        self.rules
+            .iter()
+            .filter(|r| r.rule.risk == Risk::DontTouch)
+            .find(|r| Self::applies(r, &typed, facts, now))
+            .map(|r| r.rule.id.as_str())
+    }
+
     /// Classify one item. `now` is the current time in seconds since the Unix epoch.
     pub fn classify(
         &self,

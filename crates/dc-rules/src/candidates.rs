@@ -120,13 +120,15 @@ fn facts_of(node: &Node) -> NodeFacts {
     }
 }
 
-/// The first thing inside `dir` that makes it unfit to offer, if any.
+/// The first thing inside `dir` that makes it unfit to offer, if any. `now` is the current
+/// time (seconds since the Unix epoch), for the Don't touch rules.
 fn blocker_inside(
     tree: &Tree,
     children: &[Vec<NodeId>],
     dir: NodeId,
     dir_path: &str,
     classifier: &Classifier,
+    now: i64,
     inspected: &mut u64,
 ) -> Option<String> {
     let mut stack: Vec<(NodeId, String)> = vec![(dir, dir_path.to_owned())];
@@ -138,19 +140,23 @@ fn blocker_inside(
             *inspected += 1;
             let child_path = join(&path, &node.name);
             let why = if node.flags.reparse {
-                Some("a link or junction")
+                Some("a link or junction".to_owned())
             } else if node.flags.cloud {
-                Some("a cloud placeholder file")
+                Some("a cloud placeholder file".to_owned())
             } else if node.flags.hardlink {
-                Some("a file with more than one name")
+                Some("a file with more than one name".to_owned())
             } else if classifier
                 .protected()
                 .check(&child_path, &FakeResolver::new())
                 .protected
             {
-                Some("something protected")
+                Some("something protected".to_owned())
             } else {
-                None
+                // A folder a Don't touch rule names (saves, sign-ins, uploads) inside an offered
+                // folder: the rule wins over the parent's offer, not only over its own node.
+                classifier
+                    .dont_touch_rule(&child_path, &facts_of(node), now)
+                    .map(|rule| format!("something marked Don't touch ({rule})"))
             };
             if let Some(why) = why {
                 return Some(format!("{why}: {child_path}"));
@@ -275,6 +281,7 @@ fn visit(ctx: &Ctx<'_>, id: NodeId, path: &str, part: &mut Partial) -> bool {
                     id,
                     path,
                     ctx.classifier,
+                    ctx.now,
                     &mut part.work.inspected,
                 );
                 part.work.inspect_micros += micros(started);
@@ -369,7 +376,8 @@ fn push_children(ctx: &Ctx<'_>, id: NodeId, path: &str, push: &mut dyn FnMut((No
 const SPLIT_AT: usize = 4096;
 
 /// What inside `dir` (a folder of the scan, at `dir_path`) makes it unfit to offer: a link, a
-/// cloud placeholder, a file with more than one name, or something protected. `None` if
+/// cloud placeholder, a file with more than one name, something protected, or something a Don't
+/// touch rule names. `None` if
 /// nothing does. Used by B4b candidates and B5 leftovers, so both apply the same test.
 pub fn folder_blocker(
     tree: &Tree,
@@ -377,8 +385,9 @@ pub fn folder_blocker(
     dir: NodeId,
     dir_path: &str,
     classifier: &Classifier,
+    now: i64,
 ) -> Option<String> {
-    blocker_inside(tree, children, dir, dir_path, classifier, &mut 0)
+    blocker_inside(tree, children, dir, dir_path, classifier, now, &mut 0)
 }
 
 /// Look through a scan. `now` is the current time (seconds since the Unix epoch).
@@ -507,7 +516,7 @@ pub fn explain(
             let facts = facts_of(node);
             let classification = classifier.classify(&path, &facts, resolver, now);
             let blocker = (facts.is_dir && classification.risk != Risk::DontTouch)
-                .then(|| blocker_inside(&tree, &children, id, &path, classifier, &mut 0))
+                .then(|| blocker_inside(&tree, &children, id, &path, classifier, now, &mut 0))
                 .flatten();
             return Ok(Some(Explanation {
                 path,
