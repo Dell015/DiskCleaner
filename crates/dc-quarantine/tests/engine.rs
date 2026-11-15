@@ -841,3 +841,93 @@ fn restoring_never_makes_folders_inside_a_link() {
         "nothing was made inside the link's target"
     );
 }
+
+/// QA finding 1: the holding folder itself is a link (planted first on a shared drive).
+#[test]
+fn a_holding_folder_that_is_a_link_is_refused() {
+    let w = world();
+    let before = snapshot(&w.disk);
+    let target = w.disk.parent().unwrap().join("elsewhere");
+    std::fs::create_dir_all(&target).unwrap();
+    if !link_dir(&target, &w.holding) {
+        eprintln!("links cannot be made here: test skipped");
+        return;
+    }
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    assert!(out.held.is_empty() && out.id.is_empty(), "{:?}", out.held);
+    assert_eq!(out.skipped.len(), 1);
+    assert!(
+        out.skipped[0].why.contains("holding folder"),
+        "{}",
+        out.skipped[0].why
+    );
+    assert_eq!(snapshot(&w.disk), before, "nothing moved");
+    assert!(
+        std::fs::read_dir(&target).unwrap().next().is_none(),
+        "nothing was made inside the link's target"
+    );
+}
+
+/// Swaps every slot for a link to `0` right after it is made (a race by another program).
+struct SwapSlot(PathBuf);
+impl Ops for SwapSlot {
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        RealOps.rename(from, to)
+    }
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        RealOps.create_dir_all(path)?;
+        if path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|n| n == "items")
+        {
+            std::fs::remove_dir(path)?;
+            assert!(link_dir(&self.0, path));
+        }
+        Ok(())
+    }
+    fn append_line(&self, path: &Path, line: &str) -> io::Result<()> {
+        RealOps.append_line(path, line)
+    }
+    fn remove_tree(&self, path: &Path) -> io::Result<()> {
+        RealOps.remove_tree(path)
+    }
+    fn protect_dir(&self, path: &Path) -> io::Result<()> {
+        RealOps.protect_dir(path)
+    }
+}
+
+/// QA finding 1: the slot is swapped for a link between being made and the move.
+#[test]
+fn a_slot_swapped_for_a_link_before_the_move_is_refused() {
+    let w = world();
+    let before = snapshot(&w.disk);
+    let target = w.disk.parent().unwrap().join("elsewhere");
+    std::fs::create_dir_all(&target).unwrap();
+    if !link_dir(&target, &w.disk.parent().unwrap().join("can-link")) {
+        eprintln!("links cannot be made here: test skipped");
+        return;
+    }
+    let places = Here(w.holding.clone());
+    let ops = SwapSlot(target.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &ops);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    assert!(out.held.is_empty(), "{:?}", out.held);
+    assert!(
+        out.skipped[0].why.contains("holding folder"),
+        "{}",
+        out.skipped[0].why
+    );
+    assert_eq!(snapshot(&w.disk), before, "nothing moved");
+    assert!(
+        std::fs::read_dir(&target).unwrap().next().is_none(),
+        "nothing was made inside the link's target"
+    );
+    // The record says so too, so the Removed tab never shows a phantom item.
+    assert!(e
+        .cleanups()
+        .iter()
+        .all(|c| c.items.iter().all(|i| i.state != State::Held)));
+}

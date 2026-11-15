@@ -369,6 +369,18 @@ fn outer_first(items: &[Item]) -> Vec<&Item> {
 }
 
 const BUSY: &str = "another removal, restore or emptying is running; try again when it is done";
+/// The folder an item would go back into is not where it says (restore side).
+const PLACE_MOVED: &str =
+    "its folder is now a link or cannot be found; restore it by hand from the holding folder";
+/// The holding folder (or a slot in it) is not where it says (remove side).
+const HOLDING_MOVED: &str =
+    "its holding folder is a link or is not where it should be; nothing was moved";
+
+/// Is `path` a real folder (not a link) whose real location is the path itself?
+fn is_real_dir(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir() && !check::is_link(&m))
+        && std::fs::canonicalize(path).is_ok_and(|real| same_key(&real) == same_key(path))
+}
 
 impl<'a> Engine<'a> {
     /// An engine keeping its list of holding folders and its log in `data_dir`.
@@ -437,32 +449,29 @@ impl<'a> Engine<'a> {
     }
 
     /// Make `dir` (and missing folders above it) only after checking that the nearest folder
-    /// that exists is where it says it is: nothing is ever made inside a link's target.
-    fn safe_dir(&self, dir: &Path) -> Result<(), String> {
-        const MOVED: &str =
-            "its folder is now a link or cannot be found; restore it by hand from the holding folder";
+    /// that exists is where it says it is: nothing is ever made inside a link's target. `why`
+    /// is the reason given when the folder is not where it says.
+    fn safe_dir(&self, dir: &Path, why: &str) -> Result<(), String> {
         let mut probe = dir.to_path_buf();
         loop {
             match std::fs::symlink_metadata(&probe) {
-                Ok(m) if check::is_link(&m) || !m.is_dir() => return Err(MOVED.into()),
+                Ok(m) if check::is_link(&m) || !m.is_dir() => return Err(why.into()),
                 Ok(_) => break,
                 Err(_) => {
                     if !probe.pop() {
-                        return Err(MOVED.into());
+                        return Err(why.into());
                     }
                 }
             }
         }
-        let same =
-            |p: &Path| std::fs::canonicalize(p).is_ok_and(|real| same_key(&real) == same_key(p));
-        if !same(&probe) {
-            return Err(MOVED.into());
+        if !is_real_dir(&probe) {
+            return Err(why.into());
         }
         self.ops
             .create_dir_all(dir)
-            .map_err(|e| format!("its folder could not be made again: {}", plain(&e)))?;
-        if !same(dir) {
-            return Err(MOVED.into());
+            .map_err(|e| format!("its folder could not be made: {}", plain(&e)))?;
+        if !is_real_dir(dir) {
+            return Err(why.into());
         }
         Ok(())
     }
@@ -569,9 +578,13 @@ impl<'a> Engine<'a> {
             let journal_path = dir.join("journal.jsonl");
             if !started.iter().any(|r| same_key(r) == same_key(&root)) {
                 let new_root = std::fs::symlink_metadata(&root).is_err();
+                let prepare = |e: io::Error| {
+                    format!("its holding folder could not be prepared: {}", plain(&e))
+                };
+                // The holding folder and everything down to the slot must be real folders where
+                // they say they are: nothing is ever moved into a link's target.
                 let begun = self
-                    .ops
-                    .create_dir_all(&dir.join("items"))
+                    .safe_dir(&dir.join("items"), HOLDING_MOVED)
                     .and_then(|()| {
                         if new_root {
                             // Hidden and owner-only; best effort (FAT drives have no permissions).
@@ -581,17 +594,16 @@ impl<'a> Engine<'a> {
                         }
                         self.ops
                             .append_line(&journal_path, &journal::text(&Line::Start { time: secs }))
+                            .map_err(prepare)
                     })
-                    .and_then(|()| self.ops.create_dir_all(&self.data_dir))
+                    .and_then(|()| self.ops.create_dir_all(&self.data_dir).map_err(prepare))
                     .and_then(|()| {
                         self.ops
                             .append_line(&self.roots_file(), &root.to_string_lossy())
+                            .map_err(prepare)
                     });
-                if let Err(e) = begun {
-                    skip(
-                        &mut out,
-                        format!("its holding folder could not be prepared: {}", plain(&e)),
-                    );
+                if let Err(why) = begun {
+                    skip(&mut out, why);
                     continue;
                 }
                 started.push(root.clone());
@@ -618,21 +630,33 @@ impl<'a> Engine<'a> {
                 title: item.title.clone(),
                 reason: item.reason.clone(),
             };
-            let announce = self.ops.create_dir_all(&slot).and_then(|()| {
-                self.ops.append_line(
-                    &journal_path,
-                    &journal::text(&Line::Hold {
-                        n,
-                        record: record.clone(),
-                    }),
-                )
+            let announce = self.safe_dir(&slot, HOLDING_MOVED).and_then(|()| {
+                self.ops
+                    .append_line(
+                        &journal_path,
+                        &journal::text(&Line::Hold {
+                            n,
+                            record: record.clone(),
+                        }),
+                    )
+                    .map_err(|e| format!("the journal could not be written: {}", plain(&e)))
             });
-            if let Err(e) = announce {
+            if let Err(why) = announce {
                 // Nothing moved: without its journal line, the move is not attempted.
-                skip(
-                    &mut out,
-                    format!("the journal could not be written: {}", plain(&e)),
+                skip(&mut out, why);
+                continue;
+            }
+            // The slot is checked once more right before the move (it was made a moment ago;
+            // someone may have swapped it for a link since).
+            if !is_real_dir(&slot) {
+                let _ = self.ops.append_line(
+                    &journal_path,
+                    &journal::text(&Line::Failed {
+                        n,
+                        why: HOLDING_MOVED.to_owned(),
+                    }),
                 );
+                skip(&mut out, HOLDING_MOVED.to_owned());
                 continue;
             }
             // If a line after a move cannot be written, the move is read back from the disk.
@@ -886,7 +910,9 @@ impl<'a> Engine<'a> {
                         continue; // already back
                     }
                     let wanted = original.join(rel);
-                    if let Err(why) = self.safe_dir(wanted.parent().unwrap_or(original)) {
+                    if let Err(why) =
+                        self.safe_dir(wanted.parent().unwrap_or(original), PLACE_MOVED)
+                    {
                         problem(&mut out, format!("{rel}: {why}"));
                         left += 1;
                         continue;
@@ -937,7 +963,10 @@ impl<'a> Engine<'a> {
             }
             // The folder it goes back into must be where it was (not a link to somewhere else);
             // checked before anything is made.
-            if let Err(why) = self.safe_dir(original.parent().unwrap_or_else(|| Path::new(""))) {
+            if let Err(why) = self.safe_dir(
+                original.parent().unwrap_or_else(|| Path::new("")),
+                PLACE_MOVED,
+            ) {
                 problem(&mut out, why);
                 continue;
             }
