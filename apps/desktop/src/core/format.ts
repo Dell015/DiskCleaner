@@ -41,6 +41,8 @@ export interface Owner {
   folder?: string;
   /** Where its icon is, as Windows records it (the desktop app reads the picture). */
   icon?: string;
+  /** The game launcher that installed it, when one did. */
+  launcher?: string;
 }
 
 /** The file as written (columns of plain arrays). */
@@ -193,6 +195,7 @@ export function checkView(raw: unknown): ViewData {
     if (o.runs !== undefined) out.runs = int(o.runs, `owner ${i} runs`, 0, 2 ** 32);
     if (o.folder !== undefined) out.folder = text(o.folder, `owner ${i} folder`);
     if (o.icon !== undefined) out.icon = text(o.icon, `owner ${i} icon`);
+    if (o.launcher !== undefined) out.launcher = text(o.launcher, `owner ${i} launcher`);
     return out;
   });
   const rawAssign = array(raw.assignments, "assignments");

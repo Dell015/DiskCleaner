@@ -130,6 +130,16 @@ pub fn gather(
                 .push((*id, app));
         }
     }
+    // Where a game launcher's own record says the app's files are (anywhere on any drive).
+    let mut launched: BTreeMap<String, Vec<(OwnerId, &InstalledApp)>> = BTreeMap::new();
+    for (id, app) in &app_ids {
+        for folder in &app.launcher_folders {
+            launched
+                .entry(path_key(folder))
+                .or_default()
+                .push((*id, app));
+        }
+    }
     let mut exe_folders: BTreeMap<String, Vec<(OwnerId, &InstalledApp)>> = BTreeMap::new();
     for (id, app) in &app_ids {
         if app.install_folder.is_none() {
@@ -190,6 +200,23 @@ pub fn gather(
                 shared.push((node.id, list.clone()));
             }
         }
+        if let Some(list) = launched.get(key) {
+            for (owner, app) in list {
+                claims.push(Claim {
+                    node: node.id,
+                    owner: *owner,
+                    strength: STRENGTH_INSTALL,
+                    evidence: Evidence {
+                        kind: EvidenceKind::InstallFolder,
+                        detail: format!(
+                            "{} records that it installed \"{}\" here",
+                            dc_winmeta::launcher_name(app.launcher.as_deref().unwrap_or_default()),
+                            app.name
+                        ),
+                    },
+                });
+            }
+        }
         if let Some(list) = exe_folders.get(key) {
             for (owner, app) in list {
                 claims.push(Claim {
@@ -221,19 +248,21 @@ pub fn gather(
         // level further down, where studios keep their apps (`LocalLow\miHoYo\Genshin Impact`).
         let parent_key = node.parent.map_or("", |p| index.key(p));
         let direct = container_kind(parent_key).is_some();
+        // At the top of a drive this covers `C:\Games\Genshin Impact game`; never inside `Users`.
+        let parent_node = node.parent.and_then(|p| index.tree.get(p));
         let deeper = !direct
-            && node
-                .parent
-                .and_then(|p| index.tree.get(p))
-                .and_then(|p| p.parent)
-                .is_some_and(|g| {
-                    matches!(
-                        container_kind(index.key(g)),
-                        Some(
-                            Container::UserData | Container::ProgramData | Container::ProgramFiles
-                        )
+            && parent_node.is_some_and(|p| !p.name.eq_ignore_ascii_case("users"))
+            && parent_node.and_then(|p| p.parent).is_some_and(|g| {
+                matches!(
+                    container_kind(index.key(g)),
+                    Some(
+                        Container::UserData
+                            | Container::ProgramData
+                            | Container::ProgramFiles
+                            | Container::DriveRoot
                     )
-                });
+                )
+            });
         if !direct && !deeper {
             continue;
         }

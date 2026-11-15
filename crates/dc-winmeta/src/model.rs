@@ -152,6 +152,12 @@ pub struct InstalledApp {
     /// Signature check of `main_exe`; `None` means it was not requested or there is no program.
     #[serde(default)]
     pub signature: Option<SignatureStatus>,
+    /// Folders a game launcher's own record says hold this app's files (they can be anywhere).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub launcher_folders: Vec<String>,
+    /// The launcher that installed it ("steam", "epic", "riot", "hoyoplay").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launcher: Option<String>,
 }
 
 /// A Windows known folder.

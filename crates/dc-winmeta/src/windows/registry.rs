@@ -321,3 +321,39 @@ pub fn read_user_assist() -> SourceReport<Vec<RawUsage>> {
     }
     report
 }
+
+/// Where HoYoPlay records its games (current user): `<root>\<version>\<game id>` with the value
+/// `GameInstallPath`. The version part changes between launcher versions, so every one is read.
+const HOYOPLAY_ROOTS: [&str; 2] = [r"Software\Cognosphere\HYP", r"Software\miHoYo\HYP"];
+
+/// (game id, install folder) for every game HoYoPlay recorded. Missing keys are normal.
+pub fn read_hoyoplay_games() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for root in HOYOPLAY_ROOTS {
+        let Ok(base) = open(HKEY_CURRENT_USER, root, 0) else {
+            continue;
+        };
+        for version in subkey_names(&base).unwrap_or_default() {
+            let at = format!(r"{root}\{version}");
+            let Ok(versions) = open(HKEY_CURRENT_USER, &at, 0) else {
+                continue;
+            };
+            for game in subkey_names(&versions).unwrap_or_default() {
+                let Ok(key) = open(HKEY_CURRENT_USER, &format!(r"{at}\{game}"), 0) else {
+                    continue;
+                };
+                if let Some(folder) = read_string(&key, "GameInstallPath") {
+                    let id = read_string(&key, "GameBiz").unwrap_or(game);
+                    out.push((id, folder.replace('/', "\\")));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Steam's folder, as Steam records it for the current user.
+pub fn steam_path() -> Option<String> {
+    let key = open(HKEY_CURRENT_USER, r"Software\Valve\Steam", 0).ok()?;
+    read_string(&key, "SteamPath").map(|p| p.replace('/', "\\"))
+}

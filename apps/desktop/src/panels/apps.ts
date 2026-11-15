@@ -140,6 +140,7 @@ export class AppsView {
     const card = appCards(tree).find((c) => c.owner === owner) ?? { owner, bytes: 0, places: [], system: false };
     const facts = [
       o.publisher && `by ${o.publisher}`,
+      o.launcher && `installed with ${o.launcher}`,
       o.version && `version ${o.version}`,
       o.installed && `installed ${o.installed}`,
       `last used ${ago(o.last_used, this.now)}`,

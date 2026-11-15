@@ -15,6 +15,7 @@
 mod apps;
 mod icon;
 mod label;
+mod launchers;
 mod lnk;
 mod model;
 mod parse;
@@ -32,6 +33,10 @@ mod windows;
 pub use apps::{build_snapshot, build_snapshot_with, BuildOptions};
 pub use icon::{extract_icon, parse_icon_location, Icon};
 pub use label::app_labels;
+pub use launchers::{
+    epic_item, launcher_name, merge_launcher_games, riot_name, riot_settings, steam_libraries,
+    steam_manifest, LauncherGame,
+};
 pub use lnk::{collect_shortcuts, parse_lnk, ParsedLink};
 pub use model::{
     AppFlags, AppSnapshot, FolderOrigin, InstalledApp, KnownFolder, Problem, RawUninstallEntry,

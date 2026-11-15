@@ -3,6 +3,7 @@
 
 mod folders;
 pub(crate) mod icon;
+mod launchers;
 mod registry;
 mod signature;
 mod version;
@@ -86,5 +87,9 @@ impl SystemInfoSource for WindowsSource {
 
     fn program_usage(&self) -> SourceReport<Vec<crate::usage::RawUsage>> {
         registry::read_user_assist()
+    }
+
+    fn launcher_games(&self) -> SourceReport<Vec<crate::launchers::LauncherGame>> {
+        launchers::read_launcher_games(self.env_var("PROGRAMDATA"))
     }
 }

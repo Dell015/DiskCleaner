@@ -37,6 +37,11 @@ pub trait SystemInfoSource {
     fn program_usage(&self) -> SourceReport<Vec<RawUsage>> {
         SourceReport::default()
     }
+    /// Games that launchers (Steam, Epic, Riot, HoYoPlay) say they installed, from their own
+    /// records. Read-only.
+    fn launcher_games(&self) -> SourceReport<Vec<crate::launchers::LauncherGame>> {
+        SourceReport::default()
+    }
 }
 
 /// An in-memory source for tests.
@@ -58,6 +63,8 @@ pub struct FakeSource {
     pub env: BTreeMap<String, String>,
     /// Raw program-usage values to report.
     pub usage: Vec<RawUsage>,
+    /// Launcher records to report.
+    pub games: Vec<crate::launchers::LauncherGame>,
     existing: BTreeSet<String>,
 }
 
@@ -119,6 +126,13 @@ impl SystemInfoSource for FakeSource {
     fn program_usage(&self) -> SourceReport<Vec<RawUsage>> {
         SourceReport {
             items: self.usage.clone(),
+            problems: Vec::new(),
+        }
+    }
+
+    fn launcher_games(&self) -> SourceReport<Vec<crate::launchers::LauncherGame>> {
+        SourceReport {
+            items: self.games.clone(),
             problems: Vec::new(),
         }
     }

@@ -206,9 +206,15 @@ pub fn build_snapshot_with(source: &dyn SystemInfoSource, options: &BuildOptions
                     .take(MAX_SHORTCUTS_PER_APP)
                     .collect(),
                 signature,
+                launcher_folders: Vec::new(),
+                launcher: None,
             }
         })
         .collect();
+
+    // Where launchers say their games are (Windows' list often misses it).
+    let games = source.launcher_games();
+    crate::launchers::merge_launcher_games(&mut apps, &games.items);
 
     apps.sort_by(|a, b| {
         (a.name.to_lowercase(), a.key.to_lowercase(), a.source).cmp(&(
@@ -220,6 +226,7 @@ pub fn build_snapshot_with(source: &dyn SystemInfoSource, options: &BuildOptions
 
     let mut problems = report.problems;
     problems.extend(shortcut_report.problems);
+    problems.extend(games.problems);
     let usage = if options.read_usage {
         let raw = source.program_usage();
         problems.extend(raw.problems);

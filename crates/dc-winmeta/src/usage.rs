@@ -358,6 +358,8 @@ mod tests {
             version_info: None,
             shortcuts: shortcuts.iter().map(|s| (*s).to_owned()).collect(),
             signature: None,
+            launcher_folders: Vec::new(),
+            launcher: None,
         }
     }
 

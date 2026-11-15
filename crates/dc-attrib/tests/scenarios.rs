@@ -380,3 +380,61 @@ fn a_folder_named_like_an_app_deep_inside_your_own_files_is_still_not_claimed() 
     let r = attribute(&s, &a).unwrap();
     assert_eq!(own_bytes(&r, "Live Game"), 0);
 }
+
+#[test]
+fn a_game_in_a_games_folder_at_the_top_of_a_drive_is_found() {
+    // The owner's PC: Genshin Impact registers C:\HoYoPlay, but the game is in C:\Games.
+    let s = scan(&[
+        (r"HoYoPlay\launcher.exe", 50),
+        (r"Games\Genshin Impact game\GenshinImpact.exe", 900),
+        (r"Games\Genshin Impact game\data.blk", 9000),
+        (r"Games\notes.txt", 2),
+        (r"Users\Genshin Impact\x.txt", 1),
+    ]);
+    let a = apps(&[
+        (
+            "Genshin Impact",
+            "COGNOSPHERE PTE. LTD.",
+            Some(r"C:\HoYoPlay"),
+        ),
+        ("HoYoPlay", "COGNOSPHERE PTE. LTD.", Some(r"C:\HoYoPlay")),
+    ]);
+    let r = attribute(&s, &a).unwrap();
+    assert_eq!(own_bytes(&r, "Genshin Impact"), 9900);
+    assert_eq!(own_bytes(&r, "HoYoPlay"), 50);
+    // A user profile named like an app is never claimed.
+    assert_eq!(r.unattributed.on_disk, 3);
+    assert_buckets_add_up(&r);
+}
+
+#[test]
+fn a_launcher_record_gives_a_game_its_folder_wherever_it_is() {
+    // A game folder not named like the game, on another drive: only the launcher knows.
+    let s = scan(&[
+        (r"HoYoPlay\launcher.exe", 50),
+        (r"Stuff\GI\GenshinImpact.exe", 900),
+        (r"Stuff\GI\data.blk", 9000),
+    ]);
+    let mut a = apps(&[
+        (
+            "Genshin Impact",
+            "COGNOSPHERE PTE. LTD.",
+            Some(r"C:\HoYoPlay"),
+        ),
+        ("HoYoPlay", "COGNOSPHERE PTE. LTD.", Some(r"C:\HoYoPlay")),
+    ]);
+    let g = a
+        .apps
+        .iter_mut()
+        .find(|x| x.name == "Genshin Impact")
+        .unwrap();
+    g.launcher_folders = vec![r"C:\Stuff\GI".into()];
+    g.launcher = Some("hoyoplay".into());
+    let r = attribute(&s, &a).unwrap();
+    assert_eq!(own_bytes(&r, "Genshin Impact"), 9900);
+    assert_eq!(own_bytes(&r, "HoYoPlay"), 50);
+    assert_buckets_add_up(&r);
+    let e = explain(&s, &r, r"C:\Stuff\GI\data.blk").unwrap().unwrap();
+    let detail = &e.assignment.unwrap().evidence[0].detail;
+    assert!(detail.contains("HoYoPlay records"), "{detail}");
+}

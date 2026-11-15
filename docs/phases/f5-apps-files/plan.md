@@ -40,3 +40,8 @@ Next: games inside launchers as their own apps (Steam libraries, Riot, HoYoPlay,
 for app parts from the research (Prompt 4), the hub-and-lines map look for one app, then the
 **Your files** view, and removing the old Apps tab from the side panel.
 
+Step 2 done (2026-11-15): games found through their launchers' own records (D128): Steam,
+Epic, Riot and HoYoPlay. Genshin Impact's 174 GB in `C:\Games` is now Genshin's, whatever the
+folder is called. Not covered yet: Battle.net, EA app, Ubisoft Connect, GOG, Xbox / Microsoft
+Store games.
+

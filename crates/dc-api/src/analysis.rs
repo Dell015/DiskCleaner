@@ -80,6 +80,9 @@ pub struct Owner {
     /// Registered install folder.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// The game launcher that installed it ("Steam", "HoYoPlay", ...), when one did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub launcher: Option<String>,
     /// Where its icon is, as Windows records it (`C:\x\app.exe,0`); the desktop app reads it to
     /// show the icon. Never sent to an AI.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,7 +132,17 @@ fn describe_apps(owners: &mut Vec<Owner>, snapshot: &AppSnapshot) {
         o.uninstaller = app.uninstall_command.is_some();
         o.last_used = use_.and_then(|(last, _)| last);
         o.runs = use_.map(|(_, runs)| runs);
-        o.folder = app.install_folder.clone();
+        // A launcher's record says where the files really are (HoYoPlay records its own folder
+        // for its games in Windows' list).
+        o.folder = app
+            .launcher_folders
+            .first()
+            .cloned()
+            .or_else(|| app.install_folder.clone());
+        o.launcher = app
+            .launcher
+            .as_deref()
+            .map(|l| dc_winmeta::launcher_name(l).to_owned());
         o.icon = app.display_icon.clone().or_else(|| app.main_exe.clone());
     }
 }
