@@ -365,6 +365,29 @@ const check = (ok, what) => {
     await page.waitForTimeout(600);
     check((await page.locator("#overview .ov-group").count()) >= 3, "the Overview fills in from a live scan");
 
+    // ---------- Apps view ----------
+    await page.goto(base + "?demo=40000&view=apps");
+    await page.waitForFunction(() => document.querySelectorAll("#appsView .ap-card").length > 3, null, { timeout: 60000 });
+    await shot("50-apps");
+    const appNames = await page.$$eval("#appsView .ap-card .nm", (els) => els.map((e) => e.textContent));
+    check(appNames[0] === "Steam" && appNames.includes("Google Chrome"), "the Apps view shows every app, biggest first");
+    await page.fill("#appsView .ap-filter", "chrome");
+    await page.waitForTimeout(150);
+    check((await page.locator("#appsView .ap-card").count()) >= 1 && (await page.locator("#appsView .ap-card:has(.nm:text-is('Steam'))").count()) === 0, "apps can be found by name");
+    await page.click("#appsView .ap-card:has(.nm:text-is('Google Chrome'))");
+    await page.waitForTimeout(200);
+    const secs = await page.$$eval("#appsView .ap-sec h3", (els) => els.map((e) => e.textContent));
+    check(secs[0].startsWith("Can be cleared") && secs.some((t) => t.startsWith("Needed to run")) && secs.some((t) => t.startsWith("Settings and data")), "an app's page sorts its places by what removing them does");
+    await shot("51-app-page");
+    await page.click("#appsView button:has-text('Show on the map')");
+    await page.waitForTimeout(1500);
+    check((await page.evaluate(() => window.__dc.settings.view)) === "map" && (await page.evaluate(() => window.__dc.state.owner)) >= 0, "Show on the map opens the map with only that app lit");
+    await page.evaluate(() => window.__dc.setViewMode("apps"));
+    await page.waitForTimeout(200);
+    await page.click("#appsView .ap-back");
+    await page.waitForTimeout(150);
+    check((await page.locator("#appsView .ap-card").count()) >= 1, "back to all apps");
+
     // ---------- Removing (the browser stand-in judges paths like the real engine). ----------
     await page.goto(base + "?demo=40000&view=files&cleaning");
     await page.waitForFunction(() => document.querySelectorAll("#explorer .x-row input.pick").length > 3, null, { timeout: 60000 });

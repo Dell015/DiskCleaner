@@ -127,4 +127,5 @@ Status: `open` = needs action, `watch` = keep an eye on it, `done` = resolved.
 - N80: F4 done: duplicates on request, scan order, "last used" switch. Later: duplicates of folders (whole copied folders), similar (not identical) photos; remember duplicate results when a scan is saved.
 - N81: B9 safety review (2026-11-14, a separate Fable session, report only) found 11 issues; all fixed the same day (D119 to D123, design section 14). Its probe scenarios are now tests in `tests/engine.rs`. Not testable here and to check on Windows: `win.rs` at run time (rename by handle, the holding folder's permissions and hidden flag), sharing violations versus access denied for folders with open files, long paths, read-only files when emptying.
 - N82: Still to come from the design (not from the review): "Try again as administrator" for items that need it (section 5).
+- N83: `docs/mft-design.md` (B7 design, written in a separate session) is not in the repo yet; add it before B7 starts. Its decisions are D127.
 

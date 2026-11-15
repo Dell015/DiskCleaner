@@ -436,3 +436,52 @@ button.danger { background: var(--dont); border-color: var(--dont); color: var(-
 /* App icons (desktop app). */
 img.appicon { width: 16px; height: 16px; object-fit: contain; image-rendering: auto; flex: none; }
 span.appicon.none { display: inline-block; width: 16px; height: 16px; border-radius: 4px; background: var(--panel-2); }
+
+/* ---------- Apps view: every app as a card; one app's page ---------- */
+#app.files #appsView:not([hidden]) ~ #scan { top: auto; }
+#appsView { position: absolute; inset: 0; overflow: auto; background: var(--bg); z-index: 2; container-type: inline-size; }
+.ap-page { max-width: 1180px; margin: 0 auto; padding: 22px 24px 64px; display: grid; gap: 18px; align-content: start; }
+.ap-head h2, .ap-title h2 { margin: 0; font-size: var(--t6); font-weight: 650; letter-spacing: -0.01em; }
+.ap-head .quiet, .ap-title .quiet { margin: 2px 0 0; }
+.ap-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.ap-filter { flex: 1 1 220px; max-width: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; color: var(--text); }
+.ap-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.ap-card { width: 100%; display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; gap: 2px 10px; align-items: center; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+.ap-card:hover { background: var(--panel-2); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.ap-card .ap-icon { grid-row: 1 / span 2; }
+.ap-card .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-card .sz { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.ap-card .sub { grid-column: 2 / -1; font-size: var(--t1); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-icon { width: 24px; height: 24px; object-fit: contain; flex: none; }
+.ap-detail-head .ap-icon { width: 32px; height: 32px; }
+.ap-icon.letter { display: inline-grid; place-items: center; border-radius: 6px; background: var(--panel-2); color: var(--text-2); font-weight: 650; font-size: 12px; }
+.ap-detail-head .ap-icon.letter { font-size: 15px; }
+.ap-more summary { cursor: pointer; color: var(--text-2); padding: 6px 2px; }
+.ap-more > .quiet { margin: 2px 0 8px; }
+.ap-back { justify-self: start; border: 0; background: transparent; color: var(--text-2); padding: 2px 0; }
+.ap-back:hover { color: var(--text); }
+.ap-detail-head { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; }
+.ap-total { display: grid; justify-items: end; }
+.ap-total b { font-size: var(--t5); font-variant-numeric: tabular-nums; }
+.ap-actions { display: flex; gap: 8px; }
+.ap-sec { display: grid; gap: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.ap-sec h3 { margin: 6px 0 0; font-size: var(--t3); display: flex; align-items: center; gap: 8px; }
+.ap-sec > .quiet { margin: 0; }
+.ap-sec .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-2); }
+.ap-sec .dot.safe { background: var(--safe); }
+.ap-sec .dot.probably_safe { background: var(--probably); }
+.ap-sec .dot.keep { background: var(--folder); }
+.ap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ap-list li { display: flex; align-items: center; gap: 6px; }
+.ap-row { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr auto; gap: 1px 10px; align-items: center; text-align: left; border: 0; border-radius: 6px; padding: 6px 8px; background: transparent; }
+.ap-row:hover { background: var(--panel-2); }
+.ap-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-row .sz { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.ap-row .path { grid-column: 2 / -1; font-size: var(--t1); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-row .verdict { font-size: var(--t1); padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; }
+.ap-row .verdict.safe { color: var(--safe); border-color: color-mix(in srgb, var(--safe) 50%, var(--line)); }
+.ap-row .verdict.probably_safe { color: var(--probably); border-color: color-mix(in srgb, var(--probably) 50%, var(--line)); }
+@container (max-width: 560px) {
+  .ap-detail-head { grid-template-columns: auto 1fr; }
+  .ap-total { grid-column: 1 / -1; justify-items: start; }
+}

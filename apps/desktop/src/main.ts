@@ -26,6 +26,7 @@ import { matchPreset, prefersReducedMotion, PRESET_NAMES, PRESETS, type Quality,
 import { paletteOf, STYLES, type StyleId } from "./graph/style";
 import { ExplorerView } from "./panels/explorer";
 import { OverviewView } from "./panels/overview";
+import { AppsView } from "./panels/apps";
 
 /** A folder this big on screen (radius, px) opens when you zoom in; below CLOSE_PX it closes again. */
 const OPEN_PX = 24;
@@ -69,8 +70,8 @@ type Theme = "dark" | "light" | "system";
 // ---------- settings (kept in this browser only) ----------
 
 /** "overview" is everything at a glance (the default), "files" the simple list, "map" the node graph. */
-type ViewMode = "overview" | "files" | "map";
-const VIEW_MODES: ViewMode[] = ["overview", "files", "map"];
+type ViewMode = "overview" | "apps" | "files" | "map";
+const VIEW_MODES: ViewMode[] = ["overview", "apps", "files", "map"];
 interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean; retention: number }
 function loadSettings(): Settings {
   const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true, keepReport: true, retention: 30 };
@@ -238,6 +239,21 @@ const overview = new OverviewView(byId("overview"), {
   canFindDups: () => dupsAvailable(),
   findDups: (within) => startDups(within),
   cancelDups: () => stopDups(),
+  pick: picking,
+});
+const appsView = new AppsView(byId("appsView"), {
+  open: (i) => {
+    const tree = state.tree;
+    if (!tree) return;
+    if (tree.kind[i] === KIND.dir && tree.childCount[i] > 0) goFolder(i);
+    else goFolder(tree.parent[i], i);
+  },
+  showOnMap: (o) => {
+    setViewMode("map");
+    actions.focusOwner(o);
+    setTab("apps");
+  },
+  appIcon: (o) => appIconFor(o),
   pick: picking,
 });
 (window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder(), findDups: (w: number) => startDups(w) };
@@ -979,10 +995,18 @@ function renderOverview(force = false): void {
   overview.show(tree, scanNow(), sortRoot, Boolean(state.live?.active), force);
 }
 
-/** Draw whichever flat view is showing (Overview or Files). */
+/** Draw the Apps view (the grid, or one app's page). */
+function renderAppsView(force = false): void {
+  const tree = state.tree;
+  if (settings.view !== "apps" || !tree || tree.n === 0) return;
+  appsView.show(tree, scanNow(), force);
+}
+
+/** Draw whichever flat view is showing (Overview, Apps or Files). */
 function renderFlat(): void {
   if (settings.view === "files") renderList();
   else if (settings.view === "overview") renderOverview();
+  else if (settings.view === "apps") renderAppsView();
 }
 
 /** The user moved around the map while a scan runs: from now on show their view, not the paced reveal. */
@@ -996,6 +1020,7 @@ function applyViewMode(): void {
   app.classList.toggle("files", settings.view !== "map");
   byId("explorer").hidden = !files;
   byId("overview").hidden = settings.view !== "overview";
+  byId("appsView").hidden = settings.view !== "apps";
   document.querySelectorAll<HTMLButtonElement>("#viewSeg button").forEach((b) => {
     const on = b.dataset.view === settings.view;
     b.classList.toggle("on", on);
@@ -1015,6 +1040,11 @@ function setViewMode(m: ViewMode): void {
   if (m === "overview") {
     hideMenu();
     renderOverview(true);
+    crumbs();
+    return;
+  }
+  if (m === "apps") {
+    renderAppsView(true);
     crumbs();
     return;
   }
@@ -1098,6 +1128,7 @@ async function loadIcons(): Promise<void> {
     /* no icons: the coloured dots stay */
   }
   if (state.tab === "apps") renderSide();
+  renderAppsView(true);
 }
 
 const actions: PanelActions = {

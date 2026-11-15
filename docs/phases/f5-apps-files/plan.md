@@ -27,3 +27,16 @@ managed the same way. Owner accepted these defaults (2026-11-15):
 
 Done first (2026-11-15): launcher games found in a shared folder (D124), every installed app
 listed, app icons (D125).
+
+Step 1 done (2026-11-15): the **Apps** view. Every installed app as a card with its icon (desktop
+app; a letter otherwise), size, number of places and last use; search; sort by size, least used
+or name; Windows parts and runtimes folded into "System parts"; apps with nothing in the scan in
+their own closed section. An app's page: "Can be cleared" (what the checks offered inside its
+places, with pick boxes), then its places by role (needed to run, settings and data, your saves,
+temporary files), each without the bytes already counted as clearable; "Show on the map" opens
+the map with only that app lit.
+
+Next: games inside launchers as their own apps (Steam libraries, Riot, HoYoPlay, Epic), rules
+for app parts from the research (Prompt 4), the hub-and-lines map look for one app, then the
+**Your files** view, and removing the old Apps tab from the side panel.
+
