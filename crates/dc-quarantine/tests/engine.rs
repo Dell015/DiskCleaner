@@ -841,3 +841,159 @@ fn restoring_never_makes_folders_inside_a_link() {
         "nothing was made inside the link's target"
     );
 }
+
+/// QA finding 1: the holding folder itself is a link (planted first on a shared drive).
+#[test]
+fn a_holding_folder_that_is_a_link_is_refused() {
+    let w = world();
+    let before = snapshot(&w.disk);
+    let target = w.disk.parent().unwrap().join("elsewhere");
+    std::fs::create_dir_all(&target).unwrap();
+    if !link_dir(&target, &w.holding) {
+        eprintln!("links cannot be made here: test skipped");
+        return;
+    }
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    assert!(out.held.is_empty() && out.id.is_empty(), "{:?}", out.held);
+    assert_eq!(out.skipped.len(), 1);
+    assert!(
+        out.skipped[0].why.contains("holding folder"),
+        "{}",
+        out.skipped[0].why
+    );
+    assert_eq!(snapshot(&w.disk), before, "nothing moved");
+    assert!(
+        std::fs::read_dir(&target).unwrap().next().is_none(),
+        "nothing was made inside the link's target"
+    );
+}
+
+/// Swaps every slot for a link to `0` right after it is made (a race by another program).
+struct SwapSlot(PathBuf);
+impl Ops for SwapSlot {
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        RealOps.rename(from, to)
+    }
+    fn create_dir_all(&self, path: &Path) -> io::Result<()> {
+        RealOps.create_dir_all(path)?;
+        if path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|n| n == "items")
+        {
+            std::fs::remove_dir(path)?;
+            assert!(link_dir(&self.0, path));
+        }
+        Ok(())
+    }
+    fn append_line(&self, path: &Path, line: &str) -> io::Result<()> {
+        RealOps.append_line(path, line)
+    }
+    fn remove_tree(&self, path: &Path) -> io::Result<()> {
+        RealOps.remove_tree(path)
+    }
+    fn protect_dir(&self, path: &Path) -> io::Result<()> {
+        RealOps.protect_dir(path)
+    }
+}
+
+/// QA finding 1: the slot is swapped for a link between being made and the move.
+#[test]
+fn a_slot_swapped_for_a_link_before_the_move_is_refused() {
+    let w = world();
+    let before = snapshot(&w.disk);
+    let target = w.disk.parent().unwrap().join("elsewhere");
+    std::fs::create_dir_all(&target).unwrap();
+    if !link_dir(&target, &w.disk.parent().unwrap().join("can-link")) {
+        eprintln!("links cannot be made here: test skipped");
+        return;
+    }
+    let places = Here(w.holding.clone());
+    let ops = SwapSlot(target.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &ops);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    assert!(out.held.is_empty(), "{:?}", out.held);
+    assert!(
+        out.skipped[0].why.contains("holding folder"),
+        "{}",
+        out.skipped[0].why
+    );
+    assert_eq!(snapshot(&w.disk), before, "nothing moved");
+    assert!(
+        std::fs::read_dir(&target).unwrap().next().is_none(),
+        "nothing was made inside the link's target"
+    );
+    // The record says so too, so the Removed tab never shows a phantom item.
+    assert!(e
+        .cleanups()
+        .iter()
+        .all(|c| c.items.iter().all(|i| i.state != State::Held)));
+}
+
+/// QA finding 4: a pick inside a folder that moved only partly is told about, not dropped.
+#[test]
+fn an_inner_pick_under_a_partly_moved_folder_is_reported() {
+    let w = world();
+    let places = Here(w.holding.clone());
+    let ops = Faults {
+        fail_rename: Some((1, io::ErrorKind::PermissionDenied)),
+        fail_name: Some("b.bin"),
+        ..Faults::default()
+    };
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &ops);
+    let out = e.remove(
+        &[
+            item(w.disk.join("Cache"), Group::Safe),
+            item(w.disk.join("Cache/sub"), Group::Safe),
+            item(w.disk.join("Cache/sub/deeper"), Group::Safe),
+        ],
+        |_, _| {},
+    );
+    assert_eq!(out.held.len(), 1, "{:?}", out.held);
+    assert!(
+        w.disk.join("Cache/sub/b.bin").exists(),
+        "the locked file stays"
+    );
+    // `Cache` moved partly and says so; `Cache/sub` still has the locked file and is reported;
+    // `Cache/sub/deeper` moved whole with its parent and needs no line of its own.
+    let about = |name: &str| {
+        out.skipped
+            .iter()
+            .find(|s| s.path == w.disk.join(name))
+            .map(|s| s.why.clone())
+    };
+    assert!(about("Cache").unwrap().contains("in use"));
+    let sub = about("Cache/sub").expect("the inner pick is reported");
+    assert!(sub.contains("partly") && sub.contains("Cache"), "{sub}");
+    assert!(about("Cache/sub/deeper").is_none(), "{:?}", out.skipped);
+    assert!(!w.disk.join("Cache/sub/deeper/c.bin").exists());
+}
+
+/// QA finding 5: when automatic emptying cannot empty a cleanup, the log says so.
+#[test]
+fn a_failed_automatic_emptying_is_logged() {
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    // Someone swapped the items folder for a link: emptying must refuse, and say so.
+    let items = w.holding.join(&out.id).join("items");
+    let away = w.disk.parent().unwrap().join("moved-away");
+    std::fs::rename(&items, &away).unwrap();
+    if !link_dir(&away, &items) {
+        eprintln!("links cannot be made here: test skipped");
+        return;
+    }
+    let created = e.cleanups()[0].created;
+    let before = snapshot(&away);
+    assert!(e.empty_expired(30, created + 31 * 86_400).is_empty());
+    assert_eq!(snapshot(&away), before, "nothing deleted");
+    let log = std::fs::read_to_string(w.data.join("cleaning-log.jsonl")).unwrap();
+    let line = log
+        .lines()
+        .find(|l| l.contains("\"empty-failed\""))
+        .expect("an empty-failed line");
+    assert!(line.contains(&out.id) && line.contains("link"), "{line}");
+}

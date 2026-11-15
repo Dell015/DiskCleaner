@@ -428,7 +428,9 @@ fn examine(ctx: &Ctx<'_>, child: Child, siblings: &HashMap<(NodeId, String), Nod
     if owner_is_windows || is_os_area(&lower) {
         return refuse("it belongs to Windows or Microsoft".to_owned());
     }
-    if let Some(blocker) = folder_blocker(&ctx.tree, &ctx.children, id, &path, ctx.classifier) {
+    if let Some(blocker) =
+        folder_blocker(&ctx.tree, &ctx.children, id, &path, ctx.classifier, ctx.now)
+    {
         return refuse(format!("it contains {blocker}"));
     }
 

@@ -200,3 +200,62 @@ fn splitting_the_work_never_changes_the_answer() {
         assert_eq!(divided, one_thread, "split at {split}");
     }
 }
+
+#[test]
+fn a_dont_touch_folder_inside_blocks_the_whole_folder() {
+    // QA finding 3: Teams' cache folder is offered, but the person's uploaded backgrounds
+    // inside it are a Don't touch rule. The folder as a whole must not be offered.
+    let r = run(&[
+        f(
+            r"Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\a",
+            1000,
+            1,
+        ),
+        f(
+            r"Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Backgrounds\Uploads\me.jpg",
+            500,
+            1,
+        ),
+    ]);
+    // The rest (the web view cache next to it) is still offered on its own.
+    assert!(
+        r.items
+            .iter()
+            .all(|i| !i.path.ends_with(r"\MSTeams") && !i.path.contains("Backgrounds")),
+        "{:?}",
+        r.items
+    );
+    assert_eq!(r.items.iter().map(|i| i.sizes.files).sum::<u64>(), 1);
+    assert!(
+        r.blocked
+            .iter()
+            .any(|b| b.because.contains("Don't touch") && b.because.contains("Backgrounds")),
+        "{:?}",
+        r.blocked
+    );
+}
+
+#[test]
+fn the_previous_installations_user_files_are_never_offered() {
+    // QA finding 2: after an upgrade or a reinstall, Windows.old\Users holds the old profile
+    // (for a "keep nothing" reinstall, the only copy).
+    let r = run(&[
+        f(r"Windows.old\Windows\System32\x.dll", 1000, 400),
+        f(r"Windows.old\Users\bob\Documents\thesis.docx", 500, 400),
+        f(r"Windows.old\Users\bob\Desktop\photo.jpg", 500, 400),
+    ]);
+    // The rest of Windows.old (the old Windows folder) is still offered, on its own.
+    assert!(
+        r.items
+            .iter()
+            .all(|i| !i.path.ends_with("Windows.old") && !i.path.contains("Users")),
+        "{:?}",
+        r.items
+    );
+    assert_eq!(r.items.iter().map(|i| i.sizes.on_disk).sum::<u64>(), 1000);
+    assert!(
+        r.blocked.iter().any(|b| b.path == r"C:\Windows.old"),
+        "{:?}",
+        r.blocked
+    );
+}

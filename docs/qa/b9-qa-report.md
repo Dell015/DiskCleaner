@@ -228,7 +228,7 @@ No change was made to `win.rs` in Phase 2. To re-verify the existing code on Win
 | 3 Don't touch folder inside an offered folder | `fix(rules): a Don't touch folder inside an offered folder blocks the offer` | Fixed; 1 test; also covers B5 leftovers. Finder speed on the 1M-node perf scan unchanged (1.08 s → 1.07 s) |
 | 2 Windows.old user folders | `fix(rules): never offer the previous Windows installation's user folders` | Fixed (rule `windows-old-users`, 169 rules); 1 test |
 | 4 Inner pick under a partly moved folder | `fix(quarantine): report a pick inside a folder that moved only partly` | Fixed; 1 test |
-| 5 Silent failed automatic emptying | — | **Not done** (low): log the failure in `empty_expired`; on-screen message is decision 5 |
+| 5 Silent failed automatic emptying | `fix(quarantine): log a cleanup that automatic emptying could not empty` | Fixed (`empty-failed` line in `cleaning-log.jsonl`); 1 test. On-screen message is decision 5 |
 
 After these, all checks pass (fmt, 3× clippy with `-D warnings`, workspace tests, quarantine
 tests with `destructive-actions`, `npm test`, `npm run build`). `win.rs` is unchanged.

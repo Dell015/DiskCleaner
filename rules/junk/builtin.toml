@@ -1481,6 +1481,15 @@ examples_match = ['C:\Users\bob\AppData\Roaming\obs-studio\basic\scenes\Main.jso
 examples_no_match = ['C:\Users\bob\AppData\Roaming\obs-studio\logs\a.txt']
 
 [[rule]]
+id = "windows-old-users"
+risk = "DontTouch"
+reason = "user_content"
+summary = "The previous Windows installation's user folders (Documents, Desktop, Pictures of the old profile); after a reinstall this can be the only copy. Copy what you need first; the rest of Windows.old is offered without it"
+path = '*:\Windows.old\Users'
+examples_match = ['C:\Windows.old\Users\bob\Documents\thesis.docx', 'C:\Windows.old\Users']
+examples_no_match = ['C:\Windows.old\Windows\System32\x.dll', 'C:\Users\bob\Documents\a']
+
+[[rule]]
 id = "teams-backgrounds"
 risk = "DontTouch"
 reason = "user_content"
