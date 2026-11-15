@@ -931,3 +931,42 @@ fn a_slot_swapped_for_a_link_before_the_move_is_refused() {
         .iter()
         .all(|c| c.items.iter().all(|i| i.state != State::Held)));
 }
+
+/// QA finding 4: a pick inside a folder that moved only partly is told about, not dropped.
+#[test]
+fn an_inner_pick_under_a_partly_moved_folder_is_reported() {
+    let w = world();
+    let places = Here(w.holding.clone());
+    let ops = Faults {
+        fail_rename: Some((1, io::ErrorKind::PermissionDenied)),
+        fail_name: Some("b.bin"),
+        ..Faults::default()
+    };
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &ops);
+    let out = e.remove(
+        &[
+            item(w.disk.join("Cache"), Group::Safe),
+            item(w.disk.join("Cache/sub"), Group::Safe),
+            item(w.disk.join("Cache/sub/deeper"), Group::Safe),
+        ],
+        |_, _| {},
+    );
+    assert_eq!(out.held.len(), 1, "{:?}", out.held);
+    assert!(
+        w.disk.join("Cache/sub/b.bin").exists(),
+        "the locked file stays"
+    );
+    // `Cache` moved partly and says so; `Cache/sub` still has the locked file and is reported;
+    // `Cache/sub/deeper` moved whole with its parent and needs no line of its own.
+    let about = |name: &str| {
+        out.skipped
+            .iter()
+            .find(|s| s.path == w.disk.join(name))
+            .map(|s| s.why.clone())
+    };
+    assert!(about("Cache").unwrap().contains("in use"));
+    let sub = about("Cache/sub").expect("the inner pick is reported");
+    assert!(sub.contains("partly") && sub.contains("Cache"), "{sub}");
+    assert!(about("Cache/sub/deeper").is_none(), "{:?}", out.skipped);
+    assert!(!w.disk.join("Cache/sub/deeper/c.bin").exists());
+}

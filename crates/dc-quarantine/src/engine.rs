@@ -553,13 +553,6 @@ impl<'a> Engine<'a> {
         let mut next: BTreeMap<String, u32> = BTreeMap::new();
         for (k, item) in items.iter().enumerate() {
             progress(k, items.len());
-            if out
-                .held
-                .iter()
-                .any(|h| inside(&item.path, &h.record.original))
-            {
-                continue; // moved with the item it is in
-            }
             let skip = |out: &mut Outcome, why: String| {
                 self.log("skipped", &item.path, 0, &why);
                 out.skipped.push(Skipped {
@@ -567,6 +560,27 @@ impl<'a> Engine<'a> {
                     why,
                 });
             };
+            if let Some(outer) = out
+                .held
+                .iter()
+                .find(|h| inside(&item.path, &h.record.original))
+            {
+                // Moved with the item it is in. If that one moved only partly (files in use)
+                // and this one is still here, say so rather than report nothing.
+                let still_here = || match std::fs::symlink_metadata(&item.path) {
+                    Ok(m) if m.is_dir() => !check::files_inside(&item.path).is_empty(),
+                    Ok(_) => true,
+                    Err(_) => false,
+                };
+                if outer.only_files.is_some() && still_here() {
+                    let why = format!(
+                        "it is inside {}, which moved only partly (files in use); scan again",
+                        outer.record.original.display()
+                    );
+                    skip(&mut out, why);
+                }
+                continue;
+            }
             let (facts, root) = match self.vet(item) {
                 Ok(v) => v,
                 Err(why) => {
