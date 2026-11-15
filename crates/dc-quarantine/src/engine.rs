@@ -1157,7 +1157,15 @@ impl<'a> Engine<'a> {
         };
         self.expired(days, now_secs)
             .into_iter()
-            .filter_map(|c| self.empty_locked(&c.id).ok().map(|b| (c.id, b)))
+            .filter_map(|c| match self.empty_locked(&c.id) {
+                Ok(bytes) => Some((c.id, bytes)),
+                Err(why) => {
+                    // Not shown on screen (the command returns only what was emptied), but
+                    // never silent: the log says which cleanup could not be emptied and why.
+                    self.log("empty-failed", Path::new(&c.id), 0, &why);
+                    None
+                }
+            })
             .collect()
     }
 }

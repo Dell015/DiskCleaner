@@ -970,3 +970,30 @@ fn an_inner_pick_under_a_partly_moved_folder_is_reported() {
     assert!(about("Cache/sub/deeper").is_none(), "{:?}", out.skipped);
     assert!(!w.disk.join("Cache/sub/deeper/c.bin").exists());
 }
+
+/// QA finding 5: when automatic emptying cannot empty a cleanup, the log says so.
+#[test]
+fn a_failed_automatic_emptying_is_logged() {
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    // Someone swapped the items folder for a link: emptying must refuse, and say so.
+    let items = w.holding.join(&out.id).join("items");
+    let away = w.disk.parent().unwrap().join("moved-away");
+    std::fs::rename(&items, &away).unwrap();
+    if !link_dir(&away, &items) {
+        eprintln!("links cannot be made here: test skipped");
+        return;
+    }
+    let created = e.cleanups()[0].created;
+    let before = snapshot(&away);
+    assert!(e.empty_expired(30, created + 31 * 86_400).is_empty());
+    assert_eq!(snapshot(&away), before, "nothing deleted");
+    let log = std::fs::read_to_string(w.data.join("cleaning-log.jsonl")).unwrap();
+    let line = log
+        .lines()
+        .find(|l| l.contains("\"empty-failed\""))
+        .expect("an empty-failed line");
+    assert!(line.contains(&out.id) && line.contains("link"), "{line}");
+}
