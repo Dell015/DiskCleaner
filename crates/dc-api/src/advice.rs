@@ -33,6 +33,17 @@ pub fn if_deleted(reason: &str) -> Option<&'static str> {
         "may_hold_installed_games" => "Apps like this keep installed games or other data you may want, so DiskCleaner only shows it.",
         "outside_app_folders" => "It sits among your own files or at the top of a drive, so DiskCleaner only shows it. Look inside before deciding.",
         "low_confidence" => "The evidence is weak, so DiskCleaner only shows it and does not suggest removing it.",
+        "download_leftovers" => "Files of a download or update that did not finish. If one is still running, it starts over; nothing else is lost.",
+        "re_downloadable" => "Content the app downloaded and can download again (needs internet and time). Nothing of yours is lost.",
+        "windows_update_cache" => "Update files Windows keeps to share with other PCs. Windows clears them itself after a while; nothing breaks.",
+        "user_content" => "Things you made or saved inside an app's folder: game saves, screenshots, projects, settings. Deleting them loses them. Do not delete.",
+        "app_settings" => "The app's settings or your unsaved work. Deleting it resets the app or loses that work. Do not delete.",
+        "app_login" => "The app's sign-in and local settings. Deleting it signs you out and may lose settings.",
+        "app_records" => "The app's record of what is installed. Deleting it makes the app forget installed games or its own uninstaller. Do not delete.",
+        "offline_media" => "Songs or videos you downloaded to use offline. Deleting them means downloading them again.",
+        "managed_by_app" => "The app manages this itself; deleting it by hand confuses the app. Free the space inside the app instead.",
+        "virtual_disk" => "A whole virtual disk in one file (all its files are inside). Shrink it with the app's own clean-up; never delete it.",
+        "repair_cache" => "Installer copies needed to repair, change or uninstall apps. Deleting them can break those later. Do not delete.",
         _ => return None,
     })
 }

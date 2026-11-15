@@ -376,3 +376,1187 @@ summary = "Password manager data (including its cache)"
 path = '*:\Users\*\AppData\Roaming\Bitwarden'
 examples_match = ['C:\Users\bob\AppData\Roaming\Bitwarden\Cache\a']
 examples_no_match = ['C:\Users\bob\AppData\Roaming\BitwardenX\a']
+
+# ---------------------------------------------------------------- App-specific rules (research 2026-11-15, D129)
+# Safe: official or well-established sources. ProbablySafe: a small cost or a weaker source.
+# DontTouch: looks like a cache but holds something you would miss (these win over every rule above).
+
+[[rule]]
+id = "opera-cache"
+risk = "Safe"
+reason = "browser_cache"
+summary = "Opera and Opera GX page cache; pages load slower once"
+path = '*:\Users\*\AppData\Local\Opera Software\*\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\Opera Software\Opera GX Stable\Cache\Cache_Data\f_0001']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Opera Software\Opera GX Stable\Cache\x']
+
+[[rule]]
+id = "firefox-startup-cache"
+risk = "Safe"
+reason = "browser_cache"
+summary = "Firefox start-up cache; rebuilt, first start slower"
+path = '*:\Users\*\AppData\Local\Mozilla\Firefox\Profiles\*\startupCache'
+examples_match = ['C:\Users\bob\AppData\Local\Mozilla\Firefox\Profiles\ab12.default\startupCache\scriptCache.bin']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Mozilla\Firefox\Profiles\ab12.default\places.sqlite']
+
+[[rule]]
+id = "firefox-thumbnails"
+risk = "Safe"
+reason = "browser_cache"
+summary = "Firefox page thumbnails; rebuilt"
+path = '*:\Users\*\AppData\Local\Mozilla\Firefox\Profiles\*\thumbnails'
+examples_match = ['C:\Users\bob\AppData\Local\Mozilla\Firefox\Profiles\ab12.default\thumbnails\a.png']
+examples_no_match = ['C:\Users\bob\AppData\Local\Mozilla\Firefox\Profiles\ab12.default\cache3\a']
+
+[[rule]]
+id = "spotify-cache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Spotify's streaming cache (not your downloaded songs); it fills again as you listen"
+path = '*:\Users\*\AppData\Local\Spotify\Data'
+examples_match = ['C:\Users\bob\AppData\Local\Spotify\Data\0a\0a1b.file']
+examples_no_match = ['C:\Users\bob\AppData\Local\Spotify\Storage\x.file']
+
+[[rule]]
+id = "spotify-store-cache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Spotify's streaming cache (Microsoft Store version; not your downloaded songs)"
+path = '*:\Users\*\AppData\Local\Packages\SpotifyAB.SpotifyMusic_*\LocalCache\Spotify\Data'
+examples_match = ['C:\Users\bob\AppData\Local\Packages\SpotifyAB.SpotifyMusic_zpdnekdrzrea0\LocalCache\Spotify\Data\0a\b.file']
+examples_no_match = ['C:\Users\bob\AppData\Local\Packages\SpotifyAB.SpotifyMusic_zpdnekdrzrea0\LocalState\Spotify\Storage\a']
+
+[[rule]]
+id = "steam-shader-cache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "Steam's compiled shaders for your games; rebuilt or downloaded again at the next start"
+path = '*:\Program Files (x86)\Steam\steamapps\shadercache'
+examples_match = ['C:\Program Files (x86)\Steam\steamapps\shadercache\570\a.bin']
+examples_no_match = ['C:\Program Files (x86)\Steam\steamapps\common\Game\shadercache\a']
+
+[[rule]]
+id = "steam-shader-cache-pf"
+risk = "Safe"
+reason = "shader_cache"
+summary = "Steam's compiled shaders for your games; rebuilt or downloaded again at the next start"
+path = '*:\Program Files\Steam\steamapps\shadercache'
+examples_match = ['C:\Program Files\Steam\steamapps\shadercache\570\a.bin']
+examples_no_match = ['C:\Program Files\Steam\steamapps\common\Game\shadercache\a']
+
+[[rule]]
+id = "steam-shader-cache-library"
+risk = "Safe"
+reason = "shader_cache"
+summary = "Steam's compiled shaders for your games; rebuilt or downloaded again at the next start"
+path = '*:\SteamLibrary\steamapps\shadercache'
+examples_match = ['D:\SteamLibrary\steamapps\shadercache\570\a.bin']
+examples_no_match = ['D:\SteamLibrary\steamapps\common\Game\shadercache\a']
+
+[[rule]]
+id = "epic-web-cache"
+risk = "Safe"
+reason = "web_cache"
+summary = "Epic Games Launcher's web cache (Epic's own fix-it steps delete it)"
+path = '*:\Users\*\AppData\Local\EpicGamesLauncher\Saved\webcache*'
+examples_match = ['C:\Users\bob\AppData\Local\EpicGamesLauncher\Saved\webcache_4147\Cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\EpicGamesLauncher\Saved\Config\a.ini']
+
+[[rule]]
+id = "riot-client-logs"
+risk = "Safe"
+reason = "old_logs"
+summary = "Riot Client logs, older than 7 days"
+path = '*:\Users\*\AppData\Local\Riot Games\Riot Client\Logs'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\Riot Games\Riot Client\Logs\Riot Client Logs\a.log']
+examples_no_match = ['C:\Users\bob\AppData\Local\Riot Games\Riot Client\Data\a']
+
+[[rule]]
+id = "valorant-logs"
+risk = "Safe"
+reason = "old_logs"
+summary = "VALORANT logs, older than 7 days"
+path = '*:\Users\*\AppData\Local\VALORANT\Saved\Logs'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\VALORANT\Saved\Logs\ShooterGame.log']
+examples_no_match = ['C:\Users\bob\AppData\Local\VALORANT\Saved\Config\a.ini']
+
+[[rule]]
+id = "valorant-crashes"
+risk = "Safe"
+reason = "crash_dumps"
+summary = "VALORANT crash reports, older than 7 days"
+path = '*:\Users\*\AppData\Local\VALORANT\Saved\Crashes'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\VALORANT\Saved\Crashes\c1\a.dmp']
+examples_no_match = ['C:\Users\bob\AppData\Local\VALORANT\Saved\Config\a.ini']
+
+[[rule]]
+id = "battlenet-cache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Battle.net's cache; Blizzard says deleting it does not touch game data"
+path = '*:\ProgramData\Blizzard Entertainment\Battle.net\Cache'
+examples_match = ['C:\ProgramData\Blizzard Entertainment\Battle.net\Cache\a\b.idx']
+examples_no_match = ['C:\ProgramData\Battle.net\Agent\Blizzard Uninstaller.exe']
+
+[[rule]]
+id = "vscode-cacheddata"
+risk = "Safe"
+reason = "app_cache"
+summary = "Visual Studio Code's cache; rebuilt (close VS Code first)"
+path = '*:\Users\*\AppData\Roaming\Code\CachedData'
+examples_match = ['C:\Users\bob\AppData\Roaming\Code\CachedData\x\y']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Code\User\settings.json']
+
+[[rule]]
+id = "vscode-cachedextensionvsixs"
+risk = "Safe"
+reason = "app_cache"
+summary = "Visual Studio Code's cache; rebuilt (close VS Code first)"
+path = '*:\Users\*\AppData\Roaming\Code\CachedExtensionVSIXs'
+examples_match = ['C:\Users\bob\AppData\Roaming\Code\CachedExtensionVSIXs\x\y']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Code\User\settings.json']
+
+[[rule]]
+id = "vscode-logs"
+risk = "Safe"
+reason = "old_logs"
+summary = "Visual Studio Code logs, older than 7 days"
+path = '*:\Users\*\AppData\Roaming\Code\logs'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Roaming\Code\logs\20261101\main.log']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Code\User\a']
+
+[[rule]]
+id = "vscode-crashpad"
+risk = "Safe"
+reason = "crash_dumps"
+summary = "Visual Studio Code crash reports, older than 7 days"
+path = '*:\Users\*\AppData\Roaming\Code\Crashpad'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Roaming\Code\Crashpad\reports\a.dmp']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Code\Backups\a']
+
+[[rule]]
+id = "visual-studio-mef-cache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Visual Studio's component cache; rebuilt at the next start (close Visual Studio first)"
+path = '*:\Users\*\AppData\Local\Microsoft\VisualStudio\*\ComponentModelCache'
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\VisualStudio\17.0_abc\ComponentModelCache\a.cache']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\VisualStudio\17.0_abc\Settings\a']
+
+[[rule]]
+id = "nuget-v3-cache"
+risk = "Safe"
+reason = "package_cache"
+summary = "NuGet's download cache; packages are downloaded again when needed"
+path = '*:\Users\*\AppData\Local\NuGet\v3-cache'
+examples_match = ['C:\Users\bob\AppData\Local\NuGet\v3-cache\a\b.dat']
+examples_no_match = ['C:\Users\bob\AppData\Local\NuGet\Config\a']
+
+[[rule]]
+id = "nuget-plugins-cache"
+risk = "Safe"
+reason = "package_cache"
+summary = "NuGet's download cache; packages are downloaded again when needed"
+path = '*:\Users\*\AppData\Local\NuGet\plugins-cache'
+examples_match = ['C:\Users\bob\AppData\Local\NuGet\plugins-cache\a\b.dat']
+examples_no_match = ['C:\Users\bob\AppData\Local\NuGet\Config\a']
+
+[[rule]]
+id = "jetbrains-logs"
+risk = "Safe"
+reason = "old_logs"
+summary = "JetBrains IDE logs, older than 7 days"
+path = '*:\Users\*\AppData\Local\JetBrains\*\log'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\JetBrains\PyCharm2024.2\log\idea.log']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\JetBrains\PyCharm2024.2\options\a.xml']
+
+[[rule]]
+id = "npm-cache-roaming"
+risk = "Safe"
+reason = "package_cache"
+summary = "npm's download cache (older npm); downloaded again when needed"
+path = '*:\Users\*\AppData\Roaming\npm-cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\npm-cache\_cacache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\npm\node_modules\a']
+
+[[rule]]
+id = "unity-package-cache"
+risk = "Safe"
+reason = "package_cache"
+summary = "Unity's package download cache; downloaded again when needed"
+path = '*:\Users\*\AppData\Local\Unity\cache\upm'
+examples_match = ['C:\Users\bob\AppData\Local\Unity\cache\upm\packages\a.tgz']
+examples_no_match = ['C:\Users\bob\AppData\Local\Unity\Editor\Editor.log']
+
+[[rule]]
+id = "adobe-media-cache-files"
+risk = "Safe"
+reason = "app_cache"
+summary = "Adobe video apps' media cache (previews and waveforms); rebuilt, slowly (close Premiere and After Effects first)"
+path = '*:\Users\*\AppData\Roaming\Adobe\Common\Media Cache Files'
+examples_match = ['C:\Users\bob\AppData\Roaming\Adobe\Common\Media Cache Files\a.cfa']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Adobe\Premiere Pro\24.0\Profile-bob\a']
+
+[[rule]]
+id = "adobe-media-cache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Adobe video apps' media cache (previews and waveforms); rebuilt, slowly (close Premiere and After Effects first)"
+path = '*:\Users\*\AppData\Roaming\Adobe\Common\Media Cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\Adobe\Common\Media Cache\a.cfa']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Adobe\Premiere Pro\24.0\Profile-bob\a']
+
+[[rule]]
+id = "adobe-peak-files"
+risk = "Safe"
+reason = "app_cache"
+summary = "Adobe video apps' media cache (previews and waveforms); rebuilt, slowly (close Premiere and After Effects first)"
+path = '*:\Users\*\AppData\Roaming\Adobe\Common\Peak Files'
+examples_match = ['C:\Users\bob\AppData\Roaming\Adobe\Common\Peak Files\a.cfa']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Adobe\Premiere Pro\24.0\Profile-bob\a']
+
+[[rule]]
+id = "obs-logs"
+risk = "Safe"
+reason = "old_logs"
+summary = "OBS Studio diagnostics, older than 7 days"
+path = '*:\Users\*\AppData\Roaming\obs-studio\logs'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Roaming\obs-studio\logs\a.txt']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\obs-studio\basic\scenes\a.json']
+
+[[rule]]
+id = "obs-crashes"
+risk = "Safe"
+reason = "crash_dumps"
+summary = "OBS Studio diagnostics, older than 7 days"
+path = '*:\Users\*\AppData\Roaming\obs-studio\crashes'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Roaming\obs-studio\crashes\a.txt']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\obs-studio\basic\scenes\a.json']
+
+[[rule]]
+id = "obs-profiler-data"
+risk = "Safe"
+reason = "old_logs"
+summary = "OBS Studio diagnostics, older than 7 days"
+path = '*:\Users\*\AppData\Roaming\obs-studio\profiler_data'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Roaming\obs-studio\profiler_data\a.txt']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\obs-studio\basic\scenes\a.json']
+
+[[rule]]
+id = "amd-glcache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "AMD shader cache; rebuilt automatically"
+path = '*:\Users\*\AppData\Local\AMD\GLCache'
+examples_match = ['C:\Users\bob\AppData\Local\AMD\GLCache\a.bin']
+examples_no_match = ['C:\Users\bob\AppData\Local\AMD\CN\a']
+
+[[rule]]
+id = "amd-vkcache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "AMD shader cache; rebuilt automatically"
+path = '*:\Users\*\AppData\Local\AMD\VkCache'
+examples_match = ['C:\Users\bob\AppData\Local\AMD\VkCache\a.bin']
+examples_no_match = ['C:\Users\bob\AppData\Local\AMD\CN\a']
+
+[[rule]]
+id = "nvidia-nv-cache"
+risk = "Safe"
+reason = "shader_cache"
+summary = "NVIDIA shader cache; rebuilt automatically"
+path = '*:\Users\*\AppData\Local\NVIDIA Corporation\NV_Cache'
+examples_match = ['C:\Users\bob\AppData\Local\NVIDIA Corporation\NV_Cache\a.toc']
+examples_no_match = ['C:\Users\bob\AppData\Local\NVIDIA Corporation\NVIDIA app\a']
+
+[[rule]]
+id = "nvidia-nv-cache-shared"
+risk = "Safe"
+reason = "shader_cache"
+summary = "NVIDIA shader cache shared by all users; rebuilt automatically"
+path = '*:\ProgramData\NVIDIA Corporation\NV_Cache'
+examples_match = ['C:\ProgramData\NVIDIA Corporation\NV_Cache\a.toc']
+examples_no_match = ['C:\ProgramData\NVIDIA Corporation\Drs\a.bin']
+
+[[rule]]
+id = "teams-classic-cache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Classic Microsoft Teams cache; rebuilt (close Teams first)"
+path = '*:\Users\*\AppData\Roaming\Microsoft\Teams\Cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\Cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\Local Storage\a']
+
+[[rule]]
+id = "teams-classic-code-cache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Classic Microsoft Teams cache; rebuilt (close Teams first)"
+path = '*:\Users\*\AppData\Roaming\Microsoft\Teams\Code Cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\Code Cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\Local Storage\a']
+
+[[rule]]
+id = "teams-classic-gpucache"
+risk = "Safe"
+reason = "app_cache"
+summary = "Classic Microsoft Teams cache; rebuilt (close Teams first)"
+path = '*:\Users\*\AppData\Roaming\Microsoft\Teams\GPUCache'
+examples_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\GPUCache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\Local Storage\a']
+
+[[rule]]
+id = "teams-classic-blob-storage"
+risk = "Safe"
+reason = "app_cache"
+summary = "Classic Microsoft Teams cache; rebuilt (close Teams first)"
+path = '*:\Users\*\AppData\Roaming\Microsoft\Teams\blob_storage'
+examples_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\blob_storage\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\Local Storage\a']
+
+[[rule]]
+id = "teams-classic-tmp"
+risk = "Safe"
+reason = "app_cache"
+summary = "Classic Microsoft Teams cache; rebuilt (close Teams first)"
+path = '*:\Users\*\AppData\Roaming\Microsoft\Teams\tmp'
+examples_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\tmp\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Microsoft\Teams\Local Storage\a']
+
+[[rule]]
+id = "roblox-logs"
+risk = "Safe"
+reason = "old_logs"
+summary = "Roblox logs, older than 7 days"
+path = '*:\Users\*\AppData\Local\Roblox\logs'
+min_age_days = 7
+examples_match = ['C:\Users\bob\AppData\Local\Roblox\logs\a.log']
+examples_no_match = ['C:\Users\bob\AppData\Local\Roblox\GlobalBasicSettings_13.xml']
+
+[[rule]]
+id = "minecraft-logs"
+risk = "Safe"
+reason = "old_logs"
+summary = "Minecraft launcher logs and caches (Mojang's reset steps remove them)"
+path = '*:\Users\*\AppData\Roaming\.minecraft\logs'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\saves\World\level.dat']
+
+[[rule]]
+id = "minecraft-crash-reports"
+risk = "Safe"
+reason = "crash_dumps"
+summary = "Minecraft launcher logs and caches (Mojang's reset steps remove them)"
+path = '*:\Users\*\AppData\Roaming\.minecraft\crash-reports'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\crash-reports\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\saves\World\level.dat']
+
+[[rule]]
+id = "minecraft-webcache"
+risk = "Safe"
+reason = "web_cache"
+summary = "Minecraft launcher logs and caches (Mojang's reset steps remove them)"
+path = '*:\Users\*\AppData\Roaming\.minecraft\webcache'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\webcache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\saves\World\level.dat']
+
+[[rule]]
+id = "minecraft-webcache2"
+risk = "Safe"
+reason = "web_cache"
+summary = "Minecraft launcher logs and caches (Mojang's reset steps remove them)"
+path = '*:\Users\*\AppData\Roaming\.minecraft\webcache2'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\webcache2\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\saves\World\level.dat']
+
+[[rule]]
+id = "chromium-gr-shader-cache"
+risk = "ProbablySafe"
+reason = "shader_cache"
+summary = "Chromium browsers' graphics shader cache; rebuilt"
+path = '*:\Users\*\AppData\Local\*\*\User Data\GrShaderCache'
+examples_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\GrShaderCache\data_0']
+examples_no_match = ['C:\Users\bob\AppData\Local\Google\Chrome\User Data\Default\Bookmarks']
+
+[[rule]]
+id = "chromium-shader-cache"
+risk = "ProbablySafe"
+reason = "shader_cache"
+summary = "Chromium browsers' shader cache; rebuilt"
+path = '*:\Users\*\AppData\Local\*\*\User Data\ShaderCache'
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\Edge\User Data\ShaderCache\data_0']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\Edge\User Data\Default\History']
+
+[[rule]]
+id = "steam-downloading"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam's unfinished download files, untouched for 7 days; an update in progress starts over"
+path = '*:\Program Files (x86)\Steam\steamapps\downloading'
+min_age_days = 7
+examples_match = ['C:\Program Files (x86)\Steam\steamapps\downloading\570\a.bin']
+examples_no_match = ['C:\Program Files (x86)\Steam\steamapps\common\Game\a']
+
+[[rule]]
+id = "steam-temp"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam's unfinished download files, untouched for 7 days; an update in progress starts over"
+path = '*:\Program Files (x86)\Steam\steamapps\temp'
+min_age_days = 7
+examples_match = ['C:\Program Files (x86)\Steam\steamapps\temp\570\a.bin']
+examples_no_match = ['C:\Program Files (x86)\Steam\steamapps\common\Game\a']
+
+[[rule]]
+id = "steam-workshop-downloads"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam Workshop's unfinished downloads, untouched for 7 days"
+path = '*:\Program Files (x86)\Steam\steamapps\workshop\downloads'
+min_age_days = 7
+examples_match = ['C:\Program Files (x86)\Steam\steamapps\workshop\downloads\431960\a']
+examples_no_match = ['C:\Program Files (x86)\Steam\steamapps\workshop\content\431960\a']
+
+[[rule]]
+id = "steam-downloading-pf"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam's unfinished download files, untouched for 7 days; an update in progress starts over"
+path = '*:\Program Files\Steam\steamapps\downloading'
+min_age_days = 7
+examples_match = ['C:\Program Files\Steam\steamapps\downloading\570\a.bin']
+examples_no_match = ['C:\Program Files\Steam\steamapps\common\Game\a']
+
+[[rule]]
+id = "steam-temp-pf"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam's unfinished download files, untouched for 7 days; an update in progress starts over"
+path = '*:\Program Files\Steam\steamapps\temp'
+min_age_days = 7
+examples_match = ['C:\Program Files\Steam\steamapps\temp\570\a.bin']
+examples_no_match = ['C:\Program Files\Steam\steamapps\common\Game\a']
+
+[[rule]]
+id = "steam-workshop-downloads-pf"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam Workshop's unfinished downloads, untouched for 7 days"
+path = '*:\Program Files\Steam\steamapps\workshop\downloads'
+min_age_days = 7
+examples_match = ['C:\Program Files\Steam\steamapps\workshop\downloads\431960\a']
+examples_no_match = ['C:\Program Files\Steam\steamapps\workshop\content\431960\a']
+
+[[rule]]
+id = "steam-downloading-library"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam's unfinished download files, untouched for 7 days; an update in progress starts over"
+path = '*:\SteamLibrary\steamapps\downloading'
+min_age_days = 7
+examples_match = ['D:\SteamLibrary\steamapps\downloading\570\a.bin']
+examples_no_match = ['D:\SteamLibrary\steamapps\common\Game\a']
+
+[[rule]]
+id = "steam-temp-library"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam's unfinished download files, untouched for 7 days; an update in progress starts over"
+path = '*:\SteamLibrary\steamapps\temp'
+min_age_days = 7
+examples_match = ['D:\SteamLibrary\steamapps\temp\570\a.bin']
+examples_no_match = ['D:\SteamLibrary\steamapps\common\Game\a']
+
+[[rule]]
+id = "steam-workshop-downloads-library"
+risk = "ProbablySafe"
+reason = "download_leftovers"
+summary = "Steam Workshop's unfinished downloads, untouched for 7 days"
+path = '*:\SteamLibrary\steamapps\workshop\downloads'
+min_age_days = 7
+examples_match = ['D:\SteamLibrary\steamapps\workshop\downloads\431960\a']
+examples_no_match = ['D:\SteamLibrary\steamapps\workshop\content\431960\a']
+
+[[rule]]
+id = "steam-depotcache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files (x86)\Steam\depotcache'
+examples_match = ['C:\Program Files (x86)\Steam\depotcache\a']
+examples_no_match = ['C:\Program Files (x86)\Steam\userdata\123\a']
+
+[[rule]]
+id = "steam-appcache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files (x86)\Steam\appcache'
+examples_match = ['C:\Program Files (x86)\Steam\appcache\a']
+examples_no_match = ['C:\Program Files (x86)\Steam\userdata\123\a']
+
+[[rule]]
+id = "steam-dumps"
+risk = "ProbablySafe"
+reason = "crash_dumps"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files (x86)\Steam\dumps'
+min_age_days = 7
+examples_match = ['C:\Program Files (x86)\Steam\dumps\a']
+examples_no_match = ['C:\Program Files (x86)\Steam\userdata\123\a']
+
+[[rule]]
+id = "steam-logs"
+risk = "ProbablySafe"
+reason = "old_logs"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files (x86)\Steam\logs'
+min_age_days = 7
+examples_match = ['C:\Program Files (x86)\Steam\logs\a']
+examples_no_match = ['C:\Program Files (x86)\Steam\userdata\123\a']
+
+[[rule]]
+id = "steam-depotcache-pf"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files\Steam\depotcache'
+examples_match = ['C:\Program Files\Steam\depotcache\a']
+examples_no_match = ['C:\Program Files\Steam\userdata\123\a']
+
+[[rule]]
+id = "steam-appcache-pf"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files\Steam\appcache'
+examples_match = ['C:\Program Files\Steam\appcache\a']
+examples_no_match = ['C:\Program Files\Steam\userdata\123\a']
+
+[[rule]]
+id = "steam-dumps-pf"
+risk = "ProbablySafe"
+reason = "crash_dumps"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files\Steam\dumps'
+min_age_days = 7
+examples_match = ['C:\Program Files\Steam\dumps\a']
+examples_no_match = ['C:\Program Files\Steam\userdata\123\a']
+
+[[rule]]
+id = "steam-logs-pf"
+risk = "ProbablySafe"
+reason = "old_logs"
+summary = "Steam's own cache, dumps and logs; rebuilt (close Steam first)"
+path = '*:\Program Files\Steam\logs'
+min_age_days = 7
+examples_match = ['C:\Program Files\Steam\logs\a']
+examples_no_match = ['C:\Program Files\Steam\userdata\123\a']
+
+[[rule]]
+id = "epic-launcher-logs"
+risk = "ProbablySafe"
+reason = "old_logs"
+summary = "Epic Games Launcher logs, older than 30 days"
+path = '*:\Users\*\AppData\Local\EpicGamesLauncher\Saved\Logs'
+min_age_days = 30
+examples_match = ['C:\Users\bob\AppData\Local\EpicGamesLauncher\Saved\Logs\a.log']
+examples_no_match = ['C:\Users\bob\AppData\Local\EpicGamesLauncher\Saved\Config\a']
+
+[[rule]]
+id = "epic-vault-cache"
+risk = "ProbablySafe"
+reason = "re_downloadable"
+summary = "Downloaded Unreal / Fab asset packs kept for reuse; downloaded again when needed"
+path = '*:\ProgramData\Epic\EpicGamesLauncher\VaultCache'
+examples_match = ['C:\ProgramData\Epic\EpicGamesLauncher\VaultCache\Pack\a.pak']
+examples_no_match = ['C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests\a.item']
+
+[[rule]]
+id = "genshin-web-cache"
+risk = "ProbablySafe"
+reason = "web_cache"
+summary = "Genshin Impact's in-game browser cache (news, wish history pages); rebuilt"
+path = '*:\*\Genshin Impact game\GenshinImpact_Data\webCaches'
+examples_match = ['C:\Games\Genshin Impact game\GenshinImpact_Data\webCaches\2.30\Cache\Cache_Data\data_0']
+examples_no_match = ['C:\Games\Genshin Impact game\GenshinImpact_Data\StreamingAssets\a.blk']
+
+[[rule]]
+id = "genshin-web-cache-2"
+risk = "ProbablySafe"
+reason = "web_cache"
+summary = "Genshin Impact's in-game browser cache (news, wish history pages); rebuilt"
+path = '*:\*\*\Genshin Impact game\GenshinImpact_Data\webCaches'
+examples_match = ['C:\HoYoPlay\games\Genshin Impact game\GenshinImpact_Data\webCaches\2.30\Cache\Cache_Data\data_0']
+examples_no_match = ['C:\HoYoPlay\games\Genshin Impact game\GenshinImpact_Data\StreamingAssets\a.blk']
+
+[[rule]]
+id = "genshin-web-cache-3"
+risk = "ProbablySafe"
+reason = "web_cache"
+summary = "Genshin Impact's in-game browser cache (news, wish history pages); rebuilt"
+path = '*:\*\*\*\Genshin Impact game\GenshinImpact_Data\webCaches'
+examples_match = ['C:\Program Files\HoYoPlay\games\Genshin Impact game\GenshinImpact_Data\webCaches\2.30\Cache\Cache_Data\data_0']
+examples_no_match = ['C:\Program Files\HoYoPlay\games\Genshin Impact game\GenshinImpact_Data\StreamingAssets\a.blk']
+
+[[rule]]
+id = "hoyoplay-web-cache"
+risk = "ProbablySafe"
+reason = "web_cache"
+summary = "HoYoverse launcher's web cache; rebuilt"
+path = '*:\Users\*\AppData\Local\HoYoverse\*\QtWebEngine\Default\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\HoYoverse\Genshin Impact\QtWebEngine\Default\Cache\data_0']
+examples_no_match = ['C:\Users\bob\AppData\Local\HoYoverse\Genshin Impact\config.ini']
+
+[[rule]]
+id = "battlenet-browser-caches"
+risk = "ProbablySafe"
+reason = "web_cache"
+summary = "Battle.net's store and web cache"
+path = '*:\Users\*\AppData\Local\Battle.net\BrowserCaches'
+examples_match = ['C:\Users\bob\AppData\Local\Battle.net\BrowserCaches\common\Cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\Battle.net\Account\a']
+
+[[rule]]
+id = "vscode-cpptools-ipch"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "VS Code C++ IntelliSense cache; rebuilt (projects re-index)"
+path = '*:\Users\*\AppData\Local\Microsoft\vscode-cpptools\ipch'
+examples_match = ['C:\Users\bob\AppData\Local\Microsoft\vscode-cpptools\ipch\a\b.ipch']
+examples_no_match = ['C:\Users\bob\AppData\Local\Microsoft\vscode-cpptools\settings.json']
+
+[[rule]]
+id = "jetbrains-caches"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "JetBrains IDE caches and indexes; projects are indexed again (slow) at the next open"
+path = '*:\Users\*\AppData\Local\JetBrains\*\caches'
+examples_match = ['C:\Users\bob\AppData\Local\JetBrains\IntelliJIdea2024.2\caches\a.dat']
+examples_no_match = ['C:\Users\bob\AppData\Local\JetBrains\IntelliJIdea2024.2\LocalHistory\a']
+
+[[rule]]
+id = "android-studio-caches"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Android Studio caches and indexes; projects are indexed again (slow) at the next open"
+path = '*:\Users\*\AppData\Local\Google\AndroidStudio*\caches'
+examples_match = ['C:\Users\bob\AppData\Local\Google\AndroidStudio2024.1\caches\a.dat']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Google\AndroidStudio2024.1\options\a.xml']
+
+[[rule]]
+id = "jetbrains-index"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "JetBrains IDE caches and indexes; projects are indexed again (slow) at the next open"
+path = '*:\Users\*\AppData\Local\JetBrains\*\index'
+examples_match = ['C:\Users\bob\AppData\Local\JetBrains\IntelliJIdea2024.2\index\a.dat']
+examples_no_match = ['C:\Users\bob\AppData\Local\JetBrains\IntelliJIdea2024.2\LocalHistory\a']
+
+[[rule]]
+id = "android-studio-index"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Android Studio caches and indexes; projects are indexed again (slow) at the next open"
+path = '*:\Users\*\AppData\Local\Google\AndroidStudio*\index'
+examples_match = ['C:\Users\bob\AppData\Local\Google\AndroidStudio2024.1\index\a.dat']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Google\AndroidStudio2024.1\options\a.xml']
+
+[[rule]]
+id = "gradle-wrapper-dists"
+risk = "ProbablySafe"
+reason = "package_cache"
+summary = "Gradle versions downloaded by projects; downloaded again when needed"
+path = '*:\Users\*\.gradle\wrapper\dists'
+examples_match = ['C:\Users\bob\.gradle\wrapper\dists\gradle-8.5-bin\a\gradle.zip']
+examples_no_match = ['C:\Users\bob\.gradle\init.d\a.gradle']
+
+[[rule]]
+id = "gradle-daemon-logs"
+risk = "ProbablySafe"
+reason = "old_logs"
+summary = "Gradle background-process logs, older than 7 days"
+path = '*:\Users\*\.gradle\daemon'
+min_age_days = 7
+examples_match = ['C:\Users\bob\.gradle\daemon\8.5\daemon-1.out.log']
+examples_no_match = ['C:\Users\bob\.gradle\gradle.properties']
+
+[[rule]]
+id = "android-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Android build cache; rebuilt"
+path = '*:\Users\*\.android\cache'
+examples_match = ['C:\Users\bob\.android\cache\a.bin']
+examples_no_match = ['C:\Users\bob\.android\avd\Pixel.avd\a.img']
+
+[[rule]]
+id = "android-build-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Android build cache; rebuilt"
+path = '*:\Users\*\.android\build-cache'
+examples_match = ['C:\Users\bob\.android\build-cache\a.bin']
+examples_no_match = ['C:\Users\bob\.android\avd\Pixel.avd\a.img']
+
+[[rule]]
+id = "yarn-berry-cache"
+risk = "ProbablySafe"
+reason = "package_cache"
+summary = "Yarn's download cache (Yarn 2 and later)"
+path = '*:\Users\*\AppData\Local\Yarn\Berry\cache'
+examples_match = ['C:\Users\bob\AppData\Local\Yarn\Berry\cache\a.zip']
+examples_no_match = ['C:\Users\bob\AppData\Local\Yarn\Data\a']
+
+[[rule]]
+id = "pnpm-store"
+risk = "ProbablySafe"
+reason = "package_cache"
+summary = "pnpm's package store; existing projects keep working, later installs download again ('pnpm store prune' is the gentler way)"
+path = '*:\Users\*\AppData\Local\pnpm\store'
+examples_match = ['C:\Users\bob\AppData\Local\pnpm\store\v3\files\00\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\pnpm\pnpm.exe']
+
+[[rule]]
+id = "pnpm-cache"
+risk = "ProbablySafe"
+reason = "package_cache"
+summary = "pnpm's metadata cache; downloaded again"
+path = '*:\Users\*\AppData\Local\pnpm\cache'
+examples_match = ['C:\Users\bob\AppData\Local\pnpm\cache\metadata\a.json']
+examples_no_match = ['C:\Users\bob\AppData\Local\pnpm\store\v3\a']
+
+[[rule]]
+id = "unity-asset-store"
+risk = "ProbablySafe"
+reason = "re_downloadable"
+summary = "Asset Store packages you downloaded; downloaded again from your account (can take long)"
+path = '*:\Users\*\AppData\Roaming\Unity\Asset Store-5.x'
+examples_match = ['C:\Users\bob\AppData\Roaming\Unity\Asset Store-5.x\Publisher\Pack.unitypackage']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Unity\Editor-5.x\a']
+
+[[rule]]
+id = "unity-hub-logs"
+risk = "ProbablySafe"
+reason = "old_logs"
+summary = "Unity Hub logs, older than 30 days"
+path = '*:\Users\*\AppData\Roaming\UnityHub\logs'
+min_age_days = 30
+examples_match = ['C:\Users\bob\AppData\Roaming\UnityHub\logs\info-log.json']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\UnityHub\secondaryInstallPath.json']
+
+[[rule]]
+id = "camera-raw-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Adobe Camera Raw / Lightroom preview cache; rebuilt"
+path = '*:\Users\*\AppData\Local\Adobe\CameraRaw\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\Adobe\CameraRaw\Cache\a.dat']
+examples_no_match = ['C:\Users\bob\AppData\Local\Adobe\CameraRaw\Settings\a']
+
+[[rule]]
+id = "capcut-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "CapCut's cache (previews and temporary files; not your drafts)"
+path = '*:\Users\*\AppData\Local\CapCut\User Data\Cache'
+examples_match = ['C:\Users\bob\AppData\Local\CapCut\User Data\Cache\a.tmp']
+examples_no_match = ['C:\Users\bob\AppData\Local\CapCut\User Data\Projects\com.lveditor.draft\a']
+
+[[rule]]
+id = "nvidia-driver-downloads"
+risk = "ProbablySafe"
+reason = "old_installers"
+summary = "NVIDIA driver installers already used; a reinstall downloads them again"
+path = '*:\ProgramData\NVIDIA Corporation\Downloader'
+examples_match = ['C:\ProgramData\NVIDIA Corporation\Downloader\latest\a.exe']
+examples_no_match = ['C:\ProgramData\NVIDIA Corporation\Drs\a.bin']
+
+[[rule]]
+id = "nvidia-crash-dumps"
+risk = "ProbablySafe"
+reason = "crash_dumps"
+summary = "NVIDIA crash reports, older than 7 days"
+path = '*:\ProgramData\NVIDIA Corporation\CrashDumps'
+min_age_days = 7
+examples_match = ['C:\ProgramData\NVIDIA Corporation\CrashDumps\a.dmp']
+examples_no_match = ['C:\ProgramData\NVIDIA Corporation\Drs\a.bin']
+
+[[rule]]
+id = "teams-new-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "New Microsoft Teams cache; you may need to sign in again (close Teams first)"
+path = '*:\Users\*\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams'
+examples_match = ['C:\Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\Settings\a']
+
+[[rule]]
+id = "zoom-webview-cache"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Zoom's web view cache (it can grow very large)"
+path = '*:\Users\*\AppData\Roaming\Zoom\data\WebviewCache'
+examples_match = ['C:\Users\bob\AppData\Roaming\Zoom\data\WebviewCache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Zoom\data\zoomus.enc.db']
+
+[[rule]]
+id = "zoom-logs"
+risk = "ProbablySafe"
+reason = "old_logs"
+summary = "Zoom logs, older than 30 days"
+path = '*:\Users\*\AppData\Roaming\Zoom\logs'
+min_age_days = 30
+examples_match = ['C:\Users\bob\AppData\Roaming\Zoom\logs\a.log']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Zoom\bin\Zoom.exe']
+
+[[rule]]
+id = "telegram-cache"
+risk = "ProbablySafe"
+reason = "re_downloadable"
+summary = "Telegram's media cache; pictures and videos are downloaded again from Telegram when opened"
+path = '*:\Users\*\AppData\Roaming\Telegram Desktop\tdata\user_data\cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\Telegram Desktop\tdata\user_data\cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Telegram Desktop\tdata\key_datas']
+
+[[rule]]
+id = "telegram-media-cache"
+risk = "ProbablySafe"
+reason = "re_downloadable"
+summary = "Telegram's media cache; pictures and videos are downloaded again from Telegram when opened"
+path = '*:\Users\*\AppData\Roaming\Telegram Desktop\tdata\user_data\media_cache'
+examples_match = ['C:\Users\bob\AppData\Roaming\Telegram Desktop\tdata\user_data\media_cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Telegram Desktop\tdata\key_datas']
+
+[[rule]]
+id = "figma-desktop"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Figma desktop app's local data (Figma's own fix-it steps); you sign in again, your files are online"
+path = '*:\Users\*\AppData\Roaming\Figma\Desktop'
+examples_match = ['C:\Users\bob\AppData\Roaming\Figma\Desktop\Cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Figma\settings.json']
+
+[[rule]]
+id = "figma-desktopprofile"
+risk = "ProbablySafe"
+reason = "app_cache"
+summary = "Figma desktop app's local data (Figma's own fix-it steps); you sign in again, your files are online"
+path = '*:\Users\*\AppData\Roaming\Figma\DesktopProfile'
+examples_match = ['C:\Users\bob\AppData\Roaming\Figma\DesktopProfile\Cache\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Figma\settings.json']
+
+[[rule]]
+id = "spotify-offline-songs"
+risk = "DontTouch"
+reason = "offline_media"
+summary = "Your downloaded Spotify songs; deleting means downloading them again"
+path = '*:\Users\*\AppData\Local\Spotify\Storage'
+examples_match = ['C:\Users\bob\AppData\Local\Spotify\Storage\a.file']
+examples_no_match = ['C:\Users\bob\AppData\Local\Spotify\Data\a.file']
+
+[[rule]]
+id = "spotify-store-offline-songs"
+risk = "DontTouch"
+reason = "offline_media"
+summary = "Your downloaded Spotify songs (Microsoft Store version)"
+path = '*:\Users\*\AppData\Local\Packages\SpotifyAB.SpotifyMusic_*\LocalState\Spotify\Storage'
+examples_match = ['C:\Users\bob\AppData\Local\Packages\SpotifyAB.SpotifyMusic_zpdnekdrzrea0\LocalState\Spotify\Storage\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\Packages\SpotifyAB.SpotifyMusic_zpdnekdrzrea0\LocalCache\Spotify\Data\a']
+
+[[rule]]
+id = "discord-local-storage"
+risk = "DontTouch"
+reason = "app_login"
+summary = "Discord's sign-in and settings; deleting signs you out"
+path = '*:\Users\*\AppData\Roaming\discord\Local Storage'
+examples_match = ['C:\Users\bob\AppData\Roaming\discord\Local Storage\leveldb\a.ldb']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\discord\Cache\a']
+
+[[rule]]
+id = "discord-session-storage"
+risk = "DontTouch"
+reason = "app_login"
+summary = "Discord's sign-in and settings; deleting signs you out"
+path = '*:\Users\*\AppData\Roaming\discord\Session Storage'
+examples_match = ['C:\Users\bob\AppData\Roaming\discord\Session Storage\leveldb\a.ldb']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\discord\Cache\a']
+
+[[rule]]
+id = "discord-indexeddb"
+risk = "DontTouch"
+reason = "app_login"
+summary = "Discord's sign-in and settings; deleting signs you out"
+path = '*:\Users\*\AppData\Roaming\discord\IndexedDB'
+examples_match = ['C:\Users\bob\AppData\Roaming\discord\IndexedDB\leveldb\a.ldb']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\discord\Cache\a']
+
+[[rule]]
+id = "steam-userdata"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Steam account data: game saves, settings, controller setups and screenshots"
+path = '*:\Program Files (x86)\Steam\userdata'
+examples_match = ['C:\Program Files (x86)\Steam\userdata\123456\760\remote\a.jpg']
+examples_no_match = ['C:\Program Files (x86)\Steam\steamapps\shadercache\a']
+
+[[rule]]
+id = "steam-userdata-pf"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Steam account data: game saves, settings, controller setups and screenshots"
+path = '*:\Program Files\Steam\userdata'
+examples_match = ['C:\Program Files\Steam\userdata\123456\760\remote\a.jpg']
+examples_no_match = ['C:\Program Files\Steam\steamapps\shadercache\a']
+
+[[rule]]
+id = "wallpaper-engine-workshop"
+risk = "DontTouch"
+reason = "managed_by_app"
+summary = "Wallpaper Engine's subscribed wallpapers; unsubscribe in Steam instead (deleting makes Steam download them all again)"
+path = '*:\Program Files (x86)\Steam\steamapps\workshop\content\431960'
+examples_match = ['C:\Program Files (x86)\Steam\steamapps\workshop\content\431960\123\scene.pkg']
+examples_no_match = ['C:\Program Files (x86)\Steam\steamapps\workshop\content\570\a']
+
+[[rule]]
+id = "wallpaper-engine-workshop-pf"
+risk = "DontTouch"
+reason = "managed_by_app"
+summary = "Wallpaper Engine's subscribed wallpapers; unsubscribe in Steam instead (deleting makes Steam download them all again)"
+path = '*:\Program Files\Steam\steamapps\workshop\content\431960'
+examples_match = ['C:\Program Files\Steam\steamapps\workshop\content\431960\123\scene.pkg']
+examples_no_match = ['C:\Program Files\Steam\steamapps\workshop\content\570\a']
+
+[[rule]]
+id = "wallpaper-engine-workshop-library"
+risk = "DontTouch"
+reason = "managed_by_app"
+summary = "Wallpaper Engine's subscribed wallpapers; unsubscribe in Steam instead (deleting makes Steam download them all again)"
+path = '*:\SteamLibrary\steamapps\workshop\content\431960'
+examples_match = ['D:\SteamLibrary\steamapps\workshop\content\431960\123\scene.pkg']
+examples_no_match = ['D:\SteamLibrary\steamapps\workshop\content\570\a']
+
+[[rule]]
+id = "wallpaper-engine-own"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Wallpapers you made in Wallpaper Engine"
+path = '*:\*\*\*\*\wallpaper_engine\projects\myprojects'
+examples_match = ['C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\projects\myprojects\mine\project.json']
+examples_no_match = ['C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\projects\defaultprojects\a']
+
+[[rule]]
+id = "epic-install-records"
+risk = "DontTouch"
+reason = "app_records"
+summary = "Epic's record of your installed games; without it Epic thinks they are not installed"
+path = '*:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests'
+examples_match = ['C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests\ABC.item']
+examples_no_match = ['C:\ProgramData\Epic\EpicGamesLauncher\VaultCache\a']
+
+[[rule]]
+id = "riot-install-records"
+risk = "DontTouch"
+reason = "app_records"
+summary = "Riot's record of your installed games"
+path = '*:\ProgramData\Riot Games\Metadata'
+examples_match = ['C:\ProgramData\Riot Games\Metadata\valorant.live\valorant.live.product_settings.yaml']
+examples_no_match = ['C:\ProgramData\Riot Games\Logs\a']
+
+[[rule]]
+id = "valorant-settings"
+risk = "DontTouch"
+reason = "app_settings"
+summary = "Your VALORANT keybinds and graphics settings"
+path = '*:\Users\*\AppData\Local\VALORANT\Saved\Config'
+examples_match = ['C:\Users\bob\AppData\Local\VALORANT\Saved\Config\Windows\GameUserSettings.ini']
+examples_no_match = ['C:\Users\bob\AppData\Local\VALORANT\Saved\Logs\a.log']
+
+[[rule]]
+id = "battlenet-agent"
+risk = "DontTouch"
+reason = "app_records"
+summary = "Battle.net's agent with its uninstaller; without it games cannot be removed or found"
+path = '*:\ProgramData\Battle.net\Agent'
+examples_match = ['C:\ProgramData\Battle.net\Agent\Blizzard Uninstaller.exe']
+examples_no_match = ['C:\ProgramData\Blizzard Entertainment\Battle.net\Cache\a']
+
+[[rule]]
+id = "vscode-user"
+risk = "DontTouch"
+reason = "app_settings"
+summary = "Visual Studio Code settings, unsaved work and file history"
+path = '*:\Users\*\AppData\Roaming\Code\User'
+examples_match = ['C:\Users\bob\AppData\Roaming\Code\User\a.json']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Code\CachedData\a']
+
+[[rule]]
+id = "vscode-backups"
+risk = "DontTouch"
+reason = "app_settings"
+summary = "Visual Studio Code settings, unsaved work and file history"
+path = '*:\Users\*\AppData\Roaming\Code\Backups'
+examples_match = ['C:\Users\bob\AppData\Roaming\Code\Backups\a.json']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\Code\CachedData\a']
+
+[[rule]]
+id = "jetbrains-local-history"
+risk = "DontTouch"
+reason = "app_settings"
+summary = "JetBrains local history: earlier versions of your files"
+path = '*:\Users\*\AppData\Local\JetBrains\*\LocalHistory'
+examples_match = ['C:\Users\bob\AppData\Local\JetBrains\PyCharm2024.2\LocalHistory\changes.storageData']
+examples_no_match = ['C:\Users\bob\AppData\Local\JetBrains\PyCharm2024.2\caches\a']
+
+[[rule]]
+id = "jetbrains-toolbox"
+risk = "DontTouch"
+reason = "app_settings"
+summary = "JetBrains Toolbox and the IDEs it installed"
+path = '*:\Users\*\AppData\Local\JetBrains\Toolbox'
+examples_match = ['C:\Users\bob\AppData\Local\JetBrains\Toolbox\caches\a']
+examples_no_match = ['C:\Users\bob\AppData\Local\JetBrains\PyCharm2024.2\caches\a']
+
+[[rule]]
+id = "android-virtual-devices"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Android emulator devices with their data; remove them in Android Studio's Device Manager"
+path = '*:\Users\*\.android\avd'
+examples_match = ['C:\Users\bob\.android\avd\Pixel_8.avd\userdata-qemu.img']
+examples_no_match = ['C:\Users\bob\.android\cache\a']
+
+[[rule]]
+id = "npm-global-packages"
+risk = "DontTouch"
+reason = "app_settings"
+summary = "Programs you installed with npm (global packages)"
+path = '*:\Users\*\AppData\Roaming\npm'
+examples_match = ['C:\Users\bob\AppData\Roaming\npm\node_modules\typescript\a.js']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\npm-cache\a']
+
+[[rule]]
+id = "whatsapp-media"
+risk = "DontTouch"
+reason = "managed_by_app"
+summary = "Every photo and file you sent or received on WhatsApp; free space in WhatsApp's Settings > Storage instead"
+path = '*:\Users\*\AppData\Local\Packages\5319275A.WhatsAppDesktop_*\LocalState\shared\transfers'
+examples_match = ['C:\Users\bob\AppData\Local\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers\a.jpg']
+examples_no_match = ['C:\Users\bob\AppData\Local\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalCache\a']
+
+[[rule]]
+id = "capcut-drafts"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your CapCut projects and drafts"
+path = '*:\Users\*\AppData\Local\CapCut\User Data\Projects'
+examples_match = ['C:\Users\bob\AppData\Local\CapCut\User Data\Projects\com.lveditor.draft\a\draft.json']
+examples_no_match = ['C:\Users\bob\AppData\Local\CapCut\User Data\Cache\a']
+
+[[rule]]
+id = "capcut-drafts-folder"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your CapCut drafts"
+path = '*:\Users\*\AppData\Local\CapCut Drafts'
+examples_match = ['C:\Users\bob\AppData\Local\CapCut Drafts\a\draft.json']
+examples_no_match = ['C:\Users\bob\AppData\Local\CapCut\a']
+
+[[rule]]
+id = "obs-scenes"
+risk = "DontTouch"
+reason = "app_settings"
+summary = "Your OBS scenes, profiles and stream settings"
+path = '*:\Users\*\AppData\Roaming\obs-studio\basic'
+examples_match = ['C:\Users\bob\AppData\Roaming\obs-studio\basic\scenes\Main.json']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\obs-studio\logs\a.txt']
+
+[[rule]]
+id = "teams-backgrounds"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your own Teams backgrounds"
+path = '*:\Users\*\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Backgrounds'
+examples_match = ['C:\Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Backgrounds\Uploads\me.png']
+examples_no_match = ['C:\Users\bob\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\a']
+
+[[rule]]
+id = "minecraft-saves"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your Minecraft worlds, screenshots, packs and settings"
+path = '*:\Users\*\AppData\Roaming\.minecraft\saves'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\saves\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a.log']
+
+[[rule]]
+id = "minecraft-screenshots"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your Minecraft worlds, screenshots, packs and settings"
+path = '*:\Users\*\AppData\Roaming\.minecraft\screenshots'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\screenshots\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a.log']
+
+[[rule]]
+id = "minecraft-resourcepacks"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your Minecraft worlds, screenshots, packs and settings"
+path = '*:\Users\*\AppData\Roaming\.minecraft\resourcepacks'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\resourcepacks\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a.log']
+
+[[rule]]
+id = "minecraft-shaderpacks"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your Minecraft worlds, screenshots, packs and settings"
+path = '*:\Users\*\AppData\Roaming\.minecraft\shaderpacks'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\shaderpacks\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a.log']
+
+[[rule]]
+id = "minecraft-mods"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your Minecraft worlds, screenshots, packs and settings"
+path = '*:\Users\*\AppData\Roaming\.minecraft\mods'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\mods\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a.log']
+
+[[rule]]
+id = "minecraft-config"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your Minecraft worlds, screenshots, packs and settings"
+path = '*:\Users\*\AppData\Roaming\.minecraft\config'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\config\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a.log']
+
+[[rule]]
+id = "minecraft-backup"
+risk = "DontTouch"
+reason = "user_content"
+summary = "Your Minecraft worlds, screenshots, packs and settings"
+path = '*:\Users\*\AppData\Roaming\.minecraft\backup'
+examples_match = ['C:\Users\bob\AppData\Roaming\.minecraft\backup\a']
+examples_no_match = ['C:\Users\bob\AppData\Roaming\.minecraft\logs\a.log']
+
+[[rule]]
+id = "brave-wallet"
+risk = "DontTouch"
+reason = "wallet_or_vault"
+summary = "Brave's built-in crypto wallet"
+path = '*:\Users\*\AppData\Local\BraveSoftware\Brave-Browser\User Data\*\Local Extension Settings'
+examples_match = ['C:\Users\bob\AppData\Local\BraveSoftware\Brave-Browser\User Data\Default\Local Extension Settings\a\b.ldb']
+examples_no_match = ['C:\Users\bob\AppData\Local\BraveSoftware\Brave-Browser\User Data\Default\Cache\a']

@@ -51,3 +51,6 @@ can be cleared inside each place hanging further out (green safe, orange probabl
 12 places get their own circle; the rest are one "more places" circle. Clicking a circle opens it
 in the Files view. "Show on the map" still opens the full map with only the app lit.
 
+Step 4 done (2026-11-15): app-specific rules from the research (D129), so app pages show more of
+what can be cleared, and say plainly what must stay.
+
