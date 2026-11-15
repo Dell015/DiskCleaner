@@ -234,3 +234,28 @@ fn a_dont_touch_folder_inside_blocks_the_whole_folder() {
         r.blocked
     );
 }
+
+#[test]
+fn the_previous_installations_user_files_are_never_offered() {
+    // QA finding 2: after an upgrade or a reinstall, Windows.old\Users holds the old profile
+    // (for a "keep nothing" reinstall, the only copy).
+    let r = run(&[
+        f(r"Windows.old\Windows\System32\x.dll", 1000, 400),
+        f(r"Windows.old\Users\bob\Documents\thesis.docx", 500, 400),
+        f(r"Windows.old\Users\bob\Desktop\photo.jpg", 500, 400),
+    ]);
+    // The rest of Windows.old (the old Windows folder) is still offered, on its own.
+    assert!(
+        r.items
+            .iter()
+            .all(|i| !i.path.ends_with("Windows.old") && !i.path.contains("Users")),
+        "{:?}",
+        r.items
+    );
+    assert_eq!(r.items.iter().map(|i| i.sizes.on_disk).sum::<u64>(), 1000);
+    assert!(
+        r.blocked.iter().any(|b| b.path == r"C:\Windows.old"),
+        "{:?}",
+        r.blocked
+    );
+}
