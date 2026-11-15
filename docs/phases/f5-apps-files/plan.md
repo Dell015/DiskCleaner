@@ -45,3 +45,9 @@ Epic, Riot and HoYoPlay. Genshin Impact's 174 GB in `C:\Games` is now Genshin's,
 folder is called. Not covered yet: Battle.net, EA app, Ubisoft Connect, GOG, Xbox / Microsoft
 Store games.
 
+Step 3 done (2026-11-15): each app's page draws its network: the app in the middle, a line to
+every place it keeps things (circle size follows space, colour follows what it is for), and what
+can be cleared inside each place hanging further out (green safe, orange probably safe). At most
+12 places get their own circle; the rest are one "more places" circle. Clicking a circle opens it
+in the Files view. "Show on the map" still opens the full map with only the app lit.
+

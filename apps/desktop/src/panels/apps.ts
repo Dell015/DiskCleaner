@@ -2,7 +2,8 @@
 // page with every place it keeps things, sorted by what removing them would do. Read-only apart
 // from the pick boxes, which only select items for the usual review screen.
 
-import { appCards, clearables, placeRole, ROLE_TEXT, type AppCard, type PlaceRole } from "../core/apps";
+import { appCards, clearables, layoutNetwork, placeRole, ROLE_TEXT, type AppCard, type PlaceRole } from "../core/apps";
+import { appNetwork } from "./appnet";
 import { ago } from "../core/inventory";
 import type { Tree } from "../core/tree";
 import { count, human } from "../core/util";
@@ -160,6 +161,15 @@ export class AppsView {
 
     // What can go without harming it.
     const clear = clearables(tree, card.places);
+
+    // The app's network: every place it keeps things, and what can be cleared in them.
+    const roles = new Map(card.places.map((p) => [p, placeRole(tree, p, o.folder)] as [number, PlaceRole]));
+    const net = h("figure", { class: "ap-netwrap" }, appNetwork(layoutNetwork(tree, card.places, roles, clear, o.name), this.on.appIcon(owner), (n) => this.on.open(n)),
+      h("figcaption", { class: "ap-key" },
+        ...([["program", "Needed to run"], ["data", "Settings and data"], ["saves", "Your saves"], ["temp", "Temporary"], ["safe", "Safe to clear"], ["probably_safe", "Probably safe"]] as [string, string][])
+          .map(([k, t]) => h("span", {}, h("i", { class: `k-${k}` }), t)),
+        h("span", { class: "quiet" }, "Circle size is space. Click one to open it.")));
+    out.push(net);
     const sec = h("section", { class: "ap-sec" });
     const clearBytes = clear.reduce((a, c) => a + c.bytes, 0);
     sec.append(h("h3", {}, h("span", { class: "dot safe" }), clear.length ? `Can be cleared: ${human(clearBytes)}` : "Nothing to clear safely"),

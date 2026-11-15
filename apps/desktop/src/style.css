@@ -485,3 +485,32 @@ span.appicon.none { display: inline-block; width: 16px; height: 16px; border-rad
   .ap-detail-head { grid-template-columns: auto 1fr; }
   .ap-total { grid-column: 1 / -1; justify-items: start; }
 }
+
+/* An app's network drawing. */
+.ap-netwrap { margin: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 8px 10px 10px; }
+.ap-net { display: block; width: 100%; height: auto; max-height: 460px; }
+.ap-net line { stroke: var(--line); stroke-width: 1.5; }
+.ap-net line.k-safe, .ap-net line.k-probably_safe { stroke-dasharray: 4 4; }
+.ap-net line.k-safe { stroke: color-mix(in srgb, var(--safe) 60%, var(--line)); }
+.ap-net line.k-probably_safe { stroke: color-mix(in srgb, var(--probably) 60%, var(--line)); }
+.ap-net circle { stroke-width: 2; fill-opacity: 0.85; }
+.ap-net .k-app circle { fill: var(--panel-2); stroke: var(--accent); }
+.ap-net .k-program circle { fill: var(--folder); stroke: color-mix(in srgb, var(--folder) 70%, var(--text)); }
+.ap-net .k-data circle { fill: color-mix(in srgb, var(--folder) 45%, var(--panel-2)); stroke: var(--folder); }
+.ap-net .k-saves circle { fill: #9b7fd6; stroke: #b9a4ea; }
+.ap-net .k-temp circle, .ap-net .k-probably_safe circle { fill: var(--probably); stroke: color-mix(in srgb, var(--probably) 70%, var(--text)); }
+.ap-net .k-more circle { fill: var(--panel-2); stroke: var(--text-2); stroke-dasharray: 3 3; }
+.ap-net .k-safe circle { fill: var(--safe); stroke: color-mix(in srgb, var(--safe) 70%, var(--text)); }
+.ap-net .lbl { fill: var(--text); font-size: 12px; }
+.ap-net .lbl.sz { fill: var(--text-2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ap-net .letter { fill: var(--text-2); font-size: 22px; font-weight: 650; }
+.ap-net .link { cursor: pointer; }
+.ap-net .link:hover circle, .ap-net .link:focus circle { stroke: var(--text); stroke-width: 3; }
+.ap-net .link:focus { outline: none; }
+.ap-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: var(--t1); color: var(--text-2); }
+.ap-key i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.ap-key i.k-program { background: var(--folder); }
+.ap-key i.k-data { background: color-mix(in srgb, var(--folder) 45%, var(--panel-2)); border: 1px solid var(--folder); }
+.ap-key i.k-saves { background: #9b7fd6; }
+.ap-key i.k-temp, .ap-key i.k-probably_safe { background: var(--probably); }
+.ap-key i.k-safe { background: var(--safe); }
