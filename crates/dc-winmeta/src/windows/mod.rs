@@ -2,6 +2,7 @@
 //! rights, asks Windows for known-folder paths, and checks whether paths exist.
 
 mod folders;
+pub(crate) mod icon;
 mod registry;
 mod signature;
 mod version;

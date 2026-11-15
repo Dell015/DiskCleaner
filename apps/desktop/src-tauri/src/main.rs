@@ -473,6 +473,23 @@ mod cleaning {
     }
 }
 
+/// App icons for the page: one PNG data URL (or nothing) per icon location, in order. Reads the
+/// app's own program or icon file; nothing is run or changed.
+#[tauri::command]
+async fn app_icons(locations: Vec<String>) -> Result<Vec<Option<String>>, String> {
+    if locations.len() > 2000 {
+        return Err("too many icons at once".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        locations
+            .iter()
+            .map(|l| dc_api::icon::data_url(l))
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// What the AI-assistant settings show.
 #[derive(Serialize)]
 struct AiStatus {
@@ -728,6 +745,7 @@ fn main() {
             ai_status,
             set_ai_access,
             latest_report,
+            app_icons,
             cleaning::cleaning_available,
             cleaning::remove_items,
             cleaning::list_cleanups,

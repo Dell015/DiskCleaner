@@ -21,6 +21,8 @@ export interface PanelActions {
   close(): void;
   /** Picking for removing (only when removing is available). */
   pick?: PickHandlers;
+  /** An app's icon as a picture address, when it is ready (desktop app only). */
+  appIcon?(owner: number): string | undefined;
 }
 
 export type FindingFilter = "offered" | "shown" | "refused";
@@ -228,6 +230,13 @@ export function placeKind(path: string): string {
   return "Elsewhere";
 }
 
+/** An app's own icon when it is loaded, otherwise `fallback`. */
+function appBadge(url: string | undefined, fallback: HTMLElement | SVGElement): HTMLElement | SVGElement {
+  if (!url) return fallback;
+  const img = h("img", { class: "appicon", attrs: { src: url, alt: "", width: "16", height: "16", draggable: "false" } });
+  return img;
+}
+
 export function renderApps(el: HTMLElement, tree: Tree, p: Palette, focused: number, act: PanelActions): void {
   clear(el);
   const totals = appTotals(tree);
@@ -239,14 +248,14 @@ export function renderApps(el: HTMLElement, tree: Tree, p: Palette, focused: num
   if (focused >= 0) el.append(h("button", { class: "more", onclick: () => act.focusOwner(-1) }, "Show every app"));
   const max = Math.max(1, totals[0].bytes);
   const ol = h("ol", { class: "rows" });
-  for (const t of totals.slice(0, 200)) {
+  for (const t of totals) {
     const o = tree.owners[t.owner];
     const color = o.kind === "windows" ? p.windows : p.apps[t.owner % p.apps.length];
     const b = h("span", { class: "minibar" });
     b.style.width = `${Math.max(1, (t.bytes / max) * 100)}%`;
     b.style.background = color;
     ol.append(h("li", { class: focused === t.owner ? "on" : "" }, h("button", { class: "row", attrs: { "aria-expanded": String(focused === t.owner) }, onclick: () => act.focusOwner(focused === t.owner ? -1 : t.owner) },
-      shapeIcon({ color, ringColor: mix(color, p.text, 0.35), ringSize: 0.16, gapColor: p.bg, gapSize: 0 }, 12),
+      appBadge(act.appIcon?.(t.owner), shapeIcon({ color, ringColor: mix(color, p.text, 0.35), ringSize: 0.16, gapColor: p.bg, gapSize: 0 }, 12)),
       h("span", { class: "title" }, o.name),
       h("span", { class: "size" }, human(t.bytes)),
       h("span", { class: "path" }, t.folders.length > 1 ? `${count(t.folders.length)} places: ${[...new Set(t.folders.map((f) => placeKind(tree.path(f)).toLowerCase()))].join(", ")}` : tree.path(t.folders[0])),
@@ -265,6 +274,28 @@ export function renderApps(el: HTMLElement, tree: Tree, p: Palette, focused: num
     }
   }
   el.append(ol);
+  // Installed apps with nothing in this scan (their folders are on another drive, or not
+  // scanned): listed so nothing installed is missing, with Windows' own size estimate.
+  const found = new Set(totals.map((t) => t.owner));
+  const rest = tree.owners
+    .map((o, i) => ({ o, i }))
+    .filter(({ o, i }) => o.kind === "app" && !found.has(i))
+    .sort((a, b) => (b.o.stated_bytes ?? 0) - (a.o.stated_bytes ?? 0) || a.o.name.localeCompare(b.o.name));
+  if (rest.length) {
+    const more = h("details", { class: "apps-rest" },
+      h("summary", {}, `${count(rest.length)} more installed apps with nothing in this scan`),
+      h("p", { class: "quiet" }, "Their folders are on a drive or in a folder that was not scanned. Sizes are Windows' own estimate."));
+    const ul = h("ol", { class: "rows" });
+    for (const { o, i } of rest) {
+      ul.append(h("li", {}, h("div", { class: "row static" },
+        appBadge(act.appIcon?.(i), h("span", { class: "appicon none" })),
+        h("span", { class: "title" }, o.name),
+        h("span", { class: "size" }, o.stated_bytes ? `~${human(o.stated_bytes)}` : ""),
+        h("span", { class: "path" }, o.folder ?? "no folder recorded"))));
+    }
+    more.append(ul);
+    el.append(more);
+  }
 }
 
 /** The key: what each shape means, drawn with the real rules. */

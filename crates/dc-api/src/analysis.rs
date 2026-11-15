@@ -80,6 +80,10 @@ pub struct Owner {
     /// Registered install folder.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// Where its icon is, as Windows records it (`C:\x\app.exe,0`); the desktop app reads it to
+    /// show the icon. Never sent to an AI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 /// `20240115` as `2024-01-15`; anything else gives `None`.
@@ -126,6 +130,7 @@ fn describe_apps(owners: &mut Vec<Owner>, snapshot: &AppSnapshot) {
         o.last_used = use_.and_then(|(last, _)| last);
         o.runs = use_.map(|(_, runs)| runs);
         o.folder = app.install_folder.clone();
+        o.icon = app.display_icon.clone().or_else(|| app.main_exe.clone());
     }
 }
 

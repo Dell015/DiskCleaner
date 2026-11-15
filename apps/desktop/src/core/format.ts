@@ -39,6 +39,8 @@ export interface Owner {
   runs?: number;
   /** Registered install folder. */
   folder?: string;
+  /** Where its icon is, as Windows records it (the desktop app reads the picture). */
+  icon?: string;
 }
 
 /** The file as written (columns of plain arrays). */
@@ -190,6 +192,7 @@ export function checkView(raw: unknown): ViewData {
     if (o.last_used !== undefined) out.last_used = int(o.last_used, `owner ${i} last used`, 0, 1e11);
     if (o.runs !== undefined) out.runs = int(o.runs, `owner ${i} runs`, 0, 2 ** 32);
     if (o.folder !== undefined) out.folder = text(o.folder, `owner ${i} folder`);
+    if (o.icon !== undefined) out.icon = text(o.icon, `owner ${i} icon`);
     return out;
   });
   const rawAssign = array(raw.assignments, "assignments");

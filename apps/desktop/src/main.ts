@@ -14,7 +14,7 @@ import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live
 import { cleaningAvailable, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, removeItems, restoreItems, usePretendCleaning, type CleanupInfo } from "./platform";
 import { attach, daysLeft, detach, eligibility, outermost } from "./core/cleanup";
 import type { PickHandlers } from "./panels/explorer";
-import { aiStatus, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
+import { aiStatus, appIcons, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
 import { applyDupEvent, emptyDups, pathFinder, simulateDups, type DupEvent, type DupState } from "./core/dupes";
 import { makeDemo } from "./core/demo";
 import { checkView } from "./core/format";
@@ -1069,7 +1069,39 @@ function selbar(): void {
   bar.hidden = false;
 }
 
+// ---------- App icons (desktop app: read from each app's own program or icon file) ----------
+const iconCache = new Map<string, string | null>();
+const iconWanted = new Set<string>();
+let iconTimer = 0;
+
+/** The icon of `owner` when it is loaded; otherwise ask for it (once) and return nothing. */
+function appIconFor(owner: number): string | undefined {
+  const loc = state.tree?.owners[owner]?.icon;
+  if (!loc || !isDesktop()) return undefined;
+  const got = iconCache.get(loc);
+  if (got !== undefined) return got ?? undefined;
+  iconWanted.add(loc);
+  if (!iconTimer) iconTimer = window.setTimeout(loadIcons, 30);
+  return undefined;
+}
+
+async function loadIcons(): Promise<void> {
+  iconTimer = 0;
+  const list = [...iconWanted].filter((l) => !iconCache.has(l)).slice(0, 400);
+  iconWanted.clear();
+  if (!list.length) return;
+  for (const l of list) iconCache.set(l, null); // asked: never twice
+  try {
+    const urls = await appIcons(list);
+    list.forEach((l, k) => iconCache.set(l, urls[k] ?? null));
+  } catch {
+    /* no icons: the coloured dots stay */
+  }
+  if (state.tab === "apps") renderSide();
+}
+
 const actions: PanelActions = {
+  appIcon: appIconFor,
   reveal,
   toggle: toggleNode,
   focusHere: (i) => focusOn(i),

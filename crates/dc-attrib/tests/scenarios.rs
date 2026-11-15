@@ -338,3 +338,45 @@ fn an_unknown_publisher_in_a_program_does_not_create_an_owner() {
     let r = dc_attrib::attribute_with(&s, &apps(&[]), &source).unwrap();
     assert_eq!(r.unattributed.on_disk, 100);
 }
+
+#[test]
+fn a_launcher_and_its_games_sharing_one_registered_folder_each_get_their_part() {
+    // HoYoPlay and Genshin Impact both register C:\HoYoPlay (seen on the owner's PC).
+    let s = scan(&[
+        (r"HoYoPlay\launcher.exe", 50),
+        (r"HoYoPlay\games\Genshin Impact game\GenshinImpact.exe", 900),
+        (r"HoYoPlay\games\Genshin Impact game\data.blk", 9000),
+        (
+            r"Users\bob\AppData\LocalLow\miHoYo\Genshin Impact\cache.bin",
+            40,
+        ),
+        (
+            r"Users\bob\AppData\Local\HoYoverse\Genshin Impact\log.txt",
+            4,
+        ),
+        (r"Users\bob\AppData\Local\HoYoverse\other.txt", 1),
+    ]);
+    let a = apps(&[
+        (
+            "Genshin Impact",
+            "COGNOSPHERE PTE. LTD.",
+            Some(r"C:\HoYoPlay"),
+        ),
+        ("HoYoPlay", "COGNOSPHERE PTE. LTD.", Some(r"C:\HoYoPlay")),
+    ]);
+    let r = attribute(&s, &a).unwrap();
+    assert_eq!(own_bytes(&r, "Genshin Impact"), 9944);
+    assert_eq!(own_bytes(&r, "HoYoPlay"), 50);
+    assert_eq!(r.shared.on_disk, 0);
+    assert_eq!(r.unattributed.on_disk, 1);
+    assert_buckets_add_up(&r);
+}
+
+#[test]
+fn a_folder_named_like_an_app_deep_inside_your_own_files_is_still_not_claimed() {
+    // One level below a container is only for app-data places, never your documents.
+    let s = scan(&[(r"Users\bob\Documents\School\Live Game\notes.txt", 3)]);
+    let a = apps(&[("Live Game", "Studio", None)]);
+    let r = attribute(&s, &a).unwrap();
+    assert_eq!(own_bytes(&r, "Live Game"), 0);
+}

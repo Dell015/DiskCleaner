@@ -183,6 +183,12 @@ export async function emptyCleanup(id: string): Promise<number> {
   return invoke<number>("empty_cleanup", { id });
 }
 
+/** App icons as picture addresses, one per icon location (desktop app only; null when there is none). */
+export async function appIcons(locations: string[]): Promise<(string | null)[]> {
+  if (!isDesktop() || locations.length === 0) return locations.map(() => null);
+  return invoke<(string | null)[]>("app_icons", { locations });
+}
+
 /** A cleanup whose retention time is over (nothing is deleted by asking). */
 export interface ExpiredInfo { id: string; created: number; bytes: number }
 

@@ -13,6 +13,7 @@
 #![deny(unsafe_code)]
 
 mod apps;
+mod icon;
 mod label;
 mod lnk;
 mod model;
@@ -29,6 +30,7 @@ mod probe;
 mod windows;
 
 pub use apps::{build_snapshot, build_snapshot_with, BuildOptions};
+pub use icon::{extract_icon, parse_icon_location, Icon};
 pub use label::app_labels;
 pub use lnk::{collect_shortcuts, parse_lnk, ParsedLink};
 pub use model::{

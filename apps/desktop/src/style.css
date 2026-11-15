@@ -426,3 +426,13 @@ dialog#review::backdrop, dialog#expire::backdrop { background: rgba(0, 0, 0, 0.5
 .rm-items .quiet { margin: 0; }
 .rm-restored, .rm-emptied { opacity: 0.6; }
 button.danger { background: var(--dont); border-color: var(--dont); color: var(--bg); font-weight: 600; }
+
+/* Installed apps with nothing in this scan (Apps tab). */
+.apps-rest { margin-top: 14px; }
+.apps-rest summary { cursor: pointer; color: var(--text-2); padding: 6px 2px; }
+.apps-rest .row.static { grid-template-columns: 1fr auto; cursor: default; }
+.apps-rest .row.static .path { grid-column: 1 / -1; }
+
+/* App icons (desktop app). */
+img.appicon { width: 16px; height: 16px; object-fit: contain; image-rendering: auto; flex: none; }
+span.appicon.none { display: inline-block; width: 16px; height: 16px; border-radius: 4px; background: var(--panel-2); }

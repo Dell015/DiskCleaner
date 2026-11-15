@@ -22,6 +22,13 @@ pub const STRENGTH_INSTALL: u8 = 90;
 pub const STRENGTH_WINDOWS: u8 = 85;
 pub const STRENGTH_MAIN_PROGRAM: u8 = 80;
 pub const STRENGTH_NAME: u8 = 40;
+/// A folder named like the app one level further down (`AppData\Local\<studio>\<app>`).
+pub const STRENGTH_NAME_DEEPER: u8 = 35;
+/// An install folder registered by several apps, for those not named like the folder (a
+/// launcher's folder that its games also register).
+pub const STRENGTH_SHARED_INSTALL: u8 = 60;
+/// How deep inside a shared install folder a folder named like one of its apps is looked for.
+const SHARED_DEPTH: u32 = 3;
 pub const STRENGTH_VENDOR: u8 = 30;
 pub const STRENGTH_PROGRAM: u8 = 25;
 
@@ -137,22 +144,50 @@ pub fn gather(
         }
     }
 
+    // Install folders registered by several apps (a launcher and its games: HoYoPlay and
+    // Genshin Impact both register C:\HoYoPlay). The app named like the folder keeps it; each
+    // other app gets the folder named like it inside (`games\Genshin Impact game`).
+    let mut shared: Vec<(NodeId, Vec<(OwnerId, &InstalledApp)>)> = Vec::new();
     for node in index.dirs() {
         let key = index.key(node.id);
         if key.is_empty() {
             continue;
         }
         if let Some(list) = by_folder.get(key) {
+            let named: Vec<OwnerId> = if list.len() > 1 {
+                list.iter()
+                    .filter(|(_, app)| same_name(&node.name, &app.name))
+                    .map(|(o, _)| *o)
+                    .collect()
+            } else {
+                Vec::new()
+            };
             for (owner, app) in list {
+                let others = named.len() == 1 && named[0] != *owner;
                 claims.push(Claim {
                     node: node.id,
                     owner: *owner,
-                    strength: STRENGTH_INSTALL,
+                    strength: if others {
+                        STRENGTH_SHARED_INSTALL
+                    } else {
+                        STRENGTH_INSTALL
+                    },
                     evidence: Evidence {
                         kind: EvidenceKind::InstallFolder,
-                        detail: format!("registered install folder of \"{}\"", app.name),
+                        detail: if list.len() > 1 {
+                            format!(
+                                "registered install folder of \"{}\" (shared by {} apps)",
+                                app.name,
+                                list.len()
+                            )
+                        } else {
+                            format!("registered install folder of \"{}\"", app.name)
+                        },
                     },
                 });
+            }
+            if list.len() > 1 {
+                shared.push((node.id, list.clone()));
             }
         }
         if let Some(list) = exe_folders.get(key) {
@@ -182,9 +217,24 @@ pub fn gather(
                 });
             }
         }
-        // Name matches: only direct children of the known containers.
+        // Name matches: direct children of the known containers, and (a little weaker) one
+        // level further down, where studios keep their apps (`LocalLow\miHoYo\Genshin Impact`).
         let parent_key = node.parent.map_or("", |p| index.key(p));
-        if container_kind(parent_key).is_none() {
+        let direct = container_kind(parent_key).is_some();
+        let deeper = !direct
+            && node
+                .parent
+                .and_then(|p| index.tree.get(p))
+                .and_then(|p| p.parent)
+                .is_some_and(|g| {
+                    matches!(
+                        container_kind(index.key(g)),
+                        Some(
+                            Container::UserData | Container::ProgramData | Container::ProgramFiles
+                        )
+                    )
+                });
+        if !direct && !deeper {
             continue;
         }
         let folder_name = normalize(&node.name);
@@ -196,13 +246,20 @@ pub fn gather(
                 claims.push(Claim {
                     node: node.id,
                     owner: *owner,
-                    strength: STRENGTH_NAME,
+                    strength: if direct {
+                        STRENGTH_NAME
+                    } else {
+                        STRENGTH_NAME_DEEPER
+                    },
                     evidence: Evidence {
                         kind: EvidenceKind::NameMatch,
                         detail: format!("folder name matches app \"{}\"", app.name),
                     },
                 });
             }
+        }
+        if !direct {
+            continue;
         }
         if let Some(owner) = vendors.get(&folder_name) {
             claims.push(Claim {
@@ -216,12 +273,54 @@ pub fn gather(
             });
         }
     }
+    for (folder, list) in &shared {
+        for (owner, app) in list {
+            for found in named_inside(index, *folder, &app.name) {
+                claims.push(Claim {
+                    node: found,
+                    owner: *owner,
+                    strength: STRENGTH_INSTALL,
+                    evidence: Evidence {
+                        kind: EvidenceKind::InstallFolder,
+                        detail: format!(
+                            "named like \"{}\" inside the install folder it shares",
+                            app.name
+                        ),
+                    },
+                });
+            }
+        }
+    }
     let programs = probe_programs(index, source, &app_ids, &vendors, &mut claims);
     Gathered {
         owners,
         claims,
         programs,
     }
+}
+
+/// Folders below `dir` (at most [`SHARED_DEPTH`] down) named like `app`; the outermost ones only.
+fn named_inside(index: &Index<'_>, dir: NodeId, app: &str) -> Vec<NodeId> {
+    let base_depth = index.tree.get(dir).map_or(0, |n| n.depth);
+    let mut stack = vec![dir];
+    let mut found = Vec::new();
+    while let Some(current) = stack.pop() {
+        for &child in index.children(current) {
+            let Some(node) = index.tree.get(child) else {
+                continue;
+            };
+            if node.kind != dc_core::Kind::Dir {
+                continue;
+            }
+            if same_name(&node.name, app) {
+                found.push(child);
+            } else if node.depth.saturating_sub(base_depth) < SHARED_DEPTH {
+                stack.push(child);
+            }
+        }
+    }
+    found.sort_unstable();
+    found
 }
 
 /// The largest `.exe` files below `dir`, at most [`PROBES_PER_FOLDER`], within [`PROBE_DEPTH`].
