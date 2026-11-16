@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appCards, clearables, isSystemPart, placeRole } from "../../src/core/apps";
+import { appCards, biggestPlace, clearables, gamesOf, isSystemPart, launcherOf, placeRole } from "../../src/core/apps";
 import { buildTree } from "../../src/core/build";
 import { checkView } from "../../src/core/format";
 import { makeDemo } from "../../src/core/demo";
@@ -42,5 +42,26 @@ describe("apps view data", () => {
     expect(placeRole(tree, steam, "C:\\Program Files (x86)\\Steam")).toBe("program");
     const temp = find("C:\\Users\\demo\\AppData\\Local\\Temp");
     if (temp > 0) expect(placeRole(tree, temp)).toBe("temp");
+  });
+
+  it("links a launcher and the games it installed, both ways", () => {
+    const t = buildTree(checkView(makeDemo(20_000, 42, 1_762_000_000)));
+    const steam = t.owners.findIndex((o) => o.kind === "app" && o.name === "Steam");
+    const game = t.owners.findIndex((o, i) => o.kind === "app" && i !== steam && o.name !== "Google Chrome");
+    expect(steam).toBeGreaterThanOrEqual(0);
+    expect(game).toBeGreaterThanOrEqual(0);
+    expect(gamesOf(t, steam)).toEqual([]);
+    t.owners[game].launcher = "steam";
+    expect(gamesOf(t, steam)).toEqual([game]);
+    expect(launcherOf(t, game)).toBe(steam);
+    expect(launcherOf(t, steam)).toBe(-1);
+    t.owners[game].launcher = "Some Other Launcher";
+    expect(gamesOf(t, steam)).toEqual([]);
+    expect(launcherOf(t, game)).toBe(-1);
+  });
+
+  it("finds an app's biggest outermost folder", () => {
+    const card = appCards(tree).find((c) => c.bytes > 0)!;
+    expect(biggestPlace(tree, card.owner)).toBe(card.places[0]);
   });
 });

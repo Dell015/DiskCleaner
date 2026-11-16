@@ -43,6 +43,42 @@ export function appCards(tree: Tree): AppCard[] {
   return list.sort((a, b) => b.bytes - a.bytes || tree.owners[a.owner].name.localeCompare(tree.owners[b.owner].name));
 }
 
+/** Does a game's `launcher` text name this app (case and spacing ignored)? */
+function sameLauncher(launcher: string, appName: string): boolean {
+  const a = launcher.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const b = appName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return a.length > 0 && (a === b || b.startsWith(a));
+}
+
+/** The apps a launcher installed (owners whose `launcher` names it), by owner index. */
+export function gamesOf(tree: Tree, launcherOwner: number): number[] {
+  const name = tree.owners[launcherOwner]?.name ?? "";
+  const out: number[] = [];
+  tree.owners.forEach((o, i) => {
+    if (i !== launcherOwner && o.launcher && sameLauncher(o.launcher, name)) out.push(i);
+  });
+  return out;
+}
+
+/** The launcher app that installed this one, when it is in the list (owner index, or -1). */
+export function launcherOf(tree: Tree, owner: number): number {
+  const l = tree.owners[owner]?.launcher;
+  if (!l) return -1;
+  return tree.owners.findIndex((o, i) => i !== owner && o.kind === "app" && sameLauncher(l, o.name));
+}
+
+/** The outermost folder an app owns that holds the most bytes (-1 when nothing is in the scan). */
+export function biggestPlace(tree: Tree, owner: number): number {
+  let best = -1;
+  for (let i = 0; i < tree.n; i++) {
+    if (tree.ownerHere[i] !== owner) continue;
+    const up = tree.parent[i];
+    if (up >= 0 && tree.owner[up] === owner) continue;
+    if (best < 0 || tree.agg[i] > tree.agg[best]) best = i;
+  }
+  return best;
+}
+
 export type PlaceRole = "program" | "data" | "saves" | "temp";
 
 export const ROLE_TEXT: Record<PlaceRole, { title: string; why: string }> = {

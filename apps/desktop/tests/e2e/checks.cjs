@@ -365,12 +365,34 @@ const check = (ok, what) => {
     await page.waitForTimeout(600);
     check((await page.locator("#overview .ov-group").count()) >= 3, "the Overview fills in from a live scan");
 
-    // ---------- Apps view ----------
+    // ---------- Library (apps by kind, your files) ----------
     await page.goto(base + "?demo=40000&view=apps");
     await page.waitForFunction(() => document.querySelectorAll("#appsView .ap-card").length > 3, null, { timeout: 60000 });
-    await shot("50-apps");
-    const appNames = await page.$$eval("#appsView .ap-card .nm", (els) => els.map((e) => e.textContent));
-    check(appNames[0] === "Steam" && appNames.includes("Google Chrome"), "the Apps view shows every app, biggest first");
+    await shot("50-library");
+    const kindOf = (k) => page.$$eval(`#appsView .ap-kind[data-kind='${k}'] .ap-card .nm`, (els) => els.map((e) => e.textContent));
+    check((await kindOf("launcher")).includes("Steam") && (await kindOf("browser")).includes("Google Chrome") && (await kindOf("dev")).includes("Visual Studio Code"), "the Library sorts apps by kind");
+    check((await page.locator("#appsView .ap-files .ap-card").count()) >= 3, "the Library shows your files by type");
+    await page.click("#appsView .ap-chips button:has-text('Browsers')");
+    await page.waitForTimeout(150);
+    check((await page.locator("#appsView .ap-kind[data-kind='launcher']").count()) === 0 && (await kindOf("browser")).length >= 1, "a chip shows one kind");
+    await page.click("#appsView .ap-chips button:has-text('Everything')");
+    await page.waitForTimeout(150);
+    await page.click("#appsView .ap-kind[data-kind='browser'] .ap-card:has(.nm:text-is('Google Chrome'))", { button: "right" });
+    await page.waitForTimeout(150);
+    check(await page.locator(".ap-menu").isVisible(), "right-click opens the Move to menu");
+    await page.click(".ap-menu button:text-is('Utilities')");
+    await page.waitForTimeout(150);
+    check((await kindOf("utility")).includes("Google Chrome") && (await page.evaluate(() => window.__dc.settings.appKinds["Google Chrome"])) === "utility", "a moved app stays where it was put");
+    await page.click("#appsView .ap-kind[data-kind='utility'] .ap-card:has(.nm:text-is('Google Chrome'))", { button: "right" });
+    await page.click(".ap-menu button.reset");
+    await page.waitForTimeout(150);
+    check((await kindOf("browser")).includes("Google Chrome"), "Let Rhizome decide puts it back");
+    await page.click("#appsView .ap-files .ap-card:has(.nm:text-is('Pictures'))");
+    await page.waitForTimeout(200);
+    await shot("52-your-pictures");
+    check((await page.locator("#appsView .ap-sec").count()) >= 1 && (await page.locator("#appsView .ap-row").count()) >= 1, "a file group lists its kinds, folders and biggest files");
+    await page.click("#appsView .ap-back");
+    await page.waitForTimeout(150);
     await page.fill("#appsView .ap-filter", "chrome");
     await page.waitForTimeout(150);
     check((await page.locator("#appsView .ap-card").count()) >= 1 && (await page.locator("#appsView .ap-card:has(.nm:text-is('Steam'))").count()) === 0, "apps can be found by name");

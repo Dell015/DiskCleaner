@@ -145,6 +145,8 @@ code { font-size: var(--t1); background: var(--panel-2); padding: 1px 5px; borde
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 .facts .path { font-size: var(--t1); }
 .verdict { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
+.linked { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 12px 0; display: grid; gap: 8px; }
+.linked .linkish { text-align: left; overflow-wrap: anywhere; }
 .v-safe { border-color: color-mix(in srgb, var(--safe) 55%, var(--line)); }
 .v-probably_safe { border-color: color-mix(in srgb, var(--probably) 55%, var(--line)); }
 .v-dont_touch { border-color: color-mix(in srgb, var(--dont) 55%, var(--line)); }
@@ -514,3 +516,25 @@ span.appicon.none { display: inline-block; width: 16px; height: 16px; border-rad
 .ap-key i.k-saves { background: #9b7fd6; }
 .ap-key i.k-temp, .ap-key i.k-probably_safe { background: var(--probably); }
 .ap-key i.k-safe { background: var(--safe); }
+
+/* ---------- Library: kind chips, kind sections, your files, the "Move to" menu ---------- */
+.ap-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-chips button { display: inline-flex; gap: 6px; align-items: baseline; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--text-2); font-size: var(--t2); }
+.ap-chips button:hover { color: var(--text); }
+.ap-chips button.on { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--text); }
+.ap-chips .n { font-size: var(--t1); color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ap-kind { display: grid; gap: 6px; }
+.ap-kind h3, .ap-more summary { margin: 4px 0 0; font-size: var(--t3); }
+.ap-kind > .quiet { margin: 0 0 4px; }
+.ap-note { margin: 0; }
+.ap-icon.letter.big { width: 32px; height: 32px; font-size: 15px; }
+.ap-icon.letter[class*="g-"] { color: var(--text); background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); }
+.ap-kindlab { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); }
+.ap-kindsel { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; }
+.ap-actions { flex-wrap: wrap; align-items: center; }
+.ap-menu { position: fixed; z-index: 50; min-width: 210px; display: grid; gap: 1px; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.35); }
+.ap-menu > .quiet { padding: 2px 8px 6px; font-size: var(--t1); }
+.ap-menu button { text-align: left; border: 0; background: transparent; padding: 5px 8px; border-radius: 6px; color: var(--text); }
+.ap-menu button:hover, .ap-menu button:focus-visible { background: var(--panel-2); }
+.ap-menu button.on::after { content: " ✓"; color: var(--accent); }
+.ap-menu button.reset { color: var(--text-2); border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 4px; }

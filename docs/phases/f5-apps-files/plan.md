@@ -54,3 +54,9 @@ in the Files view. "Show on the map" still opens the full map with only the app 
 Step 4 done (2026-11-15): app-specific rules from the research (D129), so app pages show more of
 what can be cleared, and say plainly what must stay.
 
+
+Step 5 done (2026-11-16, D132): the Apps view became the **Library**: apps grouped by kind with
+chips to show one kind, launchers listing their games, an app's kind changeable by the person
+(remembered), and **Your files** grouped by type and kind with the folders holding the most and
+the biggest files. Next: removing the old Apps tab from the side panel; more launchers
+(Battle.net, EA app, Ubisoft, GOG, Xbox) so their games are found.

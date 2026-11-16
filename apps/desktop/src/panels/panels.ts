@@ -1,5 +1,6 @@
 // Side column (findings, apps), the details drawer, and the key. Text-only DOM, no HTML strings.
 
+import { biggestPlace, gamesOf, launcherOf } from "../core/apps";
 import { FLAG, KIND, type Mark, type RiskId } from "../core/format";
 import type { Tree } from "../core/tree";
 import { count, date, human } from "../core/util";
@@ -13,6 +14,10 @@ export interface PanelActions {
   reveal(node: number): void;
   toggle(node: number): void;
   focusHere(node: number): void;
+  /** Switch to the map and show this entry there (a folder becomes the centre). */
+  showOnMap?(node: number): void;
+  /** Is the map the current view? */
+  inMap?(): boolean;
   showMore(parent: number): void;
   unpin(node: number): void;
   isPinned(node: number): boolean;
@@ -155,6 +160,25 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
   );
   el.append(facts);
 
+  // Launchers and the games they installed: the link both ways, each a button to its folder.
+  if (owner >= 0) {
+    const links: HTMLElement[] = [];
+    const linkTo = (o: number): HTMLElement => {
+      const place = biggestPlace(tree, o);
+      const label = `${tree.owners[o].name}${place >= 0 ? ` (${human(tree.agg[place])}, ${tree.path(place)})` : ", nothing of it in this scan"}`;
+      return place >= 0 ? h("button", { class: "linkish", onclick: () => act.reveal(place) }, label) : h("span", {}, label);
+    };
+    const games = gamesOf(tree, owner);
+    if (games.length) links.push(h("div", {}, h("b", {}, `Games ${tree.owners[owner].name} installed`), ...games.map((g) => h("div", {}, linkTo(g)))));
+    const l = launcherOf(tree, owner);
+    if (l >= 0) links.push(h("div", {}, h("b", {}, "Installed with"), h("div", {}, linkTo(l))));
+    else if (tree.owners[owner].launcher) links.push(h("div", {}, h("b", {}, "Installed with"), h("div", {}, tree.owners[owner].launcher ?? "")));
+    if (links.length) {
+      el.append(h("section", { class: "linked" }, ...links,
+        h("p", { class: "quiet" }, games.length ? "The games live in their own folders. Uninstall a game from the launcher, and only remove the launcher after its games." : "Uninstall or move it from the launcher, so the launcher's records stay right.")));
+    }
+  }
+
   // What the checks say: its own mark, or the riskier one from a folder above.
   const mi = tree.mark[i];
   if (mi >= 0) {
@@ -173,10 +197,13 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
   }
 
   const actions = h("div", { class: "actions" });
+  const inMap = act.inMap?.() ?? true;
   if (isDir && tree.childCount[i] > 0) {
     actions.append(h("button", { class: "primary", onclick: () => act.toggle(i) }, act.isOpen(i) ? "Close folder" : "Open folder"));
-    if (i !== rootNode) actions.append(h("button", { onclick: () => act.focusHere(i) }, "Focus here"));
+    // On the map, a folder can become the centre. In the lists the same button opens the map there.
+    if (inMap && i !== rootNode) actions.append(h("button", { onclick: () => act.focusHere(i) }, "Focus here"));
   }
+  if (!inMap && act.showOnMap && i !== 0) actions.append(h("button", { onclick: () => act.showOnMap?.(i), title: isDir ? "Open the map with this folder in the middle" : "Open the map at this file" }, "Show on map"));
   if (act.isPinned(i)) actions.append(h("button", { onclick: () => act.unpin(i) }, "Unpin"));
   const copy = h("button", {}, "Copy path");
   copy.addEventListener("click", () => {

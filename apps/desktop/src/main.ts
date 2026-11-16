@@ -27,6 +27,7 @@ import { paletteOf, STYLES, type StyleId } from "./graph/style";
 import { ExplorerView } from "./panels/explorer";
 import { OverviewView } from "./panels/overview";
 import { AppsView } from "./panels/apps";
+import { APP_KINDS, type AppKind } from "./core/kinds";
 
 /** A folder this big on screen (radius, px) opens when you zoom in; below CLOSE_PX it closes again. */
 const OPEN_PX = 24;
@@ -72,9 +73,9 @@ type Theme = "dark" | "light" | "system";
 /** "overview" is everything at a glance (the default), "files" the simple list, "map" the node graph. */
 type ViewMode = "overview" | "apps" | "files" | "map";
 const VIEW_MODES: ViewMode[] = ["overview", "apps", "files", "map"];
-interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean; retention: number }
+interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean; retention: number; /** Kinds the person chose for apps, by app name. */ appKinds: Record<string, AppKind> }
 function loadSettings(): Settings {
-  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true, keepReport: true, retention: 30 };
+  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true, keepReport: true, retention: 30, appKinds: {} };
   if (prefersReducedMotion()) base.quality.motion = "reduced";
   try {
     const raw = JSON.parse(localStorage.getItem("dc-settings") ?? "null") as Partial<Settings> | null;
@@ -88,6 +89,9 @@ function loadSettings(): Settings {
       if (typeof raw.lastUsed === "boolean") base.lastUsed = raw.lastUsed;
       if (typeof raw.keepReport === "boolean") base.keepReport = raw.keepReport;
       if (typeof raw.retention === "number" && [7, 14, 30, 60].includes(raw.retention)) base.retention = raw.retention;
+      if (raw.appKinds && typeof raw.appKinds === "object") {
+        for (const [name, k] of Object.entries(raw.appKinds)) if (typeof name === "string" && APP_KINDS.includes(k)) base.appKinds[name] = k;
+      }
     }
   } catch {
     /* storage may be unavailable; defaults are used */
@@ -255,6 +259,12 @@ const appsView = new AppsView(byId("appsView"), {
   },
   appIcon: (o) => appIconFor(o),
   pick: picking,
+  kinds: () => settings.appKinds,
+  setKind: (name, kind) => {
+    if (kind) settings.appKinds[name] = kind;
+    else delete settings.appKinds[name];
+    saveSettings();
+  },
 });
 (window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder(), findDups: (w: number) => startDups(w) };
 // Development builds only: the smoke test calls the real removal path without clicking.
@@ -913,6 +923,22 @@ function reveal(i: number): void {
   focusTimers.push(window.setTimeout(() => view.focus(nodeKey(i)), 450));
 }
 
+/**
+ * From the lists: open the map on this entry. A folder with something inside becomes the centre
+ * (only it and what is in it are drawn); a file or empty folder is shown in its folder's map.
+ */
+function showOnMap(i: number): void {
+  const tree = state.tree;
+  if (!tree || i < 0 || i >= tree.n) return;
+  setViewMode("map");
+  if (tree.kind[i] === KIND.dir && tree.childCount[i] > 0) focusOn(i);
+  else {
+    const up = tree.parent[i];
+    if (up > 0) focusOn(up);
+    reveal(i);
+  }
+}
+
 /** Make a folder the centre of the picture ("local graph"). null goes back to everything. */
 function focusOn(i: number | null): void {
   const tree = state.tree;
@@ -1035,6 +1061,8 @@ function setViewMode(m: ViewMode): void {
   hideMenu();
   byId("tip").hidden = true;
   applyViewMode();
+  // The details panel's buttons differ between the map and the lists.
+  renderDrawer();
   const tree = state.tree;
   if (!tree) return;
   if (m === "overview") {
@@ -1136,6 +1164,8 @@ const actions: PanelActions = {
   reveal,
   toggle: toggleNode,
   focusHere: (i) => focusOn(i),
+  showOnMap: (i) => showOnMap(i),
+  inMap: () => settings.view === "map",
   showMore: (p) => {
     state.wide.add(p);
     state.opened.add(p);
@@ -1873,10 +1903,7 @@ function contextMenu(k: string, x: number, y: number): void {
     };
     add("Show details", () => select(k));
     if (tree.kind[i] === KIND.dir && tree.childCount[i] > 0) add("Open folder", () => goFolder(i));
-    add("Show on the map", () => {
-      setViewMode("map");
-      reveal(i);
-    });
+    add("Show on the map", () => showOnMap(i));
     if (picking.enabled() && !picking.why(i)) add(picks.has(i) ? "Unselect for removing" : "Select for removing", () => { picking.toggle(i); renderFlat(); renderSide(); });
     add("Copy path", () => void navigator.clipboard?.writeText(tree.path(i)));
     const rect = byId("stage").getBoundingClientRect();
