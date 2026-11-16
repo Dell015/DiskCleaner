@@ -178,10 +178,11 @@ fn hardlinks_are_counted_once_and_the_first_name_wins() {
         .collect();
     assert_eq!(counted.len(), 1);
     assert_eq!(counted[0].name, "a.bin");
+    // Every name is marked, the counted one too: removing any one of them frees nothing.
     assert!(result
         .nodes
         .iter()
-        .filter(|n| n.name != "a.bin" && n.kind == Kind::File)
+        .filter(|n| n.kind == Kind::File)
         .all(|n| n.flags.hardlink));
 }
 

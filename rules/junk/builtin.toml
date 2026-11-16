@@ -265,29 +265,6 @@ examples_match = ['C:\Users\bob\AppData\Local\SomeApp\Logs\2024-01-01.log']
 examples_no_match = ['C:\Users\bob\AppData\Local\SomeApp\Settings\a.log']
 
 [[rule]]
-id = "old-installers-exe"
-risk = "ProbablySafe"
-reason = "old_installers"
-summary = "Downloaded installer, older than 90 days; the program is probably installed already"
-path = '*:\Users\*\Downloads\*.exe'
-min_age_days = 90
-examples_match = ['C:\Users\bob\Downloads\setup.exe']
-examples_no_match = ['C:\Users\bob\Downloads\notes.txt', 'C:\Users\bob\Desktop\setup.exe']
-
-[[rule]]
-id = "old-installers-msi"
-risk = "ProbablySafe"
-reason = "old_installers"
-summary = "Downloaded installer, older than 90 days; the program is probably installed already"
-path = '*:\Users\*\Downloads\*.msi'
-min_age_days = 90
-examples_match = ['C:\Users\bob\Downloads\tool.msi']
-examples_no_match = ['C:\Users\bob\Downloads\tool.zip']
-
-# ---------------------------------------------------------------- DontTouch: say it out loud
-# These win over the broad cache rules above (the highest risk always wins).
-
-[[rule]]
 id = "browser-logins"
 risk = "DontTouch"
 reason = "browser_profile_data"

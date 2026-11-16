@@ -202,13 +202,29 @@ export async function expiredCleanups(days: number): Promise<ExpiredInfo[]> {
   return invoke<ExpiredInfo[]>("expired_cleanups", { days });
 }
 
+/** What emptying old cleanups did: emptied (id, bytes freed) and failed (id, why). */
+export interface EmptiedInfo { emptied: [string, number][]; failed: [string, string][] }
+
 /** Empty the cleanups `ids`, each only if it is still older than `days`. */
-export async function emptyExpired(days: number, ids: string[]): Promise<[string, number][]> {
+export async function emptyExpired(days: number, ids: string[]): Promise<EmptiedInfo> {
   if (pretend) {
     const old = new Set((await expiredCleanups(days)).map((c) => c.id));
-    const out: [string, number][] = [];
-    for (const id of ids) if (old.has(id)) out.push([id, await emptyCleanup(id)]);
+    const out: EmptiedInfo = { emptied: [], failed: [] };
+    for (const id of ids) {
+      if (!old.has(id)) continue;
+      try {
+        out.emptied.push([id, await emptyCleanup(id)]);
+      } catch (e) {
+        out.failed.push([id, String(e)]);
+      }
+    }
     return out;
   }
-  return invoke<[string, number][]>("empty_expired", { days, ids });
+  return invoke<EmptiedInfo>("empty_expired", { days, ids });
+}
+
+/** Holding folders that cannot be found now (a drive not connected, or a changed letter). */
+export async function missingHolding(): Promise<string[]> {
+  if (pretend || !isDesktop()) return [];
+  return invoke<string[]>("missing_holding");
 }

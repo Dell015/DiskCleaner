@@ -495,10 +495,9 @@ impl<'a> Engine<'a> {
                 return Err(why);
             }
         }
-        let root = self
-            .places
-            .holding_root(&item.path)
-            .ok_or("there is no holding folder for this drive")?;
+        let root = self.places.holding_root(&item.path).ok_or(
+            "there is no holding folder for this drive (network drives are not used for removing)",
+        )?;
         if self.touches_our_folders(&item.path, Some(&root)) {
             return Err("it is (or holds) DiskCleaner's own holding or data folder".into());
         }
@@ -591,7 +590,6 @@ impl<'a> Engine<'a> {
             let dir = root.join(&id);
             let journal_path = dir.join("journal.jsonl");
             if !started.iter().any(|r| same_key(r) == same_key(&root)) {
-                let new_root = std::fs::symlink_metadata(&root).is_err();
                 let prepare = |e: io::Error| {
                     format!("its holding folder could not be prepared: {}", plain(&e))
                 };
@@ -600,11 +598,11 @@ impl<'a> Engine<'a> {
                 let begun = self
                     .safe_dir(&dir.join("items"), HOLDING_MOVED)
                     .and_then(|()| {
-                        if new_root {
-                            // Hidden and owner-only; best effort (FAT drives have no permissions).
-                            if let Err(e) = self.ops.protect_dir(&root) {
-                                self.log("note", &root, 0, &format!("could not protect: {e}"));
-                            }
+                        // Hidden and owner-only, every time (an existing holding folder may have
+                        // been made by someone else, or lost its protection); best effort (FAT
+                        // drives have no permissions).
+                        if let Err(e) = self.ops.protect_dir(&root) {
+                            self.log("note", &root, 0, &format!("could not protect: {e}"));
                         }
                         self.ops
                             .append_line(&journal_path, &journal::text(&Line::Start { time: secs }))
@@ -800,6 +798,16 @@ impl<'a> Engine<'a> {
             }
         }
         (moved, left)
+    }
+
+    /// Holding folders used before that cannot be found now (a drive that is not connected, or
+    /// whose letter changed). Their cleanups are not listed until they are back.
+    #[must_use]
+    pub fn missing_roots(&self) -> Vec<PathBuf> {
+        self.roots()
+            .into_iter()
+            .filter(|r| std::fs::symlink_metadata(r).is_err())
+            .collect()
     }
 
     /// Every cleanup, newest first.

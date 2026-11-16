@@ -400,10 +400,12 @@ fn assemble(root: Node, children: Vec<Raw>) -> Result<(Tree, u64), ScanError> {
             continue;
         };
         if raw.node.kind == Kind::File && raw.link_count > 1 {
+            // Every name of a file with more than one name is marked (removing one name frees
+            // nothing); only the first one found counts in the totals.
+            raw.node.flags.hardlink = true;
             if let Some(id) = raw.file_id {
                 if !seen.insert(id) {
                     raw.node.counted = false;
-                    raw.node.flags.hardlink = true;
                     extra += 1;
                 }
             }

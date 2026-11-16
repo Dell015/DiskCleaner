@@ -59,6 +59,11 @@ impl WindowsPlaces {
 impl Places for WindowsPlaces {
     fn holding_root(&self, item: &Path) -> Option<PathBuf> {
         let drive = drive_of(item)?;
+        // A mapped network drive may be gone next time and cannot be protected: no holding
+        // folder there (USB drives are fine).
+        if crate::ops::is_network_drive(drive) {
+            return None;
+        }
         if Some(drive) == self.profile_drive {
             Some(self.profile_holding.clone())
         } else {

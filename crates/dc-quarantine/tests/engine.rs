@@ -997,3 +997,46 @@ fn a_failed_automatic_emptying_is_logged() {
         .expect("an empty-failed line");
     assert!(line.contains(&out.id) && line.contains("link"), "{line}");
 }
+
+// ---- Owner's decisions after the B9 QA (2026-11-16) ----
+
+#[test]
+fn holding_folders_that_cannot_be_found_are_reported() {
+    // Decision 4: a drive that is not connected (or whose letter changed).
+    let w = world();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(&[item(w.disk.join("Cache"), Group::Safe)], |_, _| {});
+    assert_eq!(out.held.len(), 1);
+    assert!(e.missing_roots().is_empty());
+    std::fs::rename(&w.holding, w.disk.join("unplugged")).unwrap();
+    assert_eq!(e.missing_roots(), std::slice::from_ref(&w.holding));
+    assert!(e.cleanups().is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_with_more_than_one_name_is_not_moved() {
+    // Decision 8: removing one name of a hard link frees nothing.
+    let w = world();
+    let file = w.disk.join("Downloads/old.zip");
+    std::fs::hard_link(&file, w.disk.join("other-name.zip")).unwrap();
+    let places = Here(w.holding.clone());
+    let e = Engine::new(w.data.clone(), &places, &NameGuard, &RealOps);
+    let out = e.remove(
+        &[
+            item(file.clone(), Group::YourCall { understood: true }),
+            item(
+                w.disk.join("Downloads"),
+                Group::YourCall { understood: true },
+            ),
+        ],
+        |_, _| {},
+    );
+    assert!(out.held.is_empty(), "{:?}", out.held);
+    assert!(out
+        .skipped
+        .iter()
+        .all(|s| s.why.contains("more than one name")));
+    assert!(file.exists());
+}

@@ -11,7 +11,7 @@ import type { Tree } from "./core/tree";
 import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
-import { cleaningAvailable, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, removeItems, restoreItems, usePretendCleaning, type CleanupInfo } from "./platform";
+import { cleaningAvailable, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, missingHolding, removeItems, restoreItems, usePretendCleaning, type CleanupInfo } from "./platform";
 import { attach, daysLeft, detach, eligibility, outermost } from "./core/cleanup";
 import type { PickHandlers } from "./panels/explorer";
 import { aiStatus, appIcons, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
@@ -1495,6 +1495,12 @@ async function renderRemoved(): Promise<void> {
   }
   clear(el);
   el.append(h("p", { class: "quiet" }, `Removed items wait here for ${settings.retention} days (change it in Settings), then they are deleted for good.`));
+  // Removed items on a drive that is not connected are not listed until it is back.
+  const missing = await missingHolding().catch(() => [] as string[]);
+  if (missing.length) {
+    const drives = missing.map((m) => m.slice(0, 2)).join(", ");
+    el.append(h("p", { class: "warn" }, `Removed items kept on ${drives} are not shown: is that drive connected? They come back here when it is.`));
+  }
   if (list.length === 0) {
     el.append(h("p", { class: "lead" }, "Nothing removed yet."));
     return;
@@ -1595,9 +1601,11 @@ async function emptyOld(): Promise<void> {
   const old = await expiredCleanups(days);
   const bytes = old.reduce((a, c) => a + c.bytes, 0);
   const run = async (): Promise<void> => {
-    const freed = await emptyExpired(days, old.map((c) => c.id));
-    const done = freed.reduce((a, [, b]) => a + b, 0);
-    if (freed.length) toast(`Deleted for good ${human(done)} removed more than ${days} days ago.`);
+    const result = await emptyExpired(days, old.map((c) => c.id));
+    const done = result.emptied.reduce((a, [, b]) => a + b, 0);
+    if (result.emptied.length) toast(`Deleted for good ${human(done)} removed more than ${days} days ago.`);
+    // Never silent: what could not be deleted stays in the Removed tab, and the person is told.
+    if (result.failed.length) showError(`${count(result.failed.length)} old removal${result.failed.length === 1 ? "" : "s"} could not be deleted for good and ${result.failed.length === 1 ? "is" : "are"} still kept: ${result.failed[0][1]}`);
     if (state.tab === "removed") void renderRemoved();
   };
   if (old.length === 1 && bytes <= ASK_ABOVE_BYTES) await run();

@@ -109,6 +109,9 @@ pub fn look(path: &Path) -> Result<Facts, String> {
         ..Facts::default()
     };
     if !meta.is_dir() {
+        if has_other_names(&meta) {
+            return Err(HARD_LINK.to_owned());
+        }
         facts.bytes = meta.len();
         facts.files = 1;
         return Ok(facts);
@@ -137,12 +140,33 @@ pub fn look(path: &Path) -> Result<Facts, String> {
             if m.is_dir() {
                 stack.push(entry.path());
             } else {
+                if has_other_names(&m) {
+                    return Err(format!("{HARD_LINK} ({})", entry.path().display()));
+                }
                 facts.bytes += m.len();
                 facts.files += 1;
             }
         }
     }
     Ok(facts)
+}
+
+const HARD_LINK: &str =
+    "it is or holds a file with more than one name (a hard link); removing one name frees no space";
+
+/// Does this file have more than one name? Known on Unix here; on Windows the scan marks such
+/// files and the removal rules (`dc_api::cleanup`) refuse them before anything reaches this.
+fn has_other_names(meta: &fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        meta.nlink() > 1
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        false
+    }
 }
 
 /// Every file inside a folder, relative to it (for moving file by file). Links are left out

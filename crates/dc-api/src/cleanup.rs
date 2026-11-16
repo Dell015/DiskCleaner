@@ -74,6 +74,18 @@ fn protected(path: &str) -> Option<String> {
     })
 }
 
+/// Is `i`, or anything inside it, a file with more than one name?
+fn holds_hard_link(ins: &Inspector, i: u32) -> bool {
+    let mut stack = vec![i];
+    while let Some(at) = stack.pop() {
+        if ins.flags(at) & crate::view::flag::HARDLINK != 0 {
+            return true;
+        }
+        stack.extend(ins.children(at));
+    }
+    false
+}
+
 /// The group of `path` in the scan `ins`.
 #[must_use]
 pub fn eligibility(ins: &Inspector, path: &str) -> Eligibility {
@@ -83,6 +95,11 @@ pub fn eligibility(ins: &Inspector, path: &str) -> Eligibility {
     let links = ins.flags(i) & (crate::view::flag::LINK | crate::view::flag::CLOUD);
     if links != 0 {
         return never("it is a link or a cloud-only file");
+    }
+    if holds_hard_link(ins, i) {
+        return never(
+            "it is or holds a file with more than one name (a hard link); removing one name frees no space",
+        );
     }
     let path_chain = chain(ins, i);
     if path_chain.len() <= 1 {
@@ -139,6 +156,10 @@ mod tests {
     use serde_json::json;
 
     fn ins() -> Inspector {
+        Inspector::from_json(&ins_json()).unwrap_or_else(|e| unreachable!("{e}"))
+    }
+
+    fn ins_json() -> String {
         // name, parent, kind
         let nodes: &[(&str, i64, u8)] = &[
             ("This PC", -1, 1),
@@ -177,7 +198,7 @@ mod tests {
                 { "node": 17, "risk": "dont_touch", "source": "rule", "title": "Profile", "reason": "browser_profile_data", "detail": "", "offered": false, "bytes": 1 }
             ]
         });
-        Inspector::from_json(&v.to_string()).unwrap_or_else(|e| unreachable!("{e}"))
+        v.to_string()
     }
 
     fn group(path: &str) -> String {
@@ -207,6 +228,16 @@ mod tests {
         assert!(group(r"C:\Users\me\AppData\Local\Chrome\Profile").contains("browser logins"));
         assert!(group(r"C:\").starts_with("never"));
         assert!(group(r"D:\nope").contains("not in the latest scan"));
+        // Decision 8 (2026-11-16): a file with more than one name, or a folder holding one.
+        let mut v: serde_json::Value = serde_json::from_str(&ins_json()).unwrap();
+        v["nodes"]["flags"][5] = json!(crate::view::flag::HARDLINK);
+        let linked = Inspector::from_json(&v.to_string()).unwrap();
+        for p in [r"C:\Users\me\Downloads\a.zip", r"C:\Users\me\Downloads"] {
+            assert!(
+                matches!(eligibility(&linked, p), Eligibility::Never { why } if why.contains("more than one name")),
+                "{p}"
+            );
+        }
         // Finding 7: your Documents, Desktop, Pictures, Music and Videos stay protected.
         assert!(group(r"C:\Users\me\Documents\cv.docx").contains("your documents"));
     }

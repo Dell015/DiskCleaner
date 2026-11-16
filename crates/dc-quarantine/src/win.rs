@@ -28,7 +28,7 @@ use windows_sys::Win32::Security::{
     PSECURITY_DESCRIPTOR,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FileRenameInfo, GetFileAttributesW, GetFileInformationByHandle,
+    CreateFileW, FileRenameInfo, GetDriveTypeW, GetFileAttributesW, GetFileInformationByHandle,
     GetFinalPathNameByHandleW, MoveFileExW, SetFileAttributesW, SetFileInformationByHandle,
     BY_HANDLE_FILE_INFORMATION, DELETE, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_REPARSE_POINT,
     FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_NAME_NORMALIZED,
@@ -203,6 +203,18 @@ pub fn move_checked(from: &Path, to: &Path) -> io::Result<()> {
         }
         Err(e) => Err(e),
     }
+}
+
+/// Is drive `letter` a network drive (a mapped share)? Such drives get no holding folder: they
+/// may be gone next time and their permissions cannot be set.
+pub fn is_network_drive(letter: char) -> bool {
+    const DRIVE_REMOTE: u32 = 4; // winbase.h
+    let root: Vec<u16> = format!("{letter}:\\")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    // SAFETY: `root` is a NUL-terminated UTF-16 string ("X:\") that outlives the call.
+    unsafe { GetDriveTypeW(root.as_ptr()) == DRIVE_REMOTE }
 }
 
 /// Hide a new holding folder and let only its owner, SYSTEM and administrators use it.

@@ -95,6 +95,20 @@ impl Ops for RealOps {
     }
 }
 
+/// Is drive `letter` a network drive (Windows only; elsewhere never)?
+#[must_use]
+pub fn is_network_drive(letter: char) -> bool {
+    #[cfg(windows)]
+    {
+        crate::win::is_network_drive(letter)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = letter;
+        false
+    }
+}
+
 /// Hold the lock that lets only one removal, restore or emptying run at a time (also across
 /// two DiskCleaner windows). Released when the returned file is dropped or the program ends.
 /// `Ok(None)`: someone else holds it.

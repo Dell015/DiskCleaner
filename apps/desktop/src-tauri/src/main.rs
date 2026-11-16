@@ -363,6 +363,25 @@ mod cleaning {
         }
     }
 
+    /// Holding folders used before that cannot be found now (a drive that is not connected, or
+    /// whose letter changed): their removed items are not listed until they are back.
+    #[tauri::command]
+    pub fn missing_holding() -> Result<Vec<String>, String> {
+        #[cfg(not(feature = "cleaning"))]
+        {
+            Ok(Vec::new())
+        }
+        #[cfg(feature = "cleaning")]
+        {
+            on::with_engine(|e| {
+                e.missing_roots()
+                    .into_iter()
+                    .map(|r| r.to_string_lossy().into_owned())
+                    .collect()
+            })
+        }
+    }
+
     /// Put back a cleanup's held items (all, or the (holding folder, number) pairs given).
     #[tauri::command]
     pub async fn restore_items(
@@ -450,26 +469,41 @@ mod cleaning {
     /// Empty the cleanups `ids`, each only if it is still older than `days`. Returns (id, bytes
     /// freed) for each one emptied.
     #[tauri::command]
-    pub async fn empty_expired(days: u32, ids: Vec<String>) -> Result<Vec<(String, u64)>, String> {
+    pub async fn empty_expired(days: u32, ids: Vec<String>) -> Result<Emptied, String> {
         #[cfg(not(feature = "cleaning"))]
         {
             let _ = (days, ids);
-            Ok(Vec::new())
+            Ok(Emptied::default())
         }
         #[cfg(feature = "cleaning")]
         {
             tauri::async_runtime::spawn_blocking(move || {
                 on::with_engine(|e| {
-                    e.expired(days.clamp(1, 365), now_secs())
+                    let mut out = Emptied::default();
+                    for c in e
+                        .expired(days.clamp(1, 365), now_secs())
                         .into_iter()
                         .filter(|c| ids.contains(&c.id))
-                        .filter_map(|c| e.empty(&c.id).ok().map(|b| (c.id, b)))
-                        .collect()
+                    {
+                        match e.empty(&c.id) {
+                            Ok(bytes) => out.emptied.push((c.id, bytes)),
+                            // Shown on screen (the items stay in the Removed tab).
+                            Err(why) => out.failed.push((c.id, why)),
+                        }
+                    }
+                    out
                 })
             })
             .await
             .map_err(|e| e.to_string())?
         }
+    }
+
+    /// What emptying old cleanups did: emptied (id, bytes freed) and failed (id, why).
+    #[derive(Serialize, Default)]
+    pub struct Emptied {
+        emptied: Vec<(String, u64)>,
+        failed: Vec<(String, String)>,
     }
 }
 
@@ -753,6 +787,7 @@ fn main() {
             cleaning::empty_cleanup,
             cleaning::empty_expired,
             cleaning::expired_cleanups,
+            cleaning::missing_holding,
             smoke_report
         ])
         .run(tauri::generate_context!());
