@@ -114,7 +114,7 @@ Each check repeats on the disk as it is now; any doubt skips the item (fail clos
    feature (`npm run tauri dev -- --features cleaning`).
 3. Your test on a throwaway folder (a copy of something you do not need), with that build.
 4. Only after your okay: on in normal builds.
-5. Later: installed apps through their own uninstaller, then sweeping what they leave.
+5. Done (D133): installed apps through their own uninstaller (from the Library), then a scan and a list of what they left.
 
 ## 11. Choices I made that you may want to change
 

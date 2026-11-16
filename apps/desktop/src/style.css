@@ -538,3 +538,27 @@ span.appicon.none { display: inline-block; width: 16px; height: 16px; border-rad
 .ap-menu button:hover, .ap-menu button:focus-visible { background: var(--panel-2); }
 .ap-menu button.on::after { content: " ✓"; color: var(--accent); }
 .ap-menu button.reset { color: var(--text-2); border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; margin-top: 4px; }
+
+/* ---------- Uninstalling (D133) and what it left behind ---------- */
+.ap-steps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; counter-reset: step; }
+.ap-step { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--panel); display: grid; gap: 6px; counter-increment: step; }
+.ap-step-head { display: grid; gap: 10px; align-items: center; }
+.ap-step-head::before { content: counter(step); grid-row: 1; width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; font-size: var(--t1); background: var(--panel-2); color: var(--text-2); }
+.ap-step-head { grid-template-columns: auto auto auto 1fr auto; }
+.ap-step-head .nm { font-weight: 600; }
+.ap-step-head .sz { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ap-step > .quiet, .ap-step-do p { margin: 0; }
+.ap-step.done { border-color: color-mix(in srgb, var(--safe) 50%, var(--line)); }
+.ap-step.done .ap-step-head::before { content: "✓"; background: var(--safe); color: var(--bg); }
+.ap-step.running, .ap-step.settings { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.ap-step-do { display: grid; gap: 8px; }
+.ap-err { color: var(--dont); }
+.ap-ok { color: var(--safe); font-weight: 600; }
+.ap-wait { display: flex; gap: 8px; align-items: center; color: var(--text); }
+.spinner.small { width: 14px; height: 14px; border-width: 2px; flex: none; }
+.ap-rescan { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 9px; margin-top: 6px; }
+.ap-rescan p { margin: 0; }
+.ap-left { display: grid; gap: 6px; justify-items: start; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--probably) 55%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--probably) 7%, var(--panel)); }
+.ap-left.done { border-color: color-mix(in srgb, var(--safe) 50%, var(--line)); background: var(--panel); }
+.ap-left h3 { margin: 0; font-size: var(--t3); }
+.ap-left .ap-list { width: 100%; }

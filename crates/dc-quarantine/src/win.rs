@@ -273,3 +273,47 @@ pub fn hide_and_protect(dir: &Path) -> io::Result<()> {
         (None, None) => Ok(()),
     }
 }
+
+/// Start a program, or open a Windows settings page, the way double-clicking does: with its own
+/// window, and with Windows' permission question when the program needs administrator rights
+/// (D133: only an installed app's own uninstaller, or the Installed apps page). Never through a
+/// shell: `args` goes to the program as it is.
+pub fn shell_open(target: &Path, args: Option<&str>) -> io::Result<()> {
+    use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW};
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    // Plain form (ShellExecute does not take `\\?\` paths).
+    let file: Vec<u16> = target
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let params: Option<Vec<u16>> = args
+        .filter(|a| !a.is_empty())
+        .map(|a| a.encode_utf16().chain(std::iter::once(0)).collect());
+    let info = SHELLEXECUTEINFOW {
+        cbSize: u32::try_from(std::mem::size_of::<SHELLEXECUTEINFOW>()).unwrap_or(0),
+        fMask: SEE_MASK_NOASYNC,
+        lpFile: file.as_ptr(),
+        lpParameters: params.as_ref().map_or(ptr::null(), |p| p.as_ptr()),
+        nShow: SW_SHOWNORMAL,
+        ..Default::default()
+    };
+    let mut info = info;
+    // SAFETY: `info` is a correctly sized SHELLEXECUTEINFOW; `file` and `params` are
+    // NUL-terminated UTF-16 strings that outlive the call; no handle is asked for
+    // (no SEE_MASK_NOCLOSEPROCESS), so nothing has to be closed afterwards.
+    let ok = unsafe { ShellExecuteExW(&mut info) };
+    if ok == 0 {
+        let e = io::Error::last_os_error();
+        const ERROR_CANCELLED: i32 = 1223;
+        if e.raw_os_error() == Some(ERROR_CANCELLED) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Windows' permission question was answered No",
+            ));
+        }
+        return Err(e);
+    }
+    Ok(())
+}

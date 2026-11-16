@@ -25,7 +25,7 @@ An open-source, Windows-first disk analyzer and cleanup advisor (WizTree-like sp
 ## Non-goals
 - No telemetry, no analytics, no network calls except the opt-in advisor providers.
 - No registry or file modification of any kind before Phase B9.
-- No process killing, no service control, no installers/uninstallers invoked.
+- No process killing, no service control, no installers invoked. The only program DiskCleaner may start is an installed app's own recorded uninstaller, after the person confirms, with its own window, never through a shell, or open Windows' Installed apps page instead (D133, `dc-quarantine/src/uninstall.rs`).
 
 ## Tech and conventions
 ## Language and tooling

@@ -8,6 +8,7 @@
 import { appCards, clearables, gamesOf, launcherOf, layoutNetwork, placeRole, ROLE_TEXT, type AppCard, type PlaceRole } from "../core/apps";
 import { appKind, APP_KINDS, KIND_TEXT, type AppKind } from "../core/kinds";
 import { GROUP_TEXT, GROUPS, yourFiles, type Group, type GroupId } from "../core/yours";
+import { findPath, uninstallSteps } from "../core/uninstall";
 import { appNetwork } from "./appnet";
 import { ago } from "../core/inventory";
 import type { Tree } from "../core/tree";
@@ -29,6 +30,42 @@ export interface AppsHandlers {
   kinds(): Record<string, AppKind>;
   /** Remember a kind for an app (null: back to Rhizome's own guess). */
   setKind(name: string, kind: AppKind | null): void;
+  /** Can apps be uninstalled from here (desktop app with removing on)? */
+  canUninstall?(): boolean;
+  /** Start an app's own uninstaller (or Windows' Installed apps page). */
+  uninstall?(name: string, publisher?: string): Promise<{ how: "uninstaller" | "settings"; why: string | null }>;
+  /** Which of these apps are still installed. */
+  stillInstalled?(names: string[]): Promise<boolean[]>;
+  /** Which of these folders are still there. */
+  stillThere?(paths: string[]): Promise<boolean[]>;
+  /** Scan the same place again (null when there is nothing to rescan). */
+  rescan?(): (() => void) | null;
+}
+
+/** Where one app's uninstall stands. */
+interface Job {
+  /** "launcher": the app is removed from inside its launcher (Windows has no uninstaller for it). */
+  status: "confirm" | "running" | "settings" | "launcher" | "done" | "failed";
+  /** The error, or why Windows' page was opened instead. */
+  why?: string;
+  /** Its install folder: when that is gone, it is uninstalled (launcher games). */
+  folder?: string;
+}
+
+/** How each launcher removes a game it installed. */
+function launcherHow(launcher: string, game: string): string {
+  const l = launcher.toLowerCase();
+  if (l.includes("riot")) return `Open Riot Client, open Settings (top right), pick ${game} on the left, then click Uninstall.`;
+  if (l.includes("steam")) return `In Steam's Library, right-click ${game}, then Manage → Uninstall.`;
+  if (l.includes("epic")) return `In Epic Games Launcher's Library, click the ⋯ under ${game}, then Uninstall.`;
+  if (l.includes("hoyoplay")) return `In HoYoPlay, pick ${game}, open the menu next to Start Game, then Uninstall game.`;
+  return `Uninstall ${game} from inside ${launcher}.`;
+}
+
+/** Folders an uninstalled app kept things in, to check after a rescan. */
+interface LeftBehind {
+  names: string[];
+  paths: string[];
 }
 
 type Sort = "size" | "used" | "name";
@@ -43,6 +80,12 @@ export class AppsView {
   private filter = "";
   private showSystem = false;
   private section: Section = "all";
+  /** Uninstalls started from here, by app name. */
+  private jobs = new Map<string, Job>();
+  private poll: number | null = null;
+  /** Places of apps uninstalled from here, by app name (kept across rescans). */
+  private placesOf = new Map<string, string[]>();
+  private leftBehind: LeftBehind[] = [];
   /** The app whose page is open, or -1 for the grid. */
   owner = -1;
   /** The file group whose page is open (when no app page is). */
@@ -58,6 +101,11 @@ export class AppsView {
   show(tree: Tree, now: number, force = false): void {
     const same = this.last && this.last.tree === tree && this.last.version === tree.version && this.last.owner === this.owner && this.last.group === this.group;
     if (same && !force) return;
+    // A new scan renumbers the apps (and an uninstalled one is gone): back to the Library.
+    if (this.last && this.last.tree !== tree) {
+      this.owner = -1;
+      this.group = null;
+    }
     const keepScroll = this.last && this.last.owner === this.owner && this.last.group === this.group ? this.el.scrollTop : 0;
     this.last = { tree, version: tree.version, owner: this.owner, group: this.group };
     this.now = now;
@@ -161,7 +209,7 @@ export class AppsView {
     for (const [id, label] of [["size", "Biggest"], ["used", "Least used"], ["name", "Name"]] as [Sort, string][]) {
       sortSeg.append(h("button", { class: this.sort === id ? "on" : "", attrs: { "aria-pressed": String(this.sort === id) }, onclick: () => { this.sort = id; this.redraw(tree); } }, label));
     }
-    const out: HTMLElement[] = [head, chips, h("div", { class: "ap-tools" }, search, sortSeg)];
+    const out: HTMLElement[] = [head, ...this.leftBehindSections(tree), chips, h("div", { class: "ap-tools" }, search, sortSeg)];
 
     // Your files first: a short row of groups.
     if ((this.section === "all" && !q) || this.section === "files") {
@@ -359,6 +407,8 @@ export class AppsView {
       h("label", { class: "ap-kindlab" }, "Kind ", select),
       this.on.kinds()[o.name] ? h("button", { onclick: () => { this.on.setKind(o.name, null); this.redraw(tree); } }, "Let Rhizome decide") : null);
     const out: HTMLElement[] = [back, head, actions];
+    const un = this.uninstallSection(tree, owner, kind);
+    if (un) out.push(un);
 
     // A launcher's games, and the launcher a game came from.
     const games = gamesOf(tree, owner);
@@ -436,6 +486,175 @@ export class AppsView {
       if (list.length > 60) ul.append(h("li", { class: "quiet" }, `and ${count(list.length - 60)} more`));
       s.append(ul);
       out.push(s);
+    }
+    return out;
+  }
+
+  /** The guided uninstall on an app's page: its games and helpers first, the app last. */
+  private uninstallSection(tree: Tree, owner: number, kind: AppKind): HTMLElement | null {
+    const o = tree.owners[owner];
+    if (!this.on.canUninstall?.() || !this.on.uninstall) return null;
+    if (kind === "system") {
+      return h("section", { class: "ap-sec ap-un" }, h("h3", {}, "Uninstall"),
+        h("p", { class: "quiet" }, "This is a part other apps need (a driver, runtime or Windows component), so Rhizome does not offer to uninstall it."));
+    }
+    const steps = uninstallSteps(tree, owner, kind);
+    const sec = h("section", { class: "ap-sec ap-un" }, h("h3", {}, steps.length > 1 ? `Uninstall ${o.name} and what it installed` : `Uninstall ${o.name}`),
+      h("p", { class: "quiet" }, steps.length > 1
+        ? "In this order: what it installed first, then itself, so each one can still be uninstalled properly. Each uses its own uninstaller, the same one Windows Settings runs."
+        : "This starts the app's own uninstaller, the same one Windows Settings runs. Its window opens; follow it there."));
+    const cards = new Map(this.cards(tree).map((c) => [c.owner, c]));
+    const ol = h("ol", { class: "ap-steps" });
+    const pendingBefore = (k: number): string[] => steps.slice(0, k).filter((s) => this.jobs.get(tree.owners[s.owner].name)?.status !== "done").map((s) => tree.owners[s.owner].name);
+    steps.forEach((step, k) => {
+      const so = tree.owners[step.owner];
+      const job = this.jobs.get(so.name);
+      const bytes = cards.get(step.owner)?.bytes ?? 0;
+      const li = h("li", { class: `ap-step ${job?.status ?? ""}` },
+        h("div", { class: "ap-step-head" },
+          this.icon(step.owner, so.name, false),
+          h("span", { class: "nm" }, so.name),
+          h("span", { class: "quiet" }, step.role),
+          h("span", { class: "sz" }, bytes > 0 ? human(bytes) : "")));
+      const notes: (HTMLElement | string)[] = [];
+      if (step.restart) notes.push("Restart your PC after this one: it is a driver that runs from the moment Windows starts.");
+      if (!so.uninstaller && !so.launcher) notes.push("Windows records no uninstaller for it; Rhizome will open Windows' Installed apps page instead.");
+      const before = pendingBefore(k);
+      if (step.owner === owner && before.length && !job) notes.push(`Still installed: ${before.join(", ")}. Uninstall ${before.length === 1 ? "it" : "them"} first, or ${so.name} may not be able to remove ${before.length === 1 ? "it" : "them"} later.`);
+      for (const n of notes) li.append(h("p", { class: "quiet" }, n));
+      const row = h("div", { class: "ap-step-do" });
+      const start = (): void => {
+        this.placesOf.set(so.name, (cards.get(step.owner)?.places ?? []).map((p) => tree.path(p)));
+        // Windows has no uninstaller for a game its launcher manages: the launcher removes it.
+        if (!so.uninstaller && so.launcher) {
+          this.jobs.set(so.name, { status: "launcher", folder: so.folder });
+          this.watch();
+          this.redraw(tree);
+          return;
+        }
+        this.jobs.set(so.name, { status: "running" });
+        this.redraw(tree);
+        this.on.uninstall?.(so.name, so.publisher).then((r) => {
+          this.jobs.set(so.name, r.how === "settings" ? { status: "settings", why: r.why ?? "" } : { status: "running" });
+          this.watch();
+          this.redrawLast();
+        }, (e: unknown) => {
+          this.jobs.set(so.name, { status: "failed", why: String(e) });
+          this.redrawLast();
+        });
+      };
+      if (!job || job.status === "failed") {
+        if (job?.status === "failed") row.append(h("p", { class: "ap-err" }, job.why ?? "It could not be started."));
+        row.append(h("button", { class: before.length && step.owner === owner ? "" : "danger", onclick: () => { this.jobs.set(so.name, { status: "confirm" }); this.redraw(tree); } },
+          job ? "Try again…" : before.length && step.owner === owner ? "Uninstall anyway…" : "Uninstall…"));
+      } else if (job.status === "confirm") {
+        const viaLauncher = !so.uninstaller && so.launcher;
+        row.append(h("p", {}, viaLauncher
+          ? `${so.name} is removed from inside ${so.launcher}, not with a Windows uninstaller. Rhizome will show you where, then watch its folder and notice when it is gone.`
+          : `Rhizome will start ${so.name}'s own uninstaller. Its window opens: follow it there. Windows may ask for permission first.`),
+          h("div", { class: "ap-actions" },
+            h("button", { class: "danger", onclick: start }, viaLauncher ? "Show me how" : "Start uninstaller"),
+            h("button", { onclick: () => { this.jobs.delete(so.name); this.redraw(tree); } }, "Cancel")));
+      } else if (job.status === "running" || job.status === "settings" || job.status === "launcher") {
+        const text = job.status === "running" ? `${so.name}'s uninstaller is open. Finish it in its own window; Rhizome notices when it is done.`
+          : job.status === "settings" ? `Windows' Installed apps page is open (${job.why}). Uninstall ${so.name} there; Rhizome notices when it is done.`
+            : `${launcherHow(so.launcher ?? "its launcher", so.name)} Rhizome notices when its folder is gone.`;
+        // Never stuck: the person can say it is done, or stop waiting.
+        row.append(h("p", { class: "ap-wait" }, h("span", { class: "spinner small" }), text),
+          h("div", { class: "ap-actions" },
+            h("button", { onclick: () => { this.jobs.set(so.name, { status: "done" }); this.redraw(tree); } }, "I've uninstalled it"),
+            h("button", { onclick: () => { this.jobs.delete(so.name); this.redraw(tree); } }, "Stop waiting")));
+      } else {
+        row.append(h("p", { class: "ap-ok" }, step.restart ? "Uninstalled. Restart your PC before going on." : "Uninstalled."));
+      }
+      li.append(row);
+      ol.append(li);
+    });
+    sec.append(ol);
+    if (steps.some((s) => this.jobs.get(tree.owners[s.owner].name)?.status === "done")) sec.append(this.rescanBox());
+    return sec;
+  }
+
+  /** "Rescan to see what it left behind". */
+  private rescanBox(): HTMLElement {
+    const go = this.on.rescan?.() ?? null;
+    return h("div", { class: "ap-rescan" },
+      h("p", {}, "Uninstallers often leave folders behind (settings, logs, downloads). Scan again and Rhizome lists what is left of them at the top of the Library, ready to tick and remove."),
+      go ? h("button", { class: "primary", onclick: () => { this.rememberLeftBehind(); go(); } }, "Scan again to check what is left") : h("p", { class: "quiet" }, "Scan the drive again to check what is left."));
+  }
+
+  /** Keep the places of the apps uninstalled so far, to look for them after the rescan. */
+  private rememberLeftBehind(): void {
+    const names = [...this.jobs.entries()].filter(([, j]) => j.status === "done").map(([n]) => n);
+    if (!names.length) return;
+    const paths = [...new Set(names.flatMap((n) => this.placesOf.get(n) ?? []))];
+    this.leftBehind = [...this.leftBehind.filter((l) => !l.names.some((n) => names.includes(n))), { names, paths }];
+    for (const n of names) this.jobs.delete(n);
+  }
+
+  /** Notice when uninstallers finish (Windows' list no longer has the app). */
+  private watch(): void {
+    if (this.poll !== null || !this.on.stillInstalled) return;
+    const tick = async (): Promise<void> => {
+      const all = [...this.jobs.entries()];
+      // Apps with an uninstaller: gone from Windows' list. Launcher games: their folder is gone.
+      const listed = all.filter(([, j]) => j.status === "running" || j.status === "settings").map(([n]) => n);
+      const byFolder = all.filter(([, j]) => j.status === "launcher" && j.folder).map(([n, j]) => [n, j.folder as string] as const);
+      if (!listed.length && !all.some(([, j]) => j.status === "launcher")) {
+        if (this.poll !== null) window.clearInterval(this.poll);
+        this.poll = null;
+        return;
+      }
+      try {
+        let changed = false;
+        if (listed.length) {
+          const still = await (this.on.stillInstalled as (n: string[]) => Promise<boolean[]>)(listed);
+          listed.forEach((n, k) => {
+            if (still[k] === false) {
+              this.jobs.set(n, { status: "done" });
+              changed = true;
+            }
+          });
+        }
+        if (byFolder.length && this.on.stillThere) {
+          const there = await this.on.stillThere(byFolder.map(([, f]) => f));
+          byFolder.forEach(([n], k) => {
+            if (there[k] === false) {
+              this.jobs.set(n, { status: "done" });
+              changed = true;
+            }
+          });
+        }
+        if (changed) this.redrawLast();
+      } catch {
+        /* try again next time */
+      }
+    };
+    this.poll = window.setInterval(() => void tick(), 3000);
+  }
+
+  /** What uninstalled apps left behind, found again in this scan. */
+  private leftBehindSections(tree: Tree): HTMLElement[] {
+    const out: HTMLElement[] = [];
+    for (const lb of this.leftBehind) {
+      const nodes = lb.paths.map((p) => findPath(tree, p)).filter((n) => n >= 0);
+      const bytes = nodes.reduce((a, n) => a + tree.agg[n], 0);
+      const forget = h("button", { onclick: () => { this.leftBehind = this.leftBehind.filter((x) => x !== lb); this.redraw(tree); } }, nodes.length ? "Hide this" : "OK");
+      const who = lb.names.join(", ");
+      if (!nodes.length) {
+        out.push(h("section", { class: "ap-left done" }, h("h3", {}, `Nothing left behind by ${who}`), h("p", { class: "quiet" }, "None of the folders it kept things in are there any more."), forget));
+        continue;
+      }
+      const ul = h("ul", { class: "ap-list" });
+      for (const n of nodes) {
+        const box = this.on.pick ? pickBox(this.on.pick, n, tree.names[n]) : null;
+        ul.append(h("li", {}, ...(box ? [box] : []), h("button", { class: "ap-row", title: tree.path(n), onclick: () => this.on.open(n) },
+          h("span", { class: "verdict probably_safe" }, "Left behind"), h("span", { class: "nm" }, tree.names[n]), h("span", { class: "sz" }, human(tree.agg[n])), h("span", { class: "path" }, tree.path(n)))));
+      }
+      out.push(h("section", { class: "ap-left" },
+        h("h3", {}, `Left behind by ${who}: ${human(bytes)}`),
+        h("p", { class: "quiet" }, "These folders were theirs and are still here. Look at each one, tick what you want gone, then Review. A folder Rhizome still protects has no tick box."),
+        ul, forget));
     }
     return out;
   }

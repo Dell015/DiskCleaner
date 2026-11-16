@@ -109,6 +109,20 @@ pub fn is_network_drive(letter: char) -> bool {
     }
 }
 
+/// Start a program or open a settings page with its own window (Windows only; D133: only an
+/// app's own uninstaller or the Installed apps page, see `uninstall`).
+pub fn shell_open(target: &Path, args: Option<&str>) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        crate::win::shell_open(target, args)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (target, args);
+        Err(io::Error::other("this only works on Windows"))
+    }
+}
+
 /// Hold the lock that lets only one removal, restore or emptying run at a time (also across
 /// two DiskCleaner windows). Released when the returned file is dropped or the program ends.
 /// `Ok(None)`: someone else holds it.

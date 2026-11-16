@@ -105,6 +105,25 @@ describe("your files", () => {
     expect(g("other")).toBeUndefined();
   });
 
+  it("a home folder with a package.json or .git is not one big project", () => {
+    // C:\Users\me has package.json and .git (npm init / git init in the home folder), and AppData.
+    const n = ["C:\\", "Users", "me", "package.json", ".git", "AppData", "Local", "cache.bin", "Documents", "app", "Cargo.toml", "main.rs", "notes.pdf"];
+    const p = [-1, 0, 1, 2, 2, 2, 5, 6, 2, 8, 9, 9, 8];
+    const d = new Set(["C:\\", "Users", "me", ".git", "AppData", "Local", "Documents", "app"]);
+    const v = {
+      schema: "dc-view", schema_version: 1, roots: ["C:\\"], categories: view.categories,
+      nodes: { name: n, parent: p, kind: n.map((x) => (d.has(x) ? 1 : 0)), size: n.map((x) => (d.has(x) ? 0 : 100)), mtime: n.map(() => 1_700_000_000), flags: n.map(() => 0), cat: n.map(() => -1) },
+      owners: [], assignments: [] as [number, number, number][], marks: [],
+    };
+    const gs = yourFiles(buildTree(checkView(v)));
+    const proj = gs.find((x) => x.id === "projects");
+    // Only Documents\app is a project; AppData is never counted; the PDF is a document.
+    expect(proj?.files).toBe(2);
+    expect(proj?.kinds[0].label).toBe("Rust projects");
+    expect(gs.find((x) => x.id === "documents")?.files).toBe(2); // notes.pdf and the home package.json
+    expect(gs.reduce((a, x) => a + x.files, 0)).toBe(4);
+  });
+
   it("on the demo disk every counted file is counted once", () => {
     const t = buildTree(checkView(makeDemo(20_000, 42, 1_762_000_000)));
     const all = yourFiles(t);
@@ -112,5 +131,28 @@ describe("your files", () => {
     const sum = all.reduce((a, x) => a + x.bytes, 0);
     expect(sum).toBeLessThanOrEqual(t.agg[0]);
     for (const x of all) expect(x.kinds.reduce((a, k) => a + k.bytes, 0)).toBe(x.bytes);
+  });
+});
+
+describe("uninstalling in order", () => {
+  it("puts a launcher's games and anti-cheat first and the launcher last; finds paths again", async () => {
+    const { uninstallSteps, findPath } = await import("../../src/core/uninstall");
+    const t = buildTree(checkView(makeDemo(5_000, 42, 1_762_000_000)));
+    const steam = t.owners.findIndex((o) => o.name === "Steam");
+    // Make the demo look like Riot: a game the launcher installed and an anti-cheat driver.
+    const game = t.owners.findIndex((o) => o.name === "Discord");
+    t.owners[game].launcher = "Steam";
+    t.owners.push({ name: "Riot Vanguard", kind: "app", publisher: "Valve Corporation" });
+    t.owners[steam].publisher = "Valve";
+    const steps = uninstallSteps(t, steam, "launcher");
+    expect(steps.map((s) => t.owners[s.owner].name)).toEqual(["Discord", "Riot Vanguard", "Steam"]);
+    expect(steps[1].restart).toBe(true);
+    expect(steps[0].restart).toBe(false);
+    // Not a launcher: only itself.
+    expect(uninstallSteps(t, game, "game").map((s) => s.owner)).toEqual([game]);
+    // Paths are found again whatever the case.
+    const some = 5;
+    expect(findPath(t, t.path(some).toUpperCase())).toBe(some);
+    expect(findPath(t, "C:\\no such folder")).toBe(-1);
   });
 });

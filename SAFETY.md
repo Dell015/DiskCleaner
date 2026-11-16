@@ -20,6 +20,12 @@ DiskCleaner inspects entire disks and advises on deletion, so safety rules come 
 7. **Links are never followed** (junctions, symlinks, reparse points).
 8. **Tests never touch real user data**; they use temporary directories or generated fixtures.
 9. **Fail closed.** Any error or ambiguity produces the more cautious result.
+10. **Uninstalling only through the app's own uninstaller** (D133). An app's program files are never
+    removed by DiskCleaner itself. On request, and only after the person confirms, it starts the
+    uninstaller Windows records for that app (the one Settings → Apps runs), with its own window,
+    never silently and never through a shell (`cmd.exe`, PowerShell and script hosts are refused).
+    When the recorded command is doubtful it opens Windows' Installed apps page instead. Windows
+    parts and runtimes other apps need are never offered. Only in builds with removing.
 
 ## Reporting a problem
 Please open a private security advisory on the repository rather than a public issue for anything

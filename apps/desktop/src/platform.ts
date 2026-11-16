@@ -228,3 +228,32 @@ export async function missingHolding(): Promise<string[]> {
   if (pretend || !isDesktop()) return [];
   return invoke<string[]>("missing_holding");
 }
+
+// ---------- uninstalling an app with its own uninstaller (D133; builds with "cleaning") ----------
+
+export interface Uninstalling { how: "uninstaller" | "settings"; why: string | null }
+
+/** Browser checks: apps the pretend uninstaller has removed. */
+const pretendGone = new Set<string>();
+
+/** Start an app's own uninstaller (or Windows' Installed apps page when that is safer). */
+export async function uninstallApp(name: string, publisher?: string): Promise<Uninstalling> {
+  if (pretend) {
+    // The pretend uninstaller finishes a moment later.
+    window.setTimeout(() => pretendGone.add(name), 300);
+    return { how: "uninstaller", why: null };
+  }
+  return invoke<Uninstalling>("uninstall_app", { name, publisher: publisher ?? null });
+}
+
+/** Is each of these apps still installed (Windows' list right now)? */
+export async function appsInstalled(names: string[]): Promise<boolean[]> {
+  if (pretend) return names.map((n) => !pretendGone.has(n));
+  return invoke<boolean[]>("apps_installed", { names });
+}
+
+/** Is each of these folders still there? */
+export async function pathsExist(paths: string[]): Promise<boolean[]> {
+  if (pretend) return paths.map(() => true);
+  return invoke<boolean[]>("paths_exist", { paths });
+}

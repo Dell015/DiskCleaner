@@ -10,6 +10,8 @@
 //! - Every step is written to an append-only journal *before* it happens; the journal is the only
 //!   record, so a crash at any point leaves a state that can be read back exactly.
 //! - No `unwrap`, `expect` or `panic!` outside tests.
+//! - Uninstalling an app only ever starts that app's own recorded uninstaller, with its own
+//!   window, after the person confirms (`uninstall`, D133); never through a shell.
 //! - `unsafe` only in `win.rs` (Windows calls for checked moves and protected holding folders,
 //!   D119), each block with a `// SAFETY:` note.
 
@@ -26,6 +28,7 @@ mod journal;
 mod ops;
 #[cfg(feature = "destructive-actions")]
 mod places;
+pub mod uninstall;
 #[cfg(all(windows, feature = "destructive-actions"))]
 #[allow(unsafe_code)]
 mod win;

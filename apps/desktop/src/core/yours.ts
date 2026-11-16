@@ -160,6 +160,23 @@ function projectKind(names: string[]): string {
   return "Other projects";
 }
 
+/** Folders that hold a person's things and are never a project themselves, even with a
+ * `package.json` or `.git` in them (a `npm init` or `git init` in the home folder is common). */
+const NOT_A_PROJECT = new Set(["users", "documents", "desktop", "downloads", "pictures", "videos", "music", "onedrive", "source", "repos", "projects", "code", "dev", "github", "src", "workspace", "workspaces"]);
+
+/** Can this folder be a code project? Not a drive, not a profile (or anything holding AppData),
+ * not a known personal or "all my projects" folder. Projects inside them are still found. */
+function mayBeProject(tree: Tree, i: number, lower: string): boolean {
+  const up = tree.parent[i];
+  if (up <= 0 || /^[a-z]:[\\/]?$/i.test(tree.names[i])) return false;
+  if (NOT_A_PROJECT.has(lower)) return false;
+  if (tree.names[up].toLowerCase().replace(/[\\/]+$/, "") === "users") return false;
+  for (let c = tree.firstChild[i]; c >= 0; c = tree.nextSibling[c]) {
+    if (tree.names[c].toLowerCase() === "appdata") return false;
+  }
+  return true;
+}
+
 /** Keep the `max` biggest of a list of (item, bytes). */
 function top<T>(m: Map<T, number>, max: number): [T, number][] {
   return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, max);
@@ -220,7 +237,7 @@ function build(tree: Tree): Group[] {
       const up = tree.parent[i];
       if (up >= 0 && isDrive(up) && SYSTEM_TOP.has(lower)) continue;
       if (lower === "appdata" || lower === "$recycle.bin") continue;
-      if (!inDownloads) {
+      if (!inDownloads && mayBeProject(tree, i, lower)) {
         // A code project: counted whole, with what its tools rebuild.
         let marker = false;
         let unity = 0;

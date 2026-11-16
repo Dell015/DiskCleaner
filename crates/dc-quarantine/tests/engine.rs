@@ -545,6 +545,9 @@ fn only_the_ops_file_may_call_rename_or_remove() {
                 "MoveFileExW",
                 "SetFileInformationByHandle",
                 "SetFileSecurityW",
+                "ShellExecute",
+                "CreateProcess",
+                "process::Command",
             ] {
                 assert!(!text.contains(call), "{name} contains {call}");
             }

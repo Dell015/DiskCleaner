@@ -410,6 +410,38 @@ const check = (ok, what) => {
     await page.waitForTimeout(150);
     check((await page.locator("#appsView .ap-card").count()) >= 1, "back to all apps");
 
+    // ---------- Uninstalling an app with its own uninstaller (stand-in in the browser) ----------
+    await page.goto(base + "?demo=40000&view=apps&cleaning");
+    await page.waitForFunction(() => document.querySelectorAll("#appsView .ap-card").length > 3, null, { timeout: 60000 });
+    await page.click("#appsView .ap-kind[data-kind='chat'] .ap-card:has(.nm:text-is('Discord'))");
+    await page.waitForTimeout(200);
+    check((await page.locator("#appsView .ap-un .ap-step").count()) === 1, "an app's page offers to uninstall it");
+    await page.click("#appsView .ap-un button:has-text('Uninstall')");
+    await page.waitForTimeout(100);
+    check(await page.locator("#appsView .ap-un button:has-text('Start uninstaller')").isVisible(), "uninstalling asks first");
+    await page.click("#appsView .ap-un button:has-text('Start uninstaller')");
+    await page.waitForSelector("#appsView .ap-step.done", { timeout: 15000 });
+    await shot("53-uninstalled");
+    check((await page.locator("#appsView .ap-un .ap-ok").count()) === 1 && (await page.locator("#appsView .ap-rescan").count()) === 1, "Rhizome notices the uninstaller finished and offers to check what is left");
+    await page.click("#appsView .ap-back");
+    await page.click("#appsView .ap-kind[data-kind='launcher'] .ap-card:has(.nm:text-is('Steam'))");
+    await page.waitForTimeout(200);
+    check((await page.locator("#appsView .ap-un").count()) === 1, "a launcher's page has the guided uninstall");
+    // A game its launcher manages (no Windows uninstaller): instructions, and never stuck waiting.
+    await page.evaluate(() => { const o = window.__dc.state.tree.owners.find((x) => x.name === "Spotify"); o.uninstaller = false; o.launcher = "Steam"; });
+    await page.click("#appsView .ap-back");
+    await page.waitForTimeout(100);
+    await page.click("#appsView .ap-card:has(.nm:text-is('Spotify'))");
+    await page.waitForTimeout(200);
+    await page.click("#appsView .ap-un button:has-text('Uninstall')");
+    await page.click("#appsView .ap-un button:has-text('Show me how')");
+    await page.waitForTimeout(150);
+    check((await page.locator("#appsView .ap-un .ap-wait").innerText()).includes("Steam's Library"), "a launcher's game says where its launcher removes it");
+    await page.click("#appsView .ap-un button:has-text(\"I've uninstalled it\")");
+    await page.waitForTimeout(150);
+    check((await page.locator("#appsView .ap-un .ap-ok").count()) === 1, "waiting can always be ended by hand");
+    await page.evaluate(() => window.__dc.setViewMode("apps"));
+
     // ---------- Removing (the browser stand-in judges paths like the real engine). ----------
     await page.goto(base + "?demo=40000&view=files&cleaning");
     await page.waitForFunction(() => document.querySelectorAll("#explorer .x-row input.pick").length > 3, null, { timeout: 60000 });

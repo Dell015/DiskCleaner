@@ -505,6 +505,134 @@ mod cleaning {
         emptied: Vec<(String, u64)>,
         failed: Vec<(String, String)>,
     }
+
+    /// Installed apps as Windows lists them right now (the ones Settings shows).
+    fn listed_now() -> Vec<(String, Option<String>, Option<String>)> {
+        dc_api::system::installed_apps(false, false)
+            .map(|snap| {
+                snap.apps
+                    .into_iter()
+                    .filter(|a| {
+                        !a.flags.hidden_entry
+                            && !a.flags.update_or_patch
+                            && !a.flags.system_component
+                            && !a.name.trim().is_empty()
+                    })
+                    .map(|a| (a.name, a.publisher, a.uninstall_command))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Is each of these apps (by name) still installed? Read-only; used to notice when an
+    /// uninstaller has finished.
+    #[tauri::command]
+    pub async fn apps_installed(names: Vec<String>) -> Result<Vec<bool>, String> {
+        tauri::async_runtime::spawn_blocking(move || {
+            let now = listed_now();
+            names
+                .iter()
+                .map(|n| now.iter().any(|(name, _, _)| name == n))
+                .collect()
+        })
+        .await
+        .map_err(|e| e.to_string())
+    }
+
+    /// Is each of these folders still there? Read-only (a link counts as there; nothing is
+    /// followed). Used to notice when a launcher has removed a game.
+    #[tauri::command]
+    pub async fn paths_exist(paths: Vec<String>) -> Result<Vec<bool>, String> {
+        tauri::async_runtime::spawn_blocking(move || {
+            paths
+                .iter()
+                .map(|p| std::fs::symlink_metadata(p).is_ok())
+                .collect()
+        })
+        .await
+        .map_err(|e| e.to_string())
+    }
+
+    /// What starting an uninstall did.
+    #[derive(Serialize)]
+    pub struct Uninstalling {
+        /// "uninstaller": the app's own uninstaller was started; "settings": Windows' Installed
+        /// apps page was opened instead (the recorded command could not be started safely).
+        how: &'static str,
+        /// Why the Installed apps page was opened instead.
+        why: Option<String>,
+    }
+
+    /// Start an installed app's own uninstaller, with its own window (D133). The app is found
+    /// again in Windows' list by name (and publisher); the command Windows records for it is
+    /// split into one program and its arguments and never given to a shell. Anything doubtful
+    /// opens Windows' own Installed apps page instead.
+    #[tauri::command]
+    pub async fn uninstall_app(
+        name: String,
+        publisher: Option<String>,
+    ) -> Result<Uninstalling, String> {
+        #[cfg(not(feature = "cleaning"))]
+        {
+            let _ = (name, publisher);
+            Err(OFF.to_owned())
+        }
+        #[cfg(feature = "cleaning")]
+        {
+            use dc_quarantine::uninstall;
+            tauri::async_runtime::spawn_blocking(move || {
+                if !cfg!(windows) {
+                    return Err("Uninstalling only works on Windows.".to_owned());
+                }
+                let now = listed_now();
+                let same: Vec<_> = now
+                    .iter()
+                    .filter(|(n, p, _)| *n == name && (publisher.is_none() || *p == publisher))
+                    .collect();
+                if same.is_empty() {
+                    return Err(format!("Windows no longer lists {name} as installed."));
+                }
+                let settings = |why: String| -> Result<Uninstalling, String> {
+                    uninstall::open_installed_apps().map_err(|e| {
+                        format!("{why}, and Windows' Installed apps page could not be opened: {e}")
+                    })?;
+                    Ok(Uninstalling {
+                        how: "settings",
+                        why: Some(why),
+                    })
+                };
+                // Two entries of the same name with different commands: do not guess.
+                if same.iter().any(|(_, _, c)| *c != same[0].2) {
+                    return settings(format!("Windows lists more than one {name}"));
+                }
+                let Some(recorded) = same[0].2.as_deref() else {
+                    return settings(format!("Windows records no uninstaller for {name}"));
+                };
+                let cmd = match uninstall::parse(
+                    recorded,
+                    &|p: &std::path::Path| p.is_file(),
+                    &uninstall::system_dir(),
+                ) {
+                    Ok(c) => c,
+                    Err(why) => return settings(why),
+                };
+                uninstall::start(&cmd).map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        "Windows' permission question was answered No, so nothing was started."
+                            .to_owned()
+                    } else {
+                        format!("The uninstaller could not be started: {e}")
+                    }
+                })?;
+                Ok(Uninstalling {
+                    how: "uninstaller",
+                    why: None,
+                })
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+    }
 }
 
 /// App icons for the page: one PNG data URL (or nothing) per icon location, in order. Reads the
@@ -781,6 +909,9 @@ fn main() {
             latest_report,
             app_icons,
             cleaning::cleaning_available,
+            cleaning::apps_installed,
+            cleaning::paths_exist,
+            cleaning::uninstall_app,
             cleaning::remove_items,
             cleaning::list_cleanups,
             cleaning::restore_items,

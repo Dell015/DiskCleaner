@@ -11,7 +11,7 @@ import type { Tree } from "./core/tree";
 import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
-import { cleaningAvailable, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, missingHolding, removeItems, restoreItems, usePretendCleaning, type CleanupInfo } from "./platform";
+import { appsInstalled, cleaningAvailable, pathsExist, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, missingHolding, removeItems, restoreItems, uninstallApp, usePretendCleaning, type CleanupInfo } from "./platform";
 import { attach, daysLeft, detach, eligibility, outermost } from "./core/cleanup";
 import type { PickHandlers } from "./panels/explorer";
 import { aiStatus, appIcons, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
@@ -259,6 +259,11 @@ const appsView = new AppsView(byId("appsView"), {
   },
   appIcon: (o) => appIconFor(o),
   pick: picking,
+  canUninstall: () => cleaningOn,
+  uninstall: (name, publisher) => uninstallApp(name, publisher),
+  stillInstalled: (names) => appsInstalled(names),
+  stillThere: (paths) => pathsExist(paths),
+  rescan: () => (lastScanTarget ? () => void scanFolder(lastScanTarget ?? undefined) : null),
   kinds: () => settings.appKinds,
   setKind: (name, kind) => {
     if (kind) settings.appKinds[name] = kind;
@@ -446,6 +451,8 @@ function finishReplay(): void {
   view.setHead(null);
   refresh(true);
   renderSide();
+  // The Library's tick boxes appear only once the scan is finished: draw it again.
+  renderAppsView(true);
   settle();
 }
 
@@ -497,12 +504,16 @@ function endLive(): void {
 }
 
 /** Ask for a folder (or take one) and scan it live. */
+/** The folder or drive scanned last in this window (to scan it again after an uninstall). */
+let lastScanTarget: string | null = null;
+
 async function scanFolder(path?: string): Promise<void> {
   try {
     const desktop = isDesktop();
     if (!desktop && !params.has("live")) return;
     const target = path ?? (desktop ? await pickFolder() : "C:\\");
     if (!target) return;
+    lastScanTarget = target;
     let allow = false;
     if (desktop && (await isDriveRoot(target))) {
       if (!(await confirmDrive(target))) return;
