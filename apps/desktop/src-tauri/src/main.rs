@@ -193,6 +193,10 @@ mod cleaning {
         checked: bool,
         /// "I understand these are my own files" (Your call items).
         understood: bool,
+        /// A folder this app left behind after it was uninstalled from Rhizome (D133): judged by
+        /// `left_behind_eligibility` (it must have been the app's, and the app must be gone).
+        #[serde(default)]
+        left_behind_of: Option<String>,
     }
 
     /// What happened.
@@ -287,14 +291,29 @@ mod cleaning {
         }
         #[cfg(feature = "cleaning")]
         {
-            use dc_api::cleanup::{eligibility, Eligibility};
+            use dc_api::cleanup::{eligibility, left_behind_eligibility, Eligibility};
             use dc_quarantine::{Group, Item};
             tauri::async_runtime::spawn_blocking(move || {
                 let mut out = Removal::default();
                 let mut items = Vec::new();
+                // Windows' list right now, only when something left behind is picked.
+                let installed: Vec<String> = if picks.iter().any(|p| p.left_behind_of.is_some()) {
+                    listed_now().into_iter().map(|(n, _, _)| n).collect()
+                } else {
+                    Vec::new()
+                };
                 for p in picks {
                     // Rust decides the group; the page only brings the person's ticks.
-                    let (group, title, reason) = match eligibility(&ins, &p.path) {
+                    let judged = match &p.left_behind_of {
+                        Some(app) => left_behind_eligibility(
+                            &ins,
+                            &p.path,
+                            app,
+                            installed.iter().any(|n| n == app),
+                        ),
+                        None => eligibility(&ins, &p.path),
+                    };
+                    let (group, title, reason) = match judged {
                         Eligibility::Never { why } => {
                             out.skipped.push((p.path, why));
                             continue;
@@ -311,7 +330,13 @@ mod cleaning {
                             "your_call".to_owned(),
                         ),
                     };
-                    let newest = ins.find(&p.path).map_or(0, |i| ins.changed(i));
+                    // Left behind: the uninstaller changed the folder after the scan, so its
+                    // time from the scan says nothing (the app being gone is checked above).
+                    let newest = if p.left_behind_of.is_some() {
+                        0
+                    } else {
+                        ins.find(&p.path).map_or(0, |i| ins.changed(i))
+                    };
                     items.push(Item {
                         path: std::path::PathBuf::from(&p.path),
                         group,
@@ -547,6 +572,52 @@ mod cleaning {
             paths
                 .iter()
                 .map(|p| std::fs::symlink_metadata(p).is_ok())
+                .collect()
+        })
+        .await
+        .map_err(|e| e.to_string())
+    }
+
+    /// Size (bytes, files) of each folder now, or `None` when it is gone. Read-only; links are
+    /// counted as themselves and never followed. Used to show what an uninstalled app left
+    /// behind without scanning the whole drive again.
+    #[tauri::command]
+    pub async fn folder_sizes(paths: Vec<String>) -> Result<Vec<Option<(u64, u64)>>, String> {
+        tauri::async_runtime::spawn_blocking(move || {
+            paths
+                .iter()
+                .map(|p| {
+                    let top = std::fs::symlink_metadata(p).ok()?;
+                    if !top.is_dir() {
+                        return Some((top.len(), 1));
+                    }
+                    let (mut bytes, mut files) = (0u64, 0u64);
+                    let mut stack = vec![std::path::PathBuf::from(p)];
+                    // A bound, so a huge folder cannot hang the page.
+                    let mut budget = 2_000_000u32;
+                    while let Some(dir) = stack.pop() {
+                        let Ok(read) = std::fs::read_dir(&dir) else {
+                            continue;
+                        };
+                        for entry in read.flatten() {
+                            budget = budget.saturating_sub(1);
+                            if budget == 0 {
+                                return Some((bytes, files));
+                            }
+                            let Ok(meta) = entry.metadata() else { continue };
+                            if meta.is_symlink() {
+                                continue;
+                            }
+                            if meta.is_dir() {
+                                stack.push(entry.path());
+                            } else {
+                                bytes += meta.len();
+                                files += 1;
+                            }
+                        }
+                    }
+                    Some((bytes, files))
+                })
                 .collect()
         })
         .await
@@ -911,6 +982,7 @@ fn main() {
             cleaning::cleaning_available,
             cleaning::apps_installed,
             cleaning::paths_exist,
+            cleaning::folder_sizes,
             cleaning::uninstall_app,
             cleaning::remove_items,
             cleaning::list_cleanups,

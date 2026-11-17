@@ -8,7 +8,7 @@
 import { appCards, clearables, gamesOf, launcherOf, layoutNetwork, placeRole, ROLE_TEXT, type AppCard, type PlaceRole } from "../core/apps";
 import { appKind, APP_KINDS, KIND_TEXT, type AppKind } from "../core/kinds";
 import { GROUP_TEXT, GROUPS, yourFiles, type Group, type GroupId } from "../core/yours";
-import { findPath, uninstallSteps } from "../core/uninstall";
+import { uninstallSteps } from "../core/uninstall";
 import { appNetwork } from "./appnet";
 import { ago } from "../core/inventory";
 import type { Tree } from "../core/tree";
@@ -38,8 +38,20 @@ export interface AppsHandlers {
   stillInstalled?(names: string[]): Promise<boolean[]>;
   /** Which of these folders are still there. */
   stillThere?(paths: string[]): Promise<boolean[]>;
-  /** Scan the same place again (null when there is nothing to rescan). */
-  rescan?(): (() => void) | null;
+  /** Size [bytes, files] of each folder now, or null when it is gone (no full scan). */
+  folderSizes?(paths: string[]): Promise<([number, number] | null)[]>;
+  /** Remove folders an uninstalled app left behind (checked again by the removal rules). */
+  removeLeftBehind?(app: string, paths: string[]): Promise<{ held: [string, number][]; skipped: [string, string][] }>;
+}
+
+/** One folder an uninstalled app left behind, as it is now. */
+interface Left {
+  path: string;
+  bytes: number;
+  files: number;
+  tick: boolean;
+  /** After removing: "removed", or why it was skipped. */
+  result?: string;
 }
 
 /** Where one app's uninstall stands. */
@@ -50,6 +62,11 @@ interface Job {
   why?: string;
   /** Its install folder: when that is gone, it is uninstalled (launcher games). */
   folder?: string;
+  /** What it left behind (after it is done; undefined while being checked). */
+  left?: Left[];
+  /** "I've looked, I don't need what's in them." */
+  looked?: boolean;
+  removing?: boolean;
 }
 
 /** How each launcher removes a game it installed. */
@@ -62,11 +79,6 @@ function launcherHow(launcher: string, game: string): string {
   return `Uninstall ${game} from inside ${launcher}.`;
 }
 
-/** Folders an uninstalled app kept things in, to check after a rescan. */
-interface LeftBehind {
-  names: string[];
-  paths: string[];
-}
 
 type Sort = "size" | "used" | "name";
 /** What the Library shows: everything, one kind of app, or your files. */
@@ -83,9 +95,8 @@ export class AppsView {
   /** Uninstalls started from here, by app name. */
   private jobs = new Map<string, Job>();
   private poll: number | null = null;
-  /** Places of apps uninstalled from here, by app name (kept across rescans). */
+  /** Places of apps uninstalled from here, by app name (from the scan, before uninstalling). */
   private placesOf = new Map<string, string[]>();
-  private leftBehind: LeftBehind[] = [];
   /** The app whose page is open, or -1 for the grid. */
   owner = -1;
   /** The file group whose page is open (when no app page is). */
@@ -209,7 +220,7 @@ export class AppsView {
     for (const [id, label] of [["size", "Biggest"], ["used", "Least used"], ["name", "Name"]] as [Sort, string][]) {
       sortSeg.append(h("button", { class: this.sort === id ? "on" : "", attrs: { "aria-pressed": String(this.sort === id) }, onclick: () => { this.sort = id; this.redraw(tree); } }, label));
     }
-    const out: HTMLElement[] = [head, ...this.leftBehindSections(tree), chips, h("div", { class: "ap-tools" }, search, sortSeg)];
+    const out: HTMLElement[] = [head, chips, h("div", { class: "ap-tools" }, search, sortSeg)];
 
     // Your files first: a short row of groups.
     if ((this.section === "all" && !q) || this.section === "files") {
@@ -566,30 +577,93 @@ export class AppsView {
             h("button", { onclick: () => { this.jobs.delete(so.name); this.redraw(tree); } }, "Stop waiting")));
       } else {
         row.append(h("p", { class: "ap-ok" }, step.restart ? "Uninstalled. Restart your PC before going on." : "Uninstalled."));
+        row.append(this.leftBox(so.name, job));
       }
       li.append(row);
       ol.append(li);
     });
     sec.append(ol);
-    if (steps.some((s) => this.jobs.get(tree.owners[s.owner].name)?.status === "done")) sec.append(this.rescanBox());
     return sec;
   }
 
-  /** "Rescan to see what it left behind". */
-  private rescanBox(): HTMLElement {
-    const go = this.on.rescan?.() ?? null;
-    return h("div", { class: "ap-rescan" },
-      h("p", {}, "Uninstallers often leave folders behind (settings, logs, downloads). Scan again and Rhizome lists what is left of them at the top of the Library, ready to tick and remove."),
-      go ? h("button", { class: "primary", onclick: () => { this.rememberLeftBehind(); go(); } }, "Scan again to check what is left") : h("p", { class: "quiet" }, "Scan the drive again to check what is left."));
+  /** Look at just this app's folders now (no full scan): which are left, and how big. */
+  private checkLeft(name: string): void {
+    const job = this.jobs.get(name);
+    const paths = this.placesOf.get(name) ?? [];
+    if (!job || job.left || !this.on.folderSizes) return;
+    if (!paths.length) {
+      job.left = [];
+      return;
+    }
+    void this.on.folderSizes(paths).then((sizes) => {
+      job.left = paths.flatMap((path, k) => {
+        const s = sizes[k];
+        return s ? [{ path, bytes: s[0], files: s[1], tick: false }] : [];
+      });
+      this.redrawLast();
+    }, () => {
+      job.left = [];
+      this.redrawLast();
+    });
   }
 
-  /** Keep the places of the apps uninstalled so far, to look for them after the rescan. */
-  private rememberLeftBehind(): void {
-    const names = [...this.jobs.entries()].filter(([, j]) => j.status === "done").map(([n]) => n);
-    if (!names.length) return;
-    const paths = [...new Set(names.flatMap((n) => this.placesOf.get(n) ?? []))];
-    this.leftBehind = [...this.leftBehind.filter((l) => !l.names.some((n) => names.includes(n))), { names, paths }];
-    for (const n of names) this.jobs.delete(n);
+  /** What an uninstalled app left behind, ready to tick and remove. */
+  private leftBox(name: string, job: Job): HTMLElement {
+    const box = h("div", { class: "ap-left" });
+    if (!job.left) {
+      this.checkLeft(name);
+      box.append(h("p", { class: "ap-wait" }, h("span", { class: "spinner small" }), "Checking its folders for what it left behind…"));
+      return box;
+    }
+    const left = job.left;
+    const still = left.filter((l) => l.result !== "removed");
+    if (!still.length) {
+      box.classList.add("done");
+      box.append(h("p", {}, left.length ? "Everything it left behind is in the Removed tab." : "It left nothing behind in the folders it used."));
+      return box;
+    }
+    const total = still.reduce((a, l) => a + l.bytes, 0);
+    box.append(h("h3", {}, `Left behind: ${human(total)} in ${count(still.length)} folder${still.length === 1 ? "" : "s"}`),
+      h("p", { class: "quiet" }, "Only the folders it used were checked. Tick what you want gone; it goes to the Removed tab first, so you can still restore it."));
+    const ul = h("ul", { class: "ap-list" });
+    for (const l of left) {
+      const tick = h("input", { class: "pick", attrs: { type: "checkbox", "aria-label": `Remove ${l.path}` } }) as HTMLInputElement;
+      tick.checked = l.tick;
+      tick.disabled = Boolean(l.result) || Boolean(job.removing);
+      tick.addEventListener("change", () => { l.tick = tick.checked; this.redrawLast(); });
+      ul.append(h("li", {}, tick, h("div", { class: "ap-row static", title: l.path },
+        h("span", { class: `verdict ${l.result === "removed" ? "safe" : "probably_safe"}` }, l.result === "removed" ? "Removed" : "Left behind"),
+        h("span", { class: "nm" }, l.path.split("\\").pop() ?? l.path),
+        h("span", { class: "sz" }, `${human(l.bytes)} · ${count(l.files)} files`),
+        h("span", { class: "path" }, l.path),
+        l.result && l.result !== "removed" ? h("span", { class: "ap-err" }, `Not removed: ${l.result}`) : null)));
+    }
+    box.append(ul);
+    const picked = left.filter((l) => l.tick && !l.result);
+    const looked = h("input", { attrs: { type: "checkbox" } }) as HTMLInputElement;
+    looked.checked = Boolean(job.looked);
+    looked.addEventListener("change", () => { job.looked = looked.checked; this.redrawLast(); });
+    const go = h("button", { class: "danger", onclick: () => void this.removeLeft(name, job, picked) },
+      job.removing ? "Removing…" : picked.length ? `Remove ${count(picked.length)} (${human(picked.reduce((a, l) => a + l.bytes, 0))})` : "Remove");
+    if (!picked.length || !job.looked || job.removing || !this.on.removeLeftBehind) go.setAttribute("disabled", "");
+    box.append(h("label", { class: "ap-looked" }, looked, " I looked: I don't need what is in them (settings, logs, saves)."), go);
+    return box;
+  }
+
+  private async removeLeft(name: string, job: Job, picked: Left[]): Promise<void> {
+    if (!this.on.removeLeftBehind || !picked.length) return;
+    job.removing = true;
+    this.redrawLast();
+    try {
+      const r = await this.on.removeLeftBehind(name, picked.map((l) => l.path));
+      const held = new Set(r.held.map(([p]) => p.toLowerCase()));
+      const why = new Map(r.skipped.map(([p, w]) => [p.toLowerCase(), w]));
+      for (const l of picked) l.result = held.has(l.path.toLowerCase()) ? "removed" : why.get(l.path.toLowerCase()) ?? "it was not removed";
+    } catch (e) {
+      for (const l of picked) l.result = String(e);
+    }
+    job.removing = false;
+    this.redrawLast();
   }
 
   /** Notice when uninstallers finish (Windows' list no longer has the app). */
@@ -631,32 +705,6 @@ export class AppsView {
       }
     };
     this.poll = window.setInterval(() => void tick(), 3000);
-  }
-
-  /** What uninstalled apps left behind, found again in this scan. */
-  private leftBehindSections(tree: Tree): HTMLElement[] {
-    const out: HTMLElement[] = [];
-    for (const lb of this.leftBehind) {
-      const nodes = lb.paths.map((p) => findPath(tree, p)).filter((n) => n >= 0);
-      const bytes = nodes.reduce((a, n) => a + tree.agg[n], 0);
-      const forget = h("button", { onclick: () => { this.leftBehind = this.leftBehind.filter((x) => x !== lb); this.redraw(tree); } }, nodes.length ? "Hide this" : "OK");
-      const who = lb.names.join(", ");
-      if (!nodes.length) {
-        out.push(h("section", { class: "ap-left done" }, h("h3", {}, `Nothing left behind by ${who}`), h("p", { class: "quiet" }, "None of the folders it kept things in are there any more."), forget));
-        continue;
-      }
-      const ul = h("ul", { class: "ap-list" });
-      for (const n of nodes) {
-        const box = this.on.pick ? pickBox(this.on.pick, n, tree.names[n]) : null;
-        ul.append(h("li", {}, ...(box ? [box] : []), h("button", { class: "ap-row", title: tree.path(n), onclick: () => this.on.open(n) },
-          h("span", { class: "verdict probably_safe" }, "Left behind"), h("span", { class: "nm" }, tree.names[n]), h("span", { class: "sz" }, human(tree.agg[n])), h("span", { class: "path" }, tree.path(n)))));
-      }
-      out.push(h("section", { class: "ap-left" },
-        h("h3", {}, `Left behind by ${who}: ${human(bytes)}`),
-        h("p", { class: "quiet" }, "These folders were theirs and are still here. Look at each one, tick what you want gone, then Review. A folder Rhizome still protects has no tick box."),
-        ul, forget));
-    }
-    return out;
   }
 
   private redrawLast(): void {

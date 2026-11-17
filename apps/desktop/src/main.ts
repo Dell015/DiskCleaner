@@ -11,7 +11,7 @@ import type { Tree } from "./core/tree";
 import { count, getSizeUnits, human, SIZE_UNITS, setSizeUnits, type SizeUnits } from "./core/util";
 import type { LoaderReply, LoaderRequest } from "./loader.worker";
 import { LiveTree, simulateLive, type LiveEvent, type LiveSummary } from "./live";
-import { appsInstalled, cleaningAvailable, pathsExist, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, missingHolding, removeItems, restoreItems, uninstallApp, usePretendCleaning, type CleanupInfo } from "./platform";
+import { appsInstalled, cleaningAvailable, folderSizes, pathsExist, type Removal, emptyCleanup, emptyExpired, expiredCleanups, listCleanups, missingHolding, removeItems, restoreItems, uninstallApp, usePretendCleaning, type CleanupInfo } from "./platform";
 import { attach, daysLeft, detach, eligibility, outermost } from "./core/cleanup";
 import type { PickHandlers } from "./panels/explorer";
 import { aiStatus, appIcons, cancelDupes, cancelScan, confirmDrive, findDupes, isDesktop, isDriveRoot, latestReport, pickFolder, saveScan, setAiAccess, startScan, suggestedFolders } from "./platform";
@@ -28,6 +28,7 @@ import { ExplorerView } from "./panels/explorer";
 import { OverviewView } from "./panels/overview";
 import { AppsView } from "./panels/apps";
 import { APP_KINDS, type AppKind } from "./core/kinds";
+import { findPath } from "./core/uninstall";
 
 /** A folder this big on screen (radius, px) opens when you zoom in; below CLOSE_PX it closes again. */
 const OPEN_PX = 24;
@@ -263,7 +264,8 @@ const appsView = new AppsView(byId("appsView"), {
   uninstall: (name, publisher) => uninstallApp(name, publisher),
   stillInstalled: (names) => appsInstalled(names),
   stillThere: (paths) => pathsExist(paths),
-  rescan: () => (lastScanTarget ? () => void scanFolder(lastScanTarget ?? undefined) : null),
+  folderSizes: (paths) => folderSizes(paths),
+  removeLeftBehind: (app, paths) => removeLeftBehind(app, paths),
   kinds: () => settings.appKinds,
   setKind: (name, kind) => {
     if (kind) settings.appKinds[name] = kind;
@@ -504,16 +506,12 @@ function endLive(): void {
 }
 
 /** Ask for a folder (or take one) and scan it live. */
-/** The folder or drive scanned last in this window (to scan it again after an uninstall). */
-let lastScanTarget: string | null = null;
-
 async function scanFolder(path?: string): Promise<void> {
   try {
     const desktop = isDesktop();
     if (!desktop && !params.has("live")) return;
     const target = path ?? (desktop ? await pickFolder() : "C:\\");
     if (!target) return;
-    lastScanTarget = target;
     let allow = false;
     if (desktop && (await isDriveRoot(target))) {
       if (!(await confirmDrive(target))) return;
@@ -1431,6 +1429,25 @@ async function doRemove(): Promise<void> {
     showError(String(err));
     byId<HTMLButtonElement>("reviewGo").hidden = false;
   }
+}
+
+/**
+ * Remove folders an app left behind after it was uninstalled from the Library (D133). Rust
+ * judges each one again: it must have been that app's in the latest scan, and the app must be
+ * gone from Windows' list now. They go to the holding folder like everything else.
+ */
+async function removeLeftBehind(app: string, paths: string[]): Promise<Removal> {
+  const r = await removeItems(paths.map((path) => ({ path, checked: true, understood: true, leftBehindOf: app })), () => undefined);
+  const t = state.tree;
+  if (t) {
+    const gone = r.held.map(([p]) => findPath(t, p)).filter((i) => i >= 0);
+    for (const i of gone) detach(t, i);
+    if (r.id) removedNodes.set(r.id, gone);
+    renderSide();
+  }
+  const freed = r.held.reduce((a, [, b]) => a + b, 0);
+  if (r.id) toastAction(`Removed ${human(freed)} left behind by ${app}.`, "Undo", () => void undoCleanup(r.id));
+  return r;
 }
 
 async function undoCleanup(id: string, only: [string, number][] | null = null): Promise<void> {

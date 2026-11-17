@@ -562,3 +562,8 @@ span.appicon.none { display: inline-block; width: 16px; height: 16px; border-rad
 .ap-left.done { border-color: color-mix(in srgb, var(--safe) 50%, var(--line)); background: var(--panel); }
 .ap-left h3 { margin: 0; font-size: var(--t3); }
 .ap-left .ap-list { width: 100%; }
+.ap-left .ap-list li { display: flex; gap: 8px; align-items: center; }
+.ap-left .ap-row.static { flex: 1; cursor: default; }
+.ap-left .ap-row.static:hover { background: transparent; }
+.ap-left .ap-err { grid-column: 1 / -1; font-size: var(--t1); }
+.ap-looked { display: flex; gap: 8px; align-items: center; }

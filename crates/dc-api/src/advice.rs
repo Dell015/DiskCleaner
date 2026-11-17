@@ -27,6 +27,7 @@ pub fn if_deleted(reason: &str) -> Option<&'static str> {
         "wallet_or_vault" => "Keys or a password vault. Deleting it can lose access to accounts or money for good. Do not delete.",
         "leftover_missing_app" => "Data of an app whose program folder is already gone, so the app cannot use it. If you reinstall that app later, its old settings are gone.",
         "leftover_backup_copy" => "An old backup copy next to the folder it was made from; the real folder is not touched. Look inside first in case it holds something the current one does not.",
+        "leftover_uninstalled" => "Left behind by an app you uninstalled. Its settings, logs and any saved data in it are gone; if you install the app again it starts fresh.",
         "leftover_known_app_removed" => "Data left by an app that is no longer installed. If you reinstall it, its old settings and saved data are gone.",
         "leftover_unregistered_program" => "Programs that no installed app claims. If you still use one of them as a portable tool, it is gone.",
         "may_hold_personal_data" => "It may hold your own documents, pictures or other personal files, so DiskCleaner only shows it. Look inside before deciding.",

@@ -85,7 +85,7 @@ export async function cancelScan(): Promise<void> {
 
 // ---------- removing (desktop builds with the "cleaning" feature; a stand-in for browser checks) ----------
 
-export interface PickRequest { path: string; checked: boolean; understood: boolean }
+export interface PickRequest { path: string; checked: boolean; understood: boolean; /** A folder this app left behind after being uninstalled (D133). */ leftBehindOf?: string }
 export interface Removal { id: string; held: [string, number][]; skipped: [string, string][] }
 export interface CleanupItem {
   root: string;
@@ -112,7 +112,9 @@ class Pretend {
     const out: Removal = { id: "", held: [], skipped: [] };
     const items: CleanupItem[] = [];
     for (const p of picks) {
-      const v = verdict(p.path);
+      const found = verdict(p.path);
+      // Left behind by an uninstalled app: Probably safe in the stand-in.
+      const v = found && p.leftBehindOf ? { ...found, group: "probably_safe", why: `Left behind by ${p.leftBehindOf}` } : found;
       if (!v) { out.skipped.push([p.path, "it is not in the scan"]); continue; }
       if (v.group === "never") { out.skipped.push([p.path, v.why]); continue; }
       if (v.group === "probably_safe" && !p.checked) { out.skipped.push([p.path, "it is Probably safe and was not ticked as checked"]); continue; }
@@ -256,4 +258,10 @@ export async function appsInstalled(names: string[]): Promise<boolean[]> {
 export async function pathsExist(paths: string[]): Promise<boolean[]> {
   if (pretend) return paths.map(() => true);
   return invoke<boolean[]>("paths_exist", { paths });
+}
+
+/** Size [bytes, files] of each folder now, or null when it is gone (read-only). */
+export async function folderSizes(paths: string[]): Promise<([number, number] | null)[]> {
+  if (pretend) return paths.map(() => [123_456, 3]);
+  return invoke<([number, number] | null)[]>("folder_sizes", { paths });
 }

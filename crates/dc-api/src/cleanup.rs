@@ -150,6 +150,70 @@ pub fn eligibility(ins: &Inspector, path: &str) -> Eligibility {
     }
 }
 
+/// The group of a folder an uninstalled app left behind (D133): `path` must have belonged to the
+/// app `app` in the latest scan, and the app must not be installed now (`still_installed` comes
+/// from Windows' list read just before). Everything that makes a path Never elsewhere still
+/// does (protected, links, hard links, refusals, Don't touch rules, Windows). It is then Probably
+/// safe (it needs the person's tick), or Your call when it is in the person's own places (saves,
+/// files they made). Read-only.
+#[must_use]
+pub fn left_behind_eligibility(
+    ins: &Inspector,
+    path: &str,
+    app: &str,
+    still_installed: bool,
+) -> Eligibility {
+    let Some(i) = ins.find(path) else {
+        return never("it is not in the latest scan");
+    };
+    if ins.flags(i) & (crate::view::flag::LINK | crate::view::flag::CLOUD) != 0 {
+        return never("it is a link or a cloud-only file");
+    }
+    if holds_hard_link(ins, i) {
+        return never(
+            "it is or holds a file with more than one name (a hard link); removing one name frees no space",
+        );
+    }
+    if chain(ins, i).len() <= 1 {
+        return never("it is the whole scanned drive or folder");
+    }
+    if let Some(why) = protected(&ins.path(i)) {
+        return never(&why);
+    }
+    if let Some((m, _)) = ins.mark(i) {
+        if m.source == "refused" {
+            return never(&format!("DiskCleaner refuses it: {}", m.detail));
+        }
+        if NEVER_REASONS.contains(&m.reason.as_str()) {
+            return never("it holds browser logins or keys; losing it can lose them for good");
+        }
+        if m.risk == "dont_touch" {
+            return never(&format!("its verdict is Don't touch: {}", m.title));
+        }
+    }
+    match ins.owner(i) {
+        Some((o, _, _)) if o.kind == "app" && o.name == app => {}
+        Some((o, _, _)) if o.kind == "windows" => return never("it belongs to Windows"),
+        _ => {
+            return never(&format!(
+                "it did not belong to \"{app}\" in the latest scan"
+            ))
+        }
+    }
+    if still_installed {
+        return never(&format!("\"{app}\" is still installed"));
+    }
+    match not_your_own(&ins.path(i)) {
+        // Not one of the person's own places (AppData, ProgramData, Program Files): the app's.
+        Some(_) => Eligibility::ProbablySafe {
+            title: format!("Left behind by {app}"),
+            reason: "leftover_uninstalled".to_owned(),
+        },
+        // In the person's own places: maybe saves or files they made.
+        None => Eligibility::YourCall,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,5 +354,38 @@ mod tests {
             }
         }
         assert!(checked >= 3);
+    }
+
+    #[test]
+    fn what_an_uninstalled_app_left_behind_can_be_picked_only_if_it_was_its_own() {
+        let ins = ins();
+        let game = r"C:\Program Files\Game";
+        assert!(matches!(
+            left_behind_eligibility(&ins, game, "Game", false),
+            Eligibility::ProbablySafe { ref reason, .. } if reason == "leftover_uninstalled"
+        ));
+        // Still installed, someone else's, Windows', a browser profile, not in the scan: never.
+        for (path, app, installed) in [
+            (game, "Game", true),
+            (game, "Chrome", false),
+            (r"C:\Windows", "Game", false),
+            (r"C:\Users\me\AppData\Local\Chrome\Profile", "Chrome", false),
+            (r"C:\Users\me\Downloads", "Game", false),
+            (r"C:\Nowhere", "Game", false),
+            (r"C:\", "Game", false),
+        ] {
+            assert!(
+                matches!(
+                    left_behind_eligibility(&ins, path, app, installed),
+                    Eligibility::Never { .. }
+                ),
+                "{path} for {app} was allowed"
+            );
+        }
+        // Chrome's own folder (not the profile inside) is Probably safe once Chrome is gone.
+        assert!(matches!(
+            left_behind_eligibility(&ins, r"C:\Users\me\AppData\Local\Chrome", "Chrome", false),
+            Eligibility::ProbablySafe { .. }
+        ));
     }
 }
