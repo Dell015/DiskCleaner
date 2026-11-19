@@ -30,7 +30,7 @@ mod probe;
 #[allow(unsafe_code)]
 mod windows;
 
-pub use apps::{build_snapshot, build_snapshot_with, BuildOptions};
+pub use apps::{build_snapshot, build_snapshot_with, listed_apps, BuildOptions, ListedApp};
 pub use icon::{extract_icon, parse_icon_location, Icon};
 pub use label::app_labels;
 pub use launchers::{

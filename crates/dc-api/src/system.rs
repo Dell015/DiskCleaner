@@ -49,6 +49,23 @@ pub fn installed_apps(verify_signatures: bool, read_usage: bool) -> Option<AppSn
     }
 }
 
+/// The apps Windows lists as installed right now (name, publisher, recorded uninstall command):
+/// a light read of the uninstall entries only. Empty on other systems.
+#[must_use]
+pub fn listed_apps() -> Vec<(String, Option<String>, Option<String>)> {
+    #[cfg(windows)]
+    {
+        dc_winmeta::listed_apps(&dc_winmeta::WindowsSource)
+            .into_iter()
+            .map(|a| (a.name, a.publisher, a.uninstall_command))
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
+}
+
 /// Size and used space of the volume holding `path`, as `(total, used)` bytes (read-only query).
 /// Only known on Windows; `None` elsewhere or when it cannot be read.
 #[must_use]

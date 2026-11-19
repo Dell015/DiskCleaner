@@ -556,8 +556,6 @@ span.appicon.none { display: inline-block; width: 16px; height: 16px; border-rad
 .ap-ok { color: var(--safe); font-weight: 600; }
 .ap-wait { display: flex; gap: 8px; align-items: center; color: var(--text); }
 .spinner.small { width: 14px; height: 14px; border-width: 2px; flex: none; }
-.ap-rescan { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 9px; margin-top: 6px; }
-.ap-rescan p { margin: 0; }
 .ap-left { display: grid; gap: 6px; justify-items: start; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--probably) 55%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--probably) 7%, var(--panel)); }
 .ap-left.done { border-color: color-mix(in srgb, var(--safe) 50%, var(--line)); background: var(--panel); }
 .ap-left h3 { margin: 0; font-size: var(--t3); }

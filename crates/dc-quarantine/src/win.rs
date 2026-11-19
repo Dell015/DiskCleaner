@@ -300,12 +300,29 @@ pub fn shell_open(target: &Path, args: Option<&str>) -> io::Result<()> {
         ..Default::default()
     };
     let mut info = info;
+    // Microsoft: COM must be set up on the calling thread first (opening a settings page or
+    // a program can go through shell extensions). Undone below when this call set it up.
+    use windows_sys::Win32::System::Com::{
+        CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+    };
+    // SAFETY: plain call with a null reserved pointer and valid flags.
+    let com = unsafe {
+        CoInitializeEx(
+            ptr::null(),
+            (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32,
+        )
+    };
     // SAFETY: `info` is a correctly sized SHELLEXECUTEINFOW; `file` and `params` are
     // NUL-terminated UTF-16 strings that outlive the call; no handle is asked for
     // (no SEE_MASK_NOCLOSEPROCESS), so nothing has to be closed afterwards.
     let ok = unsafe { ShellExecuteExW(&mut info) };
-    if ok == 0 {
-        let e = io::Error::last_os_error();
+    // Read the error before anything else can change it.
+    let err = (ok == 0).then(io::Error::last_os_error);
+    if com >= 0 {
+        // SAFETY: balances the successful CoInitializeEx above (S_OK or S_FALSE) on this thread.
+        unsafe { CoUninitialize() };
+    }
+    if let Some(e) = err {
         const ERROR_CANCELLED: i32 = 1223;
         if e.raw_os_error() == Some(ERROR_CANCELLED) {
             return Err(io::Error::new(

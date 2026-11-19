@@ -104,6 +104,37 @@ pub struct BuildOptions {
     pub read_usage: bool,
 }
 
+/// One app as Windows' Installed apps list shows it: name, publisher and the uninstall command it
+/// records. Read from the uninstall entries only (no shortcuts, no file reads), so it is cheap
+/// enough to read again every few seconds while an uninstaller runs (D133).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListedApp {
+    /// Display name (the same text as [`InstalledApp::name`]).
+    pub name: String,
+    /// Publisher.
+    pub publisher: Option<String>,
+    /// The recorded uninstall command.
+    pub uninstall_command: Option<String>,
+}
+
+/// The apps Windows lists as installed right now: entries with a name that are not Windows
+/// components or updates (the same filter as the scan's app list).
+pub fn listed_apps(source: &dyn SystemInfoSource) -> Vec<ListedApp> {
+    source
+        .uninstall_entries()
+        .items
+        .iter()
+        .filter(|e| !e.system_component && !is_update(e))
+        .filter_map(|e| {
+            Some(ListedApp {
+                name: non_empty(&e.display_name)?,
+                publisher: non_empty(&e.publisher),
+                uninstall_command: non_empty(&e.uninstall_string),
+            })
+        })
+        .collect()
+}
+
 /// Like [`build_snapshot`], with options.
 pub fn build_snapshot_with(source: &dyn SystemInfoSource, options: &BuildOptions) -> AppSnapshot {
     let known_folders = source.known_folders();
@@ -484,5 +515,39 @@ mod tests {
         }];
         let snap = build_snapshot(&fake);
         assert!(app(&snap, "A").flags.no_install_folder);
+    }
+
+    #[test]
+    fn the_light_list_matches_what_the_snapshot_lists() {
+        let src = source();
+        let light = listed_apps(&src);
+        let snap = build_snapshot_with(&src, &BuildOptions::default());
+        let mut full: Vec<_> = snap
+            .apps
+            .iter()
+            .filter(|a| {
+                !a.flags.hidden_entry && !a.flags.update_or_patch && !a.flags.system_component
+            })
+            .map(|a| {
+                (
+                    a.name.clone(),
+                    a.publisher.clone(),
+                    a.uninstall_command.clone(),
+                )
+            })
+            .collect();
+        let mut got: Vec<_> = light
+            .into_iter()
+            .map(|a| (a.name, a.publisher, a.uninstall_command))
+            .collect();
+        full.sort();
+        got.sort();
+        assert_eq!(got, full);
+        assert!(got
+            .iter()
+            .any(|(n, _, c)| n == "Msi App" && c.as_deref() == Some("MsiExec.exe /X{GUID}")));
+        assert!(!got
+            .iter()
+            .any(|(n, _, _)| n == "Update for X" || n == "Security thing"));
     }
 }

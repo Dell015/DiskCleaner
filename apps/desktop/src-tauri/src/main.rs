@@ -531,22 +531,10 @@ mod cleaning {
         failed: Vec<(String, String)>,
     }
 
-    /// Installed apps as Windows lists them right now (the ones Settings shows).
+    /// Installed apps as Windows lists them right now (the ones Settings shows): a light read of
+    /// the uninstall entries, cheap enough to repeat while an uninstaller runs.
     fn listed_now() -> Vec<(String, Option<String>, Option<String>)> {
-        dc_api::system::installed_apps(false, false)
-            .map(|snap| {
-                snap.apps
-                    .into_iter()
-                    .filter(|a| {
-                        !a.flags.hidden_entry
-                            && !a.flags.update_or_patch
-                            && !a.flags.system_component
-                            && !a.name.trim().is_empty()
-                    })
-                    .map(|a| (a.name, a.publisher, a.uninstall_command))
-                    .collect()
-            })
-            .unwrap_or_default()
+        dc_api::system::listed_apps()
     }
 
     /// Is each of these apps (by name) still installed? Read-only; used to notice when an

@@ -108,6 +108,12 @@ pub fn parse(
     if !exists(&path) {
         return Err("the uninstaller program is not there any more".into());
     }
+    // A quoted "...\msiexec.exe" /I{...} also removes rather than opens the change screen.
+    let args = if name == "msiexec.exe" {
+        msiexec_args(&format!("msiexec.exe {args}")).unwrap_or(args)
+    } else {
+        args
+    };
     Ok(Command {
         program: path,
         args,
@@ -233,6 +239,13 @@ mod tests {
         assert_eq!(c.args, "/X{12345678-1234-1234-1234-123456789012}");
         let c = parse("MsiExec.exe /X{ABC}", &ex, Path::new(SYS)).unwrap();
         assert_eq!(c.args, "/X{ABC}");
+        let c = parse(
+            r#""C:\Windows\System32\msiexec.exe" /I{ABC} /qb"#,
+            &ex,
+            Path::new(SYS),
+        )
+        .unwrap();
+        assert_eq!(c.args, "/X{ABC} /qb");
     }
 
     #[test]

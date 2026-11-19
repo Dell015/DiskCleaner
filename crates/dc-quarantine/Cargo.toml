@@ -20,7 +20,7 @@ serde_json.workspace = true
 [target.'cfg(windows)'.dependencies]
 # Windows-only moving checks (src/win.rs, D119): rename by handle, hidden and owner-only folders;
 # starting an app's own uninstaller with its own window (D133).
-windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 tempfile.workspace = true

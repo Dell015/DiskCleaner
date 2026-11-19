@@ -60,11 +60,13 @@ apps/desktop/
   src/
     main.ts           wiring: loading, replay, selection, settings
     loader.worker.ts  reads and checks a view file off the main thread
-    core/             data only, no drawing: format check, tree, level of detail, search, demo disk
+    core/             data only, no drawing: format check, tree, level of detail, search, demo disk,
+                      apps (cards, places, roles), kinds (what kind each app is), yours (your files
+                      by type), uninstall (the order to uninstall in)
     graph/            drawing: sigma layers, layout, node design system (encode.ts), looks, graphics settings
-    panels/           side column, details drawer, key, small DOM helpers
+    panels/           side column, details drawer, key, Library (apps.ts, appnet.ts), small DOM helpers
     style.css
   tests/
-    unit/             vitest: format, tree, level of detail, search, demo
+    unit/             vitest: format, tree, level of detail, search, demo, apps, library, cleanup
     e2e/              browser checks and timing (Playwright)
 ```

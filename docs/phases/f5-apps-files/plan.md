@@ -60,3 +60,11 @@ chips to show one kind, launchers listing their games, an app's kind changeable 
 (remembered), and **Your files** grouped by type and kind with the folders holding the most and
 the biggest files. Next: removing the old Apps tab from the side panel; more launchers
 (Battle.net, EA app, Ubisoft, GOG, Xbox) so their games are found.
+
+Step 6 done (2026-11-16, D133): **Uninstall** on an app's Library page (only in builds with
+removing): the app's own uninstaller, a guided order for launchers, games a launcher manages
+removed from inside the launcher, and what was left behind listed right there. Fixed the same day:
+a home folder with a `package.json` or `.git` counted as one huge code project.
+
+Still open: removing the old Apps tab from the side panel; more launchers (Battle.net, EA app,
+Ubisoft, GOG, Xbox / Microsoft Store) so their games are found and grouped.

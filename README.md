@@ -11,8 +11,8 @@ pick and confirm yourself.
 > the `dc` command, the data folder) still use the old name.
 
 > **Status: early development.** Scanning, the desktop app and the AI connection work.
-> Removing files is built but **switched off in normal builds** while it is being reviewed and
-> tested. Until then Rhizome is **read-only**: it never deletes, moves or changes anything. See
+> Removing files and uninstalling apps are built but **switched off in normal builds** while they
+> are being reviewed and tested. Until then Rhizome is **read-only**: it never deletes, moves or changes anything. See
 > [SAFETY.md](SAFETY.md).
 
 ## What it does
@@ -21,6 +21,11 @@ pick and confirm yourself.
   app with its size, places, install date and when you last used it; programs nobody installed;
   your Downloads sorted by type with hints (installers of apps you already have, archives you
   already unpacked, files untouched for a year); the biggest and oldest files.
+- **Library:** every app grouped by kind (games, launchers, developer tools, creative, browsers,
+  chat, office, AI, players, hardware, security, utilities, system parts). A launcher lists the
+  games it installed, and each game says where it came from; you can move an app to another kind.
+  **Your files** are grouped by what they are (videos, pictures, music, documents, code projects,
+  downloads, archives), then by kind (screenshots, camera photos, recordings, PDFs, ...).
 - **Files:** a sortable folder list with size bars, owners and verdicts. "Sort this folder" tidies
   the view of any messy folder or drive.
 - **Map:** the whole disk as a graph of nodes you can drag and zoom, coloured by risk, app or type.
@@ -32,6 +37,10 @@ pick and confirm yourself.
   my projects?" from your latest scan. Off until you switch it on; every question is logged.
 - **Removing safely (in testing):** picked items are moved to a holding folder on the same drive,
   can be restored for 30 days, and are only then deleted for good.
+- **Uninstalling (in testing):** from an app's Library page, Rhizome starts the app's own
+  uninstaller (never silently, never through a command prompt). A launcher is guided in order: its
+  games and anti-cheat first, the launcher last. Afterwards Rhizome checks just that app's folders
+  and lists what it left behind, to remove in the same place.
 
 ## Safety first
 
