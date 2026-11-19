@@ -23,6 +23,24 @@ describe("what is this?", () => {
       ["C:\\Program Files (x86)", /install their programs/],
     ];
     for (const [p, re] of cases) expect(known(p)?.what, p).toMatch(re);
+    // Researched additions (Microsoft, Epic, pip and Adobe's own pages).
+    const more: [string, RegExp][] = [
+      ["C:\\Windows\\ServiceProfiles\\NetworkService\\AppData\\Local\\Microsoft\\Windows\\DeliveryOptimization\\Cache", /Delivery Optimization/],
+      ["C:\\Users\\R\\AppData\\Local\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams", /new Teams/],
+      ["C:\\Users\\R\\AppData\\Local\\EpicGamesLauncher\\Saved\\webcache_4430", /Epic Games Launcher/],
+      ["C:\\Users\\R\\AppData\\Local\\pip\\Cache", /pip/],
+      ["C:\\Users\\R\\AppData\\Roaming\\Adobe\\Common\\Media Cache Files", /media cache/],
+      ["C:\\Users\\R\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache", /browser's cache/],
+      ["C:\\Users\\R\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data", /profiles: your logins/],
+      ["C:\\Users\\R\\AppData\\Roaming\\.minecraft\\saves", /Minecraft worlds/],
+      ["D:\\mail\\old.pst", /only on this PC/],
+      ["C:\\AMD", /AMD driver installer/],
+    ];
+    for (const [p, re] of more) expect(known(p)?.what, p).toMatch(re);
+    // Anything that can hold logins, saves or projects never says it is rebuilt.
+    for (const p of ["C:\\Users\\R\\AppData\\Local\\Microsoft\\Edge\\User Data", "C:\\Users\\R\\AppData\\Roaming\\.minecraft\\saves", "C:\\Users\\R\\AppData\\Local\\CapCut\\User Data\\Projects", "D:\\x.pst", "D:\\code\\.git"]) {
+      expect(known(p)?.ifDeleted, p).toMatch(/lost|gone|logged out/);
+    }
     // The most specific entry wins.
     expect(known("C:\\Windows\\SoftwareDistribution\\Download")?.ifDeleted).toMatch(/downloads what it still needs/);
     expect(known("C:\\Windows")?.what).toBe("Windows itself.");
