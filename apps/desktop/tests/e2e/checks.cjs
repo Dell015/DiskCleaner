@@ -506,7 +506,7 @@ const check = (ok, what) => {
     check(undone === dlBefore && (await page.locator("#explorer .x-row:has(.nm:text-is('game-mods.zip'))").count()) === 1, "Undo puts them back");
     await page.click("#removedTab");
     await page.waitForTimeout(300);
-    check((await page.textContent("#tab-removed")).includes("all restored"), "the Removed tab lists the cleanup");
+    check((await page.textContent("#tab-removed")).includes("put back") && (await page.locator("#tab-removed .rm-history").count()) === 1, "the Removed tab lists the cleanup (in the history, once put back)");
     // A Safe-only cleanup needs one click; Empty now needs two.
     const temp = await find("C:\\Users\\demo\\AppData\\Local\\Temp");
     await page.evaluate((i) => window.__dc.state.tree && window.__dc.goFolder(window.__dc.state.tree.parent[i]), temp);
@@ -518,13 +518,14 @@ const check = (ok, what) => {
     await page.click("#reviewCancel");
     await page.click("#removedTab");
     await page.waitForTimeout(300);
-    await page.click("#tab-removed button:has-text('Empty now')");
+    check((await page.locator("#tab-removed .rm-summary").innerText()).includes("can still be put back"), "the Removed tab says first what can still be put back");
+    await page.click("#tab-removed .rm-cleanup button:has-text('Delete for good')");
     await page.waitForTimeout(200);
     await page.click(".tabs button[data-tab=findings]");
     await page.click("#removedTab");
     await page.waitForTimeout(300);
     check((await page.locator("#tab-removed button:has-text('Click again')").count()) === 0, "a half-confirmed Empty now is forgotten when you leave the tab");
-    await page.click("#tab-removed button:has-text('Empty now')");
+    await page.click("#tab-removed .rm-cleanup button:has-text('Delete for good')");
     await page.waitForTimeout(200);
     await page.click("#tab-removed button:has-text('Click again')");
     await page.waitForTimeout(300);

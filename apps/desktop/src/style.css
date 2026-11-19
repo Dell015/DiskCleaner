@@ -565,3 +565,26 @@ span.appicon.none { display: inline-block; width: 16px; height: 16px; border-rad
 .ap-left .ap-row.static:hover { background: transparent; }
 .ap-left .ap-err { grid-column: 1 / -1; font-size: var(--t1); }
 .ap-looked { display: flex; gap: 8px; align-items: center; }
+
+/* ---------- Removed tab: summary first, what can be put back, then a quiet history ---------- */
+.rm-summary { display: grid; gap: 6px; padding: 12px 14px; border-radius: 10px; background: var(--panel-2); margin-bottom: 4px; }
+.rm-summary p { margin: 0; }
+.rm-big b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.rm-big span { color: var(--text-2); }
+.rm-actions { flex-wrap: wrap; }
+.rm-h { margin: 14px 0 0; font-size: var(--t2); color: var(--text-2); font-weight: 600; text-transform: none; }
+.rm-cleanup header { display: grid; gap: 2px; }
+.rm-cleanup header .quiet { font-size: var(--t1); }
+.rm-items .rm-size { color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: var(--t1); }
+.rm-items .rm-state { font-size: var(--t1); white-space: nowrap; }
+.rm-items b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-history { margin-top: 14px; }
+.rm-history summary { cursor: pointer; color: var(--text-2); font-weight: 600; }
+.rm-history ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.rm-history li { display: grid; gap: 1px; font-size: var(--t2); }
+.rm-history .rm-when { color: var(--text-2); font-size: var(--t1); }
+.rm-history .rm-names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-foot { margin-top: 14px; font-size: var(--t1); }
+.rm-busy { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; font-weight: 600; color: var(--text); }
+.rm-busy .quiet { font-weight: 400; font-size: var(--t1); }
+.rm-cleanup.busy { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }

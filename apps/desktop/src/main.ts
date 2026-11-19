@@ -1541,6 +1541,69 @@ function endingSoon(list: CleanupInfo[], days: number): CleanupInfo[] {
   return list.filter((c) => c.created > 0 && heldBytes(c) > 0 && daysLeft(c.created, settings.retention) <= days);
 }
 
+/** "Today, 5:11 AM", "Yesterday, 8:38 PM", "Mon, 5:11 AM" (this week) or "16 Nov 2026". */
+function friendlyWhen(secs: number): string {
+  if (secs <= 0) return "Date unknown";
+  const d = new Date(secs * 1000);
+  const now = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const day = (x: Date): number => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const ago = Math.round((day(now) - day(d)) / 86_400_000);
+  if (ago === 0) return `Today, ${time}`;
+  if (ago === 1) return `Yesterday, ${time}`;
+  if (ago > 1 && ago < 7) return `${d.toLocaleDateString(undefined, { weekday: "long" })}, ${time}`;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** The day a cleanup is deleted for good, as "16 Dec". */
+function deleteDay(c: CleanupInfo): string {
+  return new Date((c.created + settings.retention * 86_400) * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/** "packages, caches and webCaches" (at most three names). */
+function itemNames(c: CleanupInfo): string {
+  const names = c.items.map((i) => i.original.split(/[\\/]/).pop() ?? i.original);
+  if (names.length === 1) return names[0];
+  if (names.length <= 3) return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${names.slice(0, 2).join(", ")} and ${count(names.length - 2)} more`;
+}
+
+/** Cleanups being deleted for good or put back right now ("__all": everything), with what is happening. */
+const removedBusy = new Map<string, string>();
+
+/** Run a slow Removed-tab action: the card shows it is working, and its buttons wait until it is done. */
+function busyWhile(id: string, doing: string, run: () => Promise<void>): void {
+  if (removedBusy.size) return;
+  removedBusy.set(id, doing);
+  void renderRemoved();
+  void run().finally(() => {
+    removedBusy.delete(id);
+    void renderRemoved();
+  });
+}
+
+/** A two-click "delete for good" button (the second click within 5 seconds). */
+function emptyButton(id: string, label: string, run: () => Promise<void>): HTMLElement {
+  const armed = removedArmed === id;
+  const b = h("button", { class: armed ? "danger" : "", onclick: () => {
+    if (removedBusy.size) return;
+    if (!armed) {
+      armEmpty(id);
+      void renderRemoved();
+      return;
+    }
+    disarmEmpty();
+    busyWhile(id, "Deleting for good…", run);
+  } }, armed ? "Click again: this cannot be undone" : label);
+  if (removedBusy.size) b.setAttribute("disabled", "");
+  return b;
+}
+
+/** "Deleting for good… / Putting back…" with a spinner. */
+function busyLine(doing: string): HTMLElement {
+  return h("p", { class: "rm-busy", attrs: { role: "status" } }, h("span", { class: "spinner small" }), doing, h("span", { class: "quiet" }, " Big folders can take a minute; you can keep using Rhizome."));
+}
+
 async function renderRemoved(): Promise<void> {
   const el = byId("tab-removed");
   let list: CleanupInfo[] = [];
@@ -1552,52 +1615,105 @@ async function renderRemoved(): Promise<void> {
     return;
   }
   clear(el);
-  el.append(h("p", { class: "quiet" }, `Removed items wait here for ${settings.retention} days (change it in Settings), then they are deleted for good.`));
   // Removed items on a drive that is not connected are not listed until it is back.
   const missing = await missingHolding().catch(() => [] as string[]);
   if (missing.length) {
     const drives = missing.map((m) => m.slice(0, 2)).join(", ");
     el.append(h("p", { class: "warn" }, `Removed items kept on ${drives} are not shown: is that drive connected? They come back here when it is.`));
   }
-  if (list.length === 0) {
-    el.append(h("p", { class: "lead" }, "Nothing removed yet."));
+  const waiting = list.filter((c) => heldBytes(c) > 0 || c.items.some((i) => i.state === "held"));
+  const done = list.filter((c) => !waiting.includes(c));
+  const total = waiting.reduce((a, c) => a + heldBytes(c), 0);
+
+  // The summary: what can still be restored, and when it goes.
+  const head = h("div", { class: "rm-summary" });
+  if (!list.length) {
+    head.append(h("p", { class: "lead" }, "Nothing removed yet."),
+      h("p", { class: "quiet" }, `When you remove something, it waits here for ${settings.retention} days so you can put it back. Then it is deleted for good and the space is freed.`));
+    el.append(head);
     return;
   }
+  if (waiting.length) {
+    const first = waiting.filter((c) => c.created > 0).sort((a, b) => a.created - b.created)[0];
+    head.append(h("div", { class: "rm-big" }, h("b", {}, human(total)), h("span", {}, " can still be put back")),
+      h("p", { class: "quiet" }, first
+        ? `It still takes space on your drive until it is deleted for good: the first on ${deleteDay(first)} (in ${count(daysLeft(first.created, settings.retention))} days). Delete it now to free the space today.`
+        : "It still takes space on your drive until you delete it for good."),
+      waiting.length < 2 ? "" : h("div", { class: "rm-actions" },
+        emptyButton("__all", `Delete all for good (${human(total)})`, async () => {
+          let freed = 0;
+          for (const c of waiting) {
+            try {
+              freed += await emptyCleanup(c.id);
+              removedNodes.delete(c.id);
+            } catch (err) {
+              showError(String(err));
+            }
+          }
+          toast(`Deleted for good: ${human(freed)} freed.`);
+        })));
+    const all = removedBusy.get("__all");
+    if (all) head.append(busyLine(all));
+  } else {
+    head.append(h("p", { class: "lead" }, "Nothing waiting."),
+      h("p", { class: "quiet" }, "Everything you removed has been put back or deleted for good. The history is below."));
+  }
+  el.append(head);
   const soon = endingSoon(list, 3);
-  if (soon.length) el.append(h("p", { class: "warn" }, `${human(soon.reduce((a, c) => a + heldBytes(c), 0))} will be deleted for good within 3 days. Restore anything you still need.`));
-  for (const c of list) {
+  if (soon.length) el.append(h("p", { class: "warn" }, `${human(soon.reduce((a, c) => a + heldBytes(c), 0))} will be deleted for good within 3 days. Put back anything you still need.`));
+
+  // What can still be put back, newest first.
+  if (waiting.length) el.append(h("h3", { class: "rm-h" }, "Can still be put back"));
+  for (const c of waiting) {
     const held = c.items.filter((i) => i.state === "held");
-    const bytes = held.reduce((a, i) => a + i.bytes, 0);
-    // A cleanup whose date was lost is never deleted automatically.
-    const when = c.created > 0 ? new Date(c.created * 1000).toLocaleString() : "Date unknown";
-    const left = c.created > 0 ? `deleted for good in ${daysLeft(c.created, settings.retention)} days` : "kept until you empty it";
-    const status = held.length ? `${human(bytes)} held · ${left}` : c.items.some((i) => i.state === "emptied") ? "deleted for good" : "all restored";
-    const sec = h("section", { class: "rm-cleanup" }, h("header", {}, h("b", {}, when), h("span", { class: "quiet" }, ` ${count(c.items.length)} item${c.items.length === 1 ? "" : "s"} · ${status}`)));
-    if (held.length) {
-      const empty = h("button", { class: removedArmed === c.id ? "danger" : "", onclick: () => {
-        if (removedArmed !== c.id) {
-          armEmpty(c.id);
-          void renderRemoved();
-          return;
-        }
-        disarmEmpty();
-        emptyCleanup(c.id).then((b) => { toast(`Deleted for good: ${human(b)} freed.`); removedNodes.delete(c.id); void renderRemoved(); }).catch((err) => showError(String(err)));
-      } }, removedArmed === c.id ? "Click again to delete for good" : "Empty now");
-      sec.append(h("div", { class: "rm-actions" }, h("button", { onclick: () => void undoCleanup(c.id).then(() => renderRemoved()) }, "Restore all"), empty));
-    }
+    const sec = h("section", { class: "rm-cleanup" },
+      h("header", {}, h("b", {}, `Removed ${friendlyWhen(c.created).replace(/^(Today|Yesterday)/, (m) => m.toLowerCase())}`),
+        h("span", { class: "quiet" }, c.created > 0 ? `Deleted for good on ${deleteDay(c)} · in ${count(daysLeft(c.created, settings.retention))} days` : "Kept until you delete it (its date was lost)")));
     const ul = h("ul", { class: "rm-items" });
     const SHOWN = 200;
     for (const it of c.items.slice(0, SHOWN)) {
       const name = it.original.split(/[\\/]/).pop() ?? it.original;
+      const state = it.state === "held" ? "" : it.state === "restored" ? `Put back${it.to && it.to !== it.original ? ` as ${it.to}` : ""}` : "Deleted for good";
       ul.append(h("li", { class: `rm-${it.state}` },
-        h("div", {}, h("b", {}, name), h("span", { class: "path" }, it.original),
-          h("span", { class: "quiet" }, `${human(it.bytes)} · ${it.state === "held" ? "held" : it.state === "restored" ? `restored${it.to && it.to !== it.original ? ` as ${it.to}` : ""}` : "deleted for good"}`)),
-        it.state === "held" ? h("button", { onclick: () => void undoCleanup(c.id, [[it.root, it.n]]).then(() => renderRemoved()) }, "Restore") : null));
+        h("div", { class: "rm-what" }, h("b", { title: it.original }, name), h("span", { class: "path", title: it.original }, it.original)),
+        h("span", { class: "rm-size" }, human(it.bytes)),
+        it.state === "held" ? h("button", { title: `Move it back to ${it.original}`, attrs: removedBusy.size ? { disabled: "" } : {}, onclick: () => busyWhile(c.id, `Putting back ${name}…`, () => undoCleanup(c.id, [[it.root, it.n]])) }, "Put back") : h("span", { class: "quiet rm-state" }, state)));
     }
     sec.append(ul);
-    if (c.items.length > SHOWN) sec.append(h("p", { class: "quiet" }, `…and ${count(c.items.length - SHOWN)} more (${count(c.items.filter((i) => i.state === "held").length)} held in all). "Restore all" includes them.`));
+    if (c.items.length > SHOWN) sec.append(h("p", { class: "quiet" }, `…and ${count(c.items.length - SHOWN)} more. "Put all back" includes them.`));
+    const bytes = held.reduce((a, i) => a + i.bytes, 0);
+    const doing = removedBusy.get(c.id);
+    if (doing) sec.append(busyLine(doing));
+    sec.append(h("div", { class: "rm-actions" },
+      held.length > 1 ? h("button", { attrs: removedBusy.size ? { disabled: "" } : {}, onclick: () => busyWhile(c.id, `Putting back ${count(held.length)} items…`, () => undoCleanup(c.id)) }, `Put all ${count(held.length)} back`) : null,
+      emptyButton(c.id, `Delete for good (${human(bytes)})`, async () => {
+        try {
+          const b = await emptyCleanup(c.id);
+          removedNodes.delete(c.id);
+          toast(`Deleted for good: ${human(b)} freed.`);
+        } catch (err) {
+          showError(String(err));
+        }
+      })));
+    if (doing) sec.classList.add("busy");
     el.append(sec);
   }
+
+  // History: finished cleanups, one line each, closed by default.
+  if (done.length) {
+    const hist = h("details", { class: "rm-history" }, h("summary", {}, `History (${count(done.length)})`));
+    const ul = h("ul", {});
+    for (const c of done) {
+      const restored = c.items.every((i) => i.state === "restored");
+      const bytes = c.items.reduce((a, i) => a + i.bytes, 0);
+      ul.append(h("li", {}, h("span", { class: "rm-when" }, friendlyWhen(c.created)),
+        h("span", { class: "rm-names", title: c.items.map((i) => i.original).join("\n") }, itemNames(c)),
+        h("span", { class: "quiet" }, `${human(bytes)} · ${restored ? "put back" : "deleted for good"}`)));
+    }
+    hist.append(ul);
+    el.append(hist);
+  }
+  el.append(h("p", { class: "quiet rm-foot" }, `Removed things wait ${settings.retention} days before they are deleted for good (change it in Settings).`));
 }
 
 function bindRemoving(): void {
