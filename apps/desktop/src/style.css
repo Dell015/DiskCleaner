@@ -588,3 +588,12 @@ span.appicon.none { display: inline-block; width: 16px; height: 16px; border-rad
 .rm-busy { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; font-weight: 600; color: var(--text); }
 .rm-busy .quiet { font-weight: 400; font-size: var(--t1); }
 .rm-cleanup.busy { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+
+/* ---------- "What is this?" in the details panel ---------- */
+.whatis { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin: 12px 0; display: grid; gap: 4px; background: var(--panel); }
+#drawer .whatis h3 { margin: 0 0 2px; font-size: var(--t3); color: var(--text); font-weight: 700; }
+.whatis h4 { margin: 6px 0 0; font-size: var(--t1); color: var(--text-2); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.whatis p { margin: 0; }
+.whatis ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.whatis.from-clues { border-style: dashed; }
+.whatis .actions { margin-top: 6px; }

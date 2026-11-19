@@ -10,9 +10,10 @@ pick and confirm yourself.
 > Rhizome was called **DiskCleaner** until November 2026. Some internal names (the `dc-…` crates,
 > the `dc` command, the data folder) still use the old name.
 
-> **Status: early development.** Scanning, the desktop app and the AI connection work.
-> Removing files and uninstalling apps are built but **switched off in normal builds** while they
-> are being reviewed and tested. Until then Rhizome is **read-only**: it never deletes, moves or changes anything. See
+> **Status: early development.** Scanning, the desktop app and the AI connection work. Removing
+> files and uninstalling apps are on in the desktop app since November 2026, after testing on a
+> real PC. Nothing changes unless you pick it and confirm it, and removed things can be put back
+> for 30 days. The command line and the AI connection stay **read-only**. See
 > [SAFETY.md](SAFETY.md).
 
 ## What it does
@@ -26,7 +27,8 @@ pick and confirm yourself.
   games it installed, and each game says where it came from; you can move an app to another kind.
   **Your files** are grouped by what they are (videos, pictures, music, documents, code projects,
   downloads, archives), then by kind (screenshots, camera photos, recordings, PDFs, ...).
-- **Files:** a sortable folder list with size bars, owners and verdicts. "Sort this folder" tidies
+- **Files:** a sortable folder list with size bars, owners and verdicts. Click anything to see
+  **what it is for, what happens if you delete it, and the right way to free its space**. "Sort this folder" tidies
   the view of any messy folder or drive.
 - **Map:** the whole disk as a graph of nodes you can drag and zoom, coloured by risk, app or type.
 - **Leftovers:** folders that uninstalled apps left behind, with the evidence and how sure it is.
@@ -35,9 +37,9 @@ pick and confirm yourself.
 - **Your own AI as advisor:** a read-only [MCP](https://modelcontextprotocol.io) server lets
   Claude or any MCP app answer "is this safe to delete?", "which apps don't I use?" or "where are
   my projects?" from your latest scan. Off until you switch it on; every question is logged.
-- **Removing safely (in testing):** picked items are moved to a holding folder on the same drive,
+- **Removing safely:** picked items are moved to a holding folder on the same drive,
   can be restored for 30 days, and are only then deleted for good.
-- **Uninstalling (in testing):** from an app's Library page, Rhizome starts the app's own
+- **Uninstalling:** from an app's Library page, Rhizome starts the app's own
   uninstaller (never silently, never through a command prompt). A launcher is guided in order: its
   games and anti-cheat first, the launcher last. Afterwards Rhizome checks just that app's folders
   and lists what it left behind, to remove in the same place.

@@ -365,6 +365,16 @@ const check = (ok, what) => {
     await page.waitForTimeout(600);
     check((await page.locator("#overview .ov-group").count()) >= 3, "the Overview fills in from a live scan");
 
+    // ---------- "What is this?" in the details panel ----------
+    await page.goto(base + "?demo=40000&view=files");
+    await page.waitForFunction(() => window.__dc && window.__dc.state.tree, null, { timeout: 60000 });
+    await page.waitForTimeout(800);
+    const whatTemp = await page.evaluate(() => { const t = window.__dc.state.tree; for (let i = 1; i < t.n; i++) if (/\\AppData\\Local\\Temp$/i.test(t.path(i))) return i; return -1; });
+    await page.evaluate((i) => window.__dc.reveal(i), whatTemp);
+    await page.waitForTimeout(400);
+    const whatText = await page.locator("#drawer .whatis").innerText();
+    check(whatText.includes("Temporary files apps make") && whatText.includes("If you delete it") && whatText.includes("To free the space"), "the details say what a folder is for, what deleting does, and how to free it");
+
     // ---------- Library (apps by kind, your files) ----------
     await page.goto(base + "?demo=40000&view=apps");
     await page.waitForFunction(() => document.querySelectorAll("#appsView .ap-card").length > 3, null, { timeout: 60000 });

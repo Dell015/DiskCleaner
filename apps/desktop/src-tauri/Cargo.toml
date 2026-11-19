@@ -1,6 +1,6 @@
 [package]
 name = "dc-desktop"
-description = "Desktop window for DiskCleaner: pick a folder, watch the graph grow from a live scan. Read-only."
+description = "Desktop window for DiskCleaner: pick a folder, watch the graph grow from a live scan, remove and uninstall what you pick."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -23,8 +23,10 @@ tauri = { version = "=2.12.5", features = [] }
 tauri-plugin-dialog = "=2.8.3"
 
 [features]
-# Removing (moving into holding, restore, empty). Off by default until the owner's test on a
-# throwaway folder: `npm run tauri dev -- --features cleaning`.
+# Removing (moving into holding, restore, empty) and uninstalling apps. On in normal builds since
+# the owner's tests passed (D135). The `dc-quarantine` crate itself stays off by default; a
+# read-only desktop build is `npm run tauri dev -- -- --no-default-features`.
+default = ["cleaning"]
 cleaning = ["dc-quarantine/destructive-actions"]
 
 [build-dependencies]

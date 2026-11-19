@@ -6,8 +6,8 @@ DiskCleaner inspects entire disks and advises on deletion, so safety rules come 
    to scanned paths. The quarantine crate is behind the `destructive-actions` feature, off by default.
    Since B9 the removal engine exists there: it only *moves* items into a holding folder on the
    same drive, re-checks each one first, keeps an append-only journal, and deletes only when a
-   cleanup is emptied, only inside a holding folder. No normal build includes it until the
-   owner's test on a throwaway folder (see `docs/phases/b9-cleaning/design.md`). On Windows a
+   cleanup is emptied, only inside a holding folder. The desktop app includes it since the
+   owner's tests on a real PC (D135); the `dc` command line and the AI connection never do. On Windows a
    move opens the item first and checks its real location, never replaces anything and never
    copies between drives (`dc-quarantine/src/win.rs`, the crate's only `unsafe`, D119).
 2. **No destructive APIs outside `dc-quarantine`.** A Clippy `disallowed-methods` rule fails the
@@ -25,7 +25,7 @@ DiskCleaner inspects entire disks and advises on deletion, so safety rules come 
     uninstaller Windows records for that app (the one Settings → Apps runs), with its own window,
     never silently and never through a shell (`cmd.exe`, PowerShell and script hosts are refused).
     When the recorded command is doubtful it opens Windows' Installed apps page instead. Windows
-    parts and runtimes other apps need are never offered. Only in builds with removing.
+    parts and runtimes other apps need are never offered. Only in the desktop app.
 
 ## Reporting a problem
 Please open a private security advisory on the repository rather than a public issue for anything

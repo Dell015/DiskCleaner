@@ -1,6 +1,7 @@
 // Side column (findings, apps), the details drawer, and the key. Text-only DOM, no HTML strings.
 
 import { biggestPlace, gamesOf, launcherOf } from "../core/apps";
+import { askText, explain } from "../core/explain";
 import { FLAG, KIND, type Mark, type RiskId } from "../core/format";
 import type { Tree } from "../core/tree";
 import { count, date, human } from "../core/util";
@@ -159,6 +160,26 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
     notes.length ? h("dt", {}, "Notes") : null, notes.length ? h("dd", {}, notes.join("; ")) : null,
   );
   el.append(facts);
+
+  // What is this? What it is for, what deleting it does, and the right way to free the space.
+  if (i !== 0 && i !== rootNode) {
+    const x = explain(tree, i);
+    const box = h("section", { class: `whatis from-${x.from}`, attrs: { "aria-label": "What is this?" } },
+      h("h3", {}, "What is this?"),
+      h("p", {}, x.what),
+      h("h4", {}, "If you delete it"),
+      h("p", {}, x.ifDeleted));
+    if (x.how) box.append(h("h4", {}, "To free the space"), h("p", {}, x.how));
+    if (x.clues?.length) {
+      box.append(h("h4", {}, "Clues"), h("ul", {}, ...x.clues.map((c) => h("li", {}, c))));
+      const ask = h("button", { title: "Copies a question with these clues (your user name hidden) to paste into your AI" }, "Copy a question for my AI");
+      ask.addEventListener("click", () => {
+        void navigator.clipboard?.writeText(askText(tree, i)).then(() => (ask.textContent = "Copied: paste it into your AI"), () => (ask.textContent = "Could not copy"));
+      });
+      box.append(h("div", { class: "actions" }, ask));
+    }
+    el.append(box);
+  }
 
   // Launchers and the games they installed: the link both ways, each a button to its folder.
   if (owner >= 0) {

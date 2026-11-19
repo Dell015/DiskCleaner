@@ -73,7 +73,8 @@ DiskCleaner/
     dc-leftovers/   uninstalled-app leftover detection
     dc-store/       SQLite persistence, snapshots, diffs
     dc-advisor/     metadata-only AI layer                [SAFETY-CRITICAL]
-    dc-quarantine/  quarantine/restore (feature `destructive-actions`, off by default) [SAFETY-CRITICAL]
+    dc-quarantine/  quarantine/restore (feature `destructive-actions`, off by default in the crate;
+                    the desktop app turns it on, D135) [SAFETY-CRITICAL]
     dc-api/         facade for the future frontend: typed requests, events, JSON-RPC stdio
     dc-cli/         binary `dc`
 ```

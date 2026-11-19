@@ -113,7 +113,7 @@ Each check repeats on the disk as it is now; any doubt skips the item (fail clos
 2. Screens in the app, still off in normal builds: they only exist in a build made with the
    feature (`npm run tauri dev -- --features cleaning`).
 3. Your test on a throwaway folder (a copy of something you do not need), with that build.
-4. Only after your okay: on in normal builds.
+4. Done (2026-11-20, D135): on in normal builds, after the owner's tests passed.
 5. Done (D133): installed apps through their own uninstaller (from the Library), then a check
    of just that app's folders (no full scan) and a list of what it left, removed in the same place.
 
@@ -161,7 +161,8 @@ Each check repeats on the disk as it is now; any doubt skips the item (fail clos
   Restore all, Restore per item, and Empty now (asks twice).
 - Settings, Removing: keep removed items 7, 14, 30 or 60 days. Old cleanups are emptied when the
   app opens.
-- Only in a build made with `npm run tauri dev -- --features cleaning`.
+- Only in a build made with `npm run tauri dev -- --features cleaning` (since D135, every desktop
+  build; `-- -- --no-default-features` makes a read-only one).
 
 ## 14. Safety review and fixes (2026-11-14)
 
