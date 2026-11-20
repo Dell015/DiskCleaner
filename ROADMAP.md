@@ -261,6 +261,24 @@ Each phase has its own requirements and design in `docs/phases/`.
 - Threat model doc (`docs/threat-model.md`): helper IPC, prompt injection, malicious rule packs, path tricks, supply chain
 - Performance pass: profile scan/classify/store on a 5M-node synthetic tree and write results to `docs/perf.md`
 
+### Phase R1: Releases people can trust (signing, release builds, store listing)
+Why: a new, unsigned Windows program gets antivirus false alarms (it happened to the owner's own
+build: N90) and SmartScreen's "Windows protected your PC" warning, and most people stop there (D137).
+**Tasks**
+- Release build on GitHub Actions from the public code (`.github/workflows/release.yml`): release
+  mode, version and publisher filled in, SHA-256 checksums, and a GitHub build attestation so anyone
+  can check a download against the code. A draft release; publishing stays a person's step.
+- Code signing: apply to SignPath Foundation (free for open source) once a first release exists;
+  `docs/code-signing-policy.md` is the policy page they require (team roles, manual approval of
+  every signing, privacy). Alternative: Microsoft Artifact Signing (paid; check it is open to
+  individuals in the Philippines).
+- Before each release: submit the signed files to Microsoft as the developer, and put a VirusTotal
+  link in the release notes.
+- README: "If Windows warns you", how to check a download.
+- Later: a winget manifest so people can install with one command.
+**Acceptance (you):** a draft release built on GitHub, its checksum matching the download, and no
+antivirus alarm on the signed installer.
+
 ---
 
 ## 7. Data model sketch (for the design docs)
@@ -289,6 +307,6 @@ Risk   Safe < ProbablySafe < DontTouch      (Unknown => DontTouch)
 ## 9. Out of scope for now (future)
 
 - Tauri shell, React UI, 2D treemap, R3F 3D graph, node visuals, onboarding, settings screens
-- Installer/signing, winget manifest
+- (Installer, signing and winget moved to Phase R1.)
 - README screenshots/demo GIF
 - Marketing/portfolio write-up

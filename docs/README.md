@@ -7,6 +7,7 @@
 | [NOTES.md](NOTES.md) | Things noticed for later (N1, N2, ...) |
 | [phases/](phases/) | Requirements and design per phase: `b*` backend, `f*` frontend |
 | [qa/](qa/) | Review reports (QA passes) and what came of them |
+| [code-signing-policy.md](code-signing-policy.md) | How releases are built, signed and checked (Phase R1) |
 
 The project rules are in [../CLAUDE.md](../CLAUDE.md), the plan in [../ROADMAP.md](../ROADMAP.md) and the
 safety rules in [../SAFETY.md](../SAFETY.md).

@@ -27,9 +27,22 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.png"],
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
     "shortDescription": "See what fills your disk, and what could go",
-    "license": "MIT"
+    "license": "MIT",
+    "publisher": "Randel Jhon L Serafica",
+    "copyright": "Copyright (c) 2026 Randel Jhon L Serafica. MIT License.",
+    "homepage": "https://github.com/Dell015/DiskCleaner",
+    "category": "Utility",
+    "longDescription": "Rhizome shows what fills your disk and why: every app and its folders, your own files by kind, and what can go safely. Removing moves things to a holding folder you can restore from for 30 days."
   }
 }

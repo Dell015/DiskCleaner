@@ -117,3 +117,21 @@ See [docs/architecture.md](docs/architecture.md), [ROADMAP.md](ROADMAP.md) and
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## If Windows warns you
+
+Rhizome is new, and its downloads are not signed yet (that is being set up: see the
+[code signing policy](docs/code-signing-policy.md)). So Windows may show "Windows protected your PC",
+or an antivirus may flag the program. That is common for new, unsigned programs, especially ones
+that can move and delete files, as Rhizome can when you ask it to.
+
+Before running a download, you can check it is the real thing:
+
+1. Download only from this repository's [Releases](https://github.com/Dell015/DiskCleaner/releases) page.
+2. Compare its checksum with `SHA256SUMS.txt` from the same release:
+   `Get-FileHash <file> -Algorithm SHA256` in PowerShell.
+3. Check it was built by GitHub from this code: `gh attestation verify <file> --repo Dell015/DiskCleaner`.
+4. Each release links a VirusTotal report, where about 70 antivirus programs have checked it.
+
+If all of that matches, choose "More info" → "Run anyway" on the Windows warning. If anything does
+not match, do not run it, and please open an issue.
