@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<title>DiskCleaner</title>
+<title>Rhizome - Disk Space Manager</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -16 32 32'%3E%3Ccircle r='15' fill='%230b1322'/%3E%3Ccircle r='6' fill='none' stroke='%2362bdf0' stroke-width='2.5'/%3E%3Ccircle cx='-9' cy='-7' r='2.6' fill='%23e8a93a'/%3E%3Ccircle cx='9' cy='-5' r='3' fill='%232cc5a0'/%3E%3Ccircle cx='6' cy='9' r='2.2' fill='%236d8fbd'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/src/style.css">
 </head>
@@ -115,7 +115,7 @@
       <div id="reviewList"></div>
       <p class="quiet" id="reviewNote"></p>
       <p class="warn" id="reviewWarn" hidden></p>
-      <label class="opt" id="ownBox" hidden><input type="checkbox" id="ownOk"> I understand these are my own files, and DiskCleaner cannot know whether I still need them.</label>
+      <label class="opt" id="ownBox" hidden><input type="checkbox" id="ownOk"> I understand these are my own files, and Rhizome cannot know whether I still need them.</label>
       <div class="review-actions">
         <span id="reviewTotal"></span>
         <button id="reviewCancel">Cancel</button>
@@ -176,10 +176,10 @@
         <label class="opt"><input type="checkbox" id="lastUsed"> Show when apps were last used</label>
         <p class="quiet">Reads Windows' own record of programs you started from the Start menu, the taskbar or Explorer. Read-only; it never leaves this computer. Applies to the next scan.</p>
         <label class="opt"><input type="checkbox" id="keepReport"> Keep a report of my latest scan</label>
-        <p class="quiet">A summary page (sizes, owners, verdicts; never what is inside your files) kept in DiskCleaner's own folder, for you and, if you allow it below, your AI assistant.</p>
+        <p class="quiet">A summary page (sizes, owners, verdicts; never what is inside your files) kept in Rhizome's own folder, for you and, if you allow it below, your AI assistant.</p>
       </fieldset>
       <fieldset id="aiBox"><legend>AI assistant</legend>
-        <p class="quiet">Ask your own AI about your disk: "is this safe to delete?", "what breaks if I move this?", "which apps don't I use?". It reads the latest scan report; it can never delete or move anything. No account or API key needed in DiskCleaner.</p>
+        <p class="quiet">Ask your own AI about your disk: "is this safe to delete?", "what breaks if I move this?", "which apps don't I use?". It reads the latest scan report; it can never delete or move anything. No account or API key needed in Rhizome.</p>
         <div id="aiDesktop">
           <label class="opt"><input type="checkbox" id="aiAccess"> Let my AI assistant read my latest scan</label>
           <details class="ai-setup">

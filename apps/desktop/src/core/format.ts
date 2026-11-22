@@ -125,9 +125,9 @@ function text(v: unknown, what: string): string {
 
 /** Check a parsed file and convert it. Throws `ViewError` with a plain message. */
 export function checkView(raw: unknown): ViewData {
-  if (!isObject(raw)) fail("This is not a DiskCleaner view file.");
+  if (!isObject(raw)) fail("This is not a Rhizome view file.");
   if (raw.schema !== SCHEMA) {
-    fail("This is not a DiskCleaner view file. Make one with: dc view-data <scan.json> --out view.json");
+    fail("This is not a Rhizome view file. Make one with: dc view-data <scan.json> --out view.json");
   }
   if (raw.schema_version !== SCHEMA_VERSION) {
     fail(`This view file has version ${String(raw.schema_version)}; this viewer reads version ${SCHEMA_VERSION}. Make the file again with the same version of dc.`);

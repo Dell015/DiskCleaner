@@ -135,13 +135,13 @@ impl FolderSource {
 impl crate::mcp::Source for FolderSource {
     fn scan(&mut self) -> Result<Arc<Inspector>, String> {
         if !access(&self.dir).enabled {
-            return Err("DiskCleaner does not allow AI assistants to read the scan right now. The user can switch it on in DiskCleaner: Settings, AI assistant.".to_owned());
+            return Err("Rhizome does not allow AI assistants to read the scan right now. The user can switch it on in Rhizome: Settings, AI assistant.".to_owned());
         }
         let path = self.dir.join(LATEST_SCAN);
         let modified = fs::metadata(&path)
             .and_then(|m| m.modified())
             .map_err(|_| {
-                "There is no scan yet. The user should scan a drive or folder in DiskCleaner first."
+                "There is no scan yet. The user should scan a drive or folder in Rhizome first."
                     .to_owned()
             })?;
         if let Some((when, ins)) = &self.cached {
@@ -153,7 +153,7 @@ impl crate::mcp::Source for FolderSource {
             let text = fs::read_to_string(&path)
                 .map_err(|e| format!("The latest scan could not be read: {e}"))?;
             Inspector::from_json(&text).map_err(|e| {
-                format!("The latest scan could not be used ({e}); scan again in DiskCleaner.")
+                format!("The latest scan could not be used ({e}); scan again in Rhizome.")
             })
         };
         let ins = Arc::new(read().or_else(|_| {

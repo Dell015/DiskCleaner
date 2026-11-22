@@ -68,8 +68,8 @@ fn protected(path: &str) -> Option<String> {
         .check(path, &FakeResolver::new());
     verdict.protected.then(|| {
         verdict.reasons.first().map_or_else(
-            || "DiskCleaner protects it".to_owned(),
-            |r| format!("DiskCleaner protects it: {}", r.description),
+            || "Rhizome protects it".to_owned(),
+            |r| format!("Rhizome protects it: {}", r.description),
         )
     })
 }
@@ -111,7 +111,7 @@ pub fn eligibility(ins: &Inspector, path: &str) -> Eligibility {
     // What the checks say comes first: refusals and "never" verdicts win over everything.
     if let Some((m, _)) = ins.mark(i) {
         if m.source == "refused" {
-            return never(&format!("DiskCleaner refuses it: {}", m.detail));
+            return never(&format!("Rhizome refuses it: {}", m.detail));
         }
         if NEVER_REASONS.contains(&m.reason.as_str()) {
             return never("it holds browser logins or keys; losing it can lose them for good");
@@ -182,7 +182,7 @@ pub fn left_behind_eligibility(
     }
     if let Some((m, _)) = ins.mark(i) {
         if m.source == "refused" {
-            return never(&format!("DiskCleaner refuses it: {}", m.detail));
+            return never(&format!("Rhizome refuses it: {}", m.detail));
         }
         if NEVER_REASONS.contains(&m.reason.as_str()) {
             return never("it holds browser logins or keys; losing it can lose them for good");
@@ -281,7 +281,7 @@ mod tests {
         assert_eq!(group(r"C:\Users\me\Downloads"), "your_call");
         assert_eq!(group(r"C:\Users\me\Saved Games"), "your_call");
         assert_eq!(group(r"C:\Tools"), "your_call");
-        assert!(group(r"C:\Windows").starts_with("never: DiskCleaner protects it"));
+        assert!(group(r"C:\Windows").starts_with("never: Rhizome protects it"));
         assert!(group(r"C:\Program Files\Game").contains("uninstaller"));
         assert!(group(r"C:\Program Files").starts_with("never"));
         assert!(group(r"C:\Users\me\OneDrive\doc.docx").contains("OneDrive"));

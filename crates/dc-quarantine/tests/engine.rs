@@ -271,8 +271,8 @@ fn consent_protection_and_odd_items_are_skipped_and_left_alone() {
     assert!(out.held.is_empty(), "{:?}", out.held);
     assert_eq!(out.skipped.len(), 11);
     assert!(
-        out.skipped[9].why.contains("DiskCleaner's own")
-            && out.skipped[10].why.contains("DiskCleaner's own")
+        out.skipped[9].why.contains("Rhizome's own")
+            && out.skipped[10].why.contains("Rhizome's own")
     );
     let why = |k: usize| out.skipped[k].why.clone();
     assert!(why(0).contains("not ticked"));
@@ -284,7 +284,7 @@ fn consent_protection_and_odd_items_are_skipped_and_left_alone() {
         assert!(why(5).contains("link"));
     }
     assert!(why(6).contains("not there"));
-    assert!(why(7).contains("full path") || why(7).contains("DiskCleaner's own"));
+    assert!(why(7).contains("full path") || why(7).contains("Rhizome's own"));
     assert!(why(8).contains("full path"));
     assert!(out.id.is_empty());
     let mut after = snapshot(&w.disk);
@@ -676,7 +676,7 @@ fn emptying_refuses_anything_the_record_does_not_describe() {
     std::fs::create_dir_all(stray.parent().unwrap()).unwrap();
     std::fs::write(&stray, "not in the record").unwrap();
     let err = e.empty(&out.id).unwrap_err();
-    assert!(err.contains("not in DiskCleaner's record"), "{err}");
+    assert!(err.contains("not in Rhizome's record"), "{err}");
     assert!(stray.exists());
     assert!(w.holding.join(&out.id).join("items/1/Cache/a.bin").exists());
     std::fs::remove_dir_all(stray.parent().unwrap()).unwrap();

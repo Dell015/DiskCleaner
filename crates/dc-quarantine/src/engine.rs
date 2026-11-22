@@ -407,7 +407,7 @@ impl<'a> Engine<'a> {
     fn lock(&self) -> Result<File, String> {
         self.ops
             .create_dir_all(&self.data_dir)
-            .map_err(|e| format!("DiskCleaner's data folder cannot be used: {}", plain(&e)))?;
+            .map_err(|e| format!("Rhizome's data folder cannot be used: {}", plain(&e)))?;
         match ops::try_lock(&self.data_dir.join("cleaning.lock")) {
             Ok(Some(f)) => Ok(f),
             Ok(None) => Err(BUSY.to_owned()),
@@ -499,7 +499,7 @@ impl<'a> Engine<'a> {
             "there is no holding folder for this drive (network drives are not used for removing)",
         )?;
         if self.touches_our_folders(&item.path, Some(&root)) {
-            return Err("it is (or holds) DiskCleaner's own holding or data folder".into());
+            return Err("it is (or holds) Rhizome's own holding or data folder".into());
         }
         let facts = look(&item.path)?;
         // Your own files must be as you saw them. Leftovers of an app must not have been used
@@ -856,9 +856,7 @@ impl<'a> Engine<'a> {
             ));
         }
         if self.touches_our_folders(original, Some(&item.root)) {
-            return Some(
-                "its place is inside DiskCleaner's own folders; restore it by hand".into(),
-            );
+            return Some("its place is inside Rhizome's own folders; restore it by hand".into());
         }
         None
     }
@@ -1095,7 +1093,7 @@ impl<'a> Engine<'a> {
                     .is_some_and(|n| known.contains(&n));
                 if !recorded {
                     return Err(format!(
-                        "{} is in the holding folder but not in DiskCleaner's record; nothing was deleted. Look at it and move it out by hand if you need it",
+                        "{} is in the holding folder but not in Rhizome's record; nothing was deleted. Look at it and move it out by hand if you need it",
                         path.display()
                     ));
                 }

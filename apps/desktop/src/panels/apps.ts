@@ -455,7 +455,7 @@ export class AppsView {
     const sec = h("section", { class: "ap-sec" });
     const clearBytes = clear.reduce((a, c) => a + c.bytes, 0);
     sec.append(h("h3", {}, h("span", { class: "dot safe" }), clear.length ? `Can be cleared: ${human(clearBytes)}` : "Nothing to clear safely"),
-      h("p", { class: "quiet" }, clear.length ? "Caches, logs and similar files DiskCleaner checked. The app makes them again when it needs them." : "DiskCleaner found nothing it is sure the app can do without."));
+      h("p", { class: "quiet" }, clear.length ? "Caches, logs and similar files Rhizome checked. The app makes them again when it needs them." : "Rhizome found nothing it is sure the app can do without."));
     if (clear.length) {
       const ul = h("ul", { class: "ap-list" });
       for (const c of clear.slice(0, 80)) {

@@ -61,11 +61,11 @@ export function eligibility(tree: Tree, i: number): Eligibility {
   chain.reverse();
   if (chain.length <= 1) return never("it is the whole scanned drive or folder");
   const parts = driveParts(tree.path(i)) ?? [];
-  if (parts[0] === "users" && parts.length >= 3 && PROTECTED_USER.has(parts[2])) return never(`DiskCleaner protects it: ${PROTECTED_USER.get(parts[2])}`);
+  if (parts[0] === "users" && parts.length >= 3 && PROTECTED_USER.has(parts[2])) return never(`Rhizome protects it: ${PROTECTED_USER.get(parts[2])}`);
   const mk = tree.mark[i];
   if (mk >= 0) {
     const m = tree.marks[mk];
-    if (m.source === "refused") return never(`DiskCleaner refuses it: ${m.detail}`);
+    if (m.source === "refused") return never(`Rhizome refuses it: ${m.detail}`);
     if (NEVER_REASONS.has(m.reason)) return never("it holds browser logins or keys; losing it can lose them for good");
     if (m.offered) {
       if (m.risk === "safe") return { group: "safe", why: m.title, reason: m.reason };

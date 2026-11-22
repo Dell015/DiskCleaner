@@ -202,7 +202,7 @@ fn the_server_speaks_mcp_and_only_reads() {
     let (err, _) = call(&mut source, "delete_files", json!({}));
     assert!(err);
     let (_, report) = call(&mut source, "scan_report", json!({}));
-    assert!(report.starts_with("# DiskCleaner scan report"));
+    assert!(report.starts_with("# Rhizome scan report"));
     assert_eq!(source.1.len(), 6, "every call is logged");
     assert_eq!(
         handle(
@@ -216,7 +216,7 @@ fn the_server_speaks_mcp_and_only_reads() {
 
 #[test]
 fn switched_off_or_missing_scans_answer_with_the_reason() {
-    let mut source = Fixed(Err("Turned off in DiskCleaner".into()), Vec::new());
+    let mut source = Fixed(Err("Turned off in Rhizome".into()), Vec::new());
     let (err, text) = call(&mut source, "storage_overview", json!({}));
     assert!(err && text.contains("Turned off"));
 }

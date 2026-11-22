@@ -1,6 +1,6 @@
 # Rhizome
 
-**See and clean your disk.** An open-source, Windows-first disk explorer and cleanup advisor.
+**Rhizome - Disk Space Manager.** See and clean your disk: an open-source, Windows-first disk space manager.
 
 Rhizome reads your drive and shows where the space goes: **which app owns which files and why**,
 what uninstalled apps left behind, which downloads you no longer need, and which files are

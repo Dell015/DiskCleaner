@@ -225,8 +225,8 @@ mod cleaning {
         }
 
         pub fn with_engine<T>(run: impl FnOnce(&Engine<'_>) -> T) -> Result<T, String> {
-            let data = dc_api::datadir::default_dir()
-                .ok_or("DiskCleaner's data folder cannot be found")?;
+            let data =
+                dc_api::datadir::default_dir().ok_or("Rhizome's data folder cannot be found")?;
             let guard = ProtectedGuard::default();
             let places: Box<dyn Places> = if cfg!(windows) {
                 let local = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA is not set")?;
@@ -246,7 +246,7 @@ mod cleaning {
     }
 
     #[cfg(not(feature = "cleaning"))]
-    const OFF: &str = "Removing is not in this build of DiskCleaner yet.";
+    const OFF: &str = "Removing is not in this build of Rhizome yet.";
 
     /// Remove picked items: each is grouped again from the latest scan, then the engine checks
     /// the disk and moves it into its holding folder. `on_progress` gets (done, total).
@@ -274,7 +274,7 @@ mod cleaning {
             .map_or(SCAN_FRESH_FOR, |at| at.elapsed());
         if age >= SCAN_FRESH_FOR {
             return Err(format!(
-                "The latest scan is {} minutes old. Scan again before removing, so DiskCleaner judges what is on the disk now.",
+                "The latest scan is {} minutes old. Scan again before removing, so Rhizome judges what is on the disk now.",
                 age.as_secs() / 60
             ));
         }
@@ -852,7 +852,7 @@ fn save_scan(path: String, last: State<'_, LastScan>) -> Result<Saved, String> {
         .open(&target)
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::AlreadyExists {
-                "That file already exists. Pick a new name: DiskCleaner never replaces files."
+                "That file already exists. Pick a new name: Rhizome never replaces files."
                     .to_owned()
             } else {
                 format!("The file could not be created: {e}")
@@ -936,12 +936,12 @@ fn main() {
             Some(dir) => match dc_api::datadir::serve_stdio(dir) {
                 Ok(()) => 0,
                 Err(e) => {
-                    eprintln!("DiskCleaner MCP server stopped: {e}");
+                    eprintln!("Rhizome MCP server stopped: {e}");
                     1
                 }
             },
             None => {
-                eprintln!("DiskCleaner cannot find its data folder");
+                eprintln!("Rhizome cannot find its data folder");
                 1
             }
         };
@@ -983,7 +983,7 @@ fn main() {
         ])
         .run(tauri::generate_context!());
     if let Err(e) = app {
-        eprintln!("DiskCleaner could not start: {e}");
+        eprintln!("Rhizome could not start: {e}");
         std::process::exit(1);
     }
 }

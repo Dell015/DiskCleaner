@@ -189,7 +189,7 @@ fn apps_rejects_a_file_that_is_not_a_snapshot() {
     std::fs::write(&bad, "{\"nope\": 1}").unwrap();
     let out = dc(&["apps", "--from", bad.to_str().unwrap()]);
     assert_eq!(out.status.code(), Some(1));
-    assert!(text(&out.stderr).contains("not a DiskCleaner apps snapshot"));
+    assert!(text(&out.stderr).contains("not a Rhizome apps snapshot"));
 }
 
 #[cfg(not(windows))]
@@ -641,7 +641,7 @@ fn report_and_mcp_read_a_view_file() {
     .success());
     let report = dc(&["report", view.to_str().unwrap()]);
     assert!(report.status.success());
-    assert!(text(&report.stdout).starts_with("# DiskCleaner scan report"));
+    assert!(text(&report.stdout).starts_with("# Rhizome scan report"));
 
     // The MCP server serves the data folder only when access is switched on.
     let data = dir.path().join("data");

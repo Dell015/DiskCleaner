@@ -33,7 +33,7 @@ describe("format", () => {
     expect(data.parent[0]).toBe(-1);
   });
   it("rejects damaged or contradictory files with a plain message", () => {
-    expect(bad((v) => (v.schema = "x"))).toMatch(/not a DiskCleaner view file/);
+    expect(bad((v) => (v.schema = "x"))).toMatch(/not a Rhizome view file/);
     expect(bad((v) => (v.schema_version = 2))).toMatch(/version 2/);
     expect(bad((v) => (v.nodes.parent[5] = 5))).toMatch(/parent of entry 5/);
     expect(bad((v) => (v.nodes.parent[5] = v.nodes.kind.findIndex((k) => k === 0)))).toMatch(/not a folder|parent of entry/);

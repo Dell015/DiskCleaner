@@ -115,7 +115,7 @@ struct RawView {
 #[derive(Debug, thiserror::Error)]
 pub enum InspectError {
     /// Not JSON, or not the expected shape.
-    #[error("not a DiskCleaner view file: {0}")]
+    #[error("not a Rhizome view file: {0}")]
     Format(String),
     /// The columns or links do not agree.
     #[error("the view file is damaged: {0}")]

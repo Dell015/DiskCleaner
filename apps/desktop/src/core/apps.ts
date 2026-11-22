@@ -85,7 +85,7 @@ export const ROLE_TEXT: Record<PlaceRole, { title: string; why: string }> = {
   program: { title: "Needed to run", why: "The app's own program files. Remove the app with its uninstaller instead." },
   data: { title: "Settings and data", why: "Its settings, logins and data. Removing them can reset or break the app." },
   saves: { title: "Your saves", why: "Your game saves and settings. Kept unless you remove them yourself." },
-  temp: { title: "Temporary files", why: "Temporary files it left; the parts DiskCleaner checked are offered below." },
+  temp: { title: "Temporary files", why: "Temporary files it left; the parts Rhizome checked are offered below." },
 };
 
 /** What kind of place an app folder is. */

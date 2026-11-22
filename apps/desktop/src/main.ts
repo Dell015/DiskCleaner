@@ -1336,7 +1336,7 @@ function renderReview(): void {
         h("div", { class: "rv-main" },
           h("b", {}, t.names[i]),
           h("span", { class: "path" }, t.path(i)),
-          h("span", { class: "quiet" }, g === "never" ? e.why : g === "your_call" ? "Your own file or folder: DiskCleaner has no opinion on it." : e.why)),
+          h("span", { class: "quiet" }, g === "never" ? e.why : g === "your_call" ? "Your own file or folder: Rhizome has no opinion on it." : e.why)),
         h("span", { class: "rv-size" }, human(t.agg[i])),
         h("button", { class: "rv-x", title: "Leave it out", attrs: { "aria-label": `Leave ${t.names[i]} out` }, onclick: () => { picks.delete(i); pickbar(); renderReview(); renderFlat(); renderSide(); } }, "×"));
       sec.append(row);
@@ -1347,7 +1347,7 @@ function renderReview(): void {
   const warn = byId("reviewWarn");
   const age = scanAgeMinutes();
   warn.textContent = age >= SCAN_FRESH_MINUTES
-    ? `This scan is ${count(age)} minutes old. Scan again before removing, so DiskCleaner judges what is on the disk now.`
+    ? `This scan is ${count(age)} minutes old. Scan again before removing, so Rhizome judges what is on the disk now.`
     : total > 200 * 1e9
       ? `That is a lot: ${human(total)} in total. Look through the list once more before you go on.`
       : "";
@@ -2257,7 +2257,7 @@ function bindSettings(): void {
       const hit = list.filter((c) => c.created > 0 && heldBytes(c) > 0 && c.created <= now - days * 86_400);
       if (!hit.length) return apply();
       retentionArmed = days;
-      note.textContent = `With ${days} days, ${count(hit.length)} earlier removal${hit.length === 1 ? "" : "s"} (${human(hit.reduce((a, c) => a + heldBytes(c), 0))}) will be deleted for good the next time DiskCleaner opens. Click ${days} days again to confirm.`;
+      note.textContent = `With ${days} days, ${count(hit.length)} earlier removal${hit.length === 1 ? "" : "s"} (${human(hit.reduce((a, c) => a + heldBytes(c), 0))}) will be deleted for good the next time Rhizome opens. Click ${days} days again to confirm.`;
       note.hidden = false;
     }).catch(apply);
   }));

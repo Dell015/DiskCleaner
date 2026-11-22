@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DiskCleaner",
+  "productName": "Rhizome - Disk Space Manager",
   "version": "0.1.0",
   "identifier": "io.github.dell015.diskcleaner",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "DiskCleaner",
+        "title": "Rhizome - Disk Space Manager",
         "width": 1440,
         "height": 900,
         "minWidth": 900,

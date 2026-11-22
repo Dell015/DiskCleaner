@@ -36,7 +36,7 @@ pub fn load(path: &Path) -> Result<AppSnapshot> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
     let snapshot: AppSnapshot = serde_json::from_str(&text)
-        .with_context(|| format!("{} is not a DiskCleaner apps snapshot", path.display()))?;
+        .with_context(|| format!("{} is not a Rhizome apps snapshot", path.display()))?;
     if snapshot.schema_version != SNAPSHOT_SCHEMA_VERSION {
         bail!(
             "{} has snapshot version {}, this dc understands version {}",

@@ -74,7 +74,7 @@ export interface Saved { path: string; entries: number; bytes: number }
 
 /** Ask where to save the finished scan, then save it. null if the user cancelled. */
 export async function saveScan(suggestedName: string): Promise<Saved | null> {
-  const path = await save({ title: "Save this scan", defaultPath: suggestedName, filters: [{ name: "DiskCleaner scan", extensions: ["json"] }] });
+  const path = await save({ title: "Save this scan", defaultPath: suggestedName, filters: [{ name: "Rhizome scan", extensions: ["json"] }] });
   if (!path) return null;
   return invoke<Saved>("save_scan", { path });
 }

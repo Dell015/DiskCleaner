@@ -30,10 +30,10 @@ pub fn if_deleted(reason: &str) -> Option<&'static str> {
         "leftover_uninstalled" => "Left behind by an app you uninstalled. Its settings, logs and any saved data in it are gone; if you install the app again it starts fresh.",
         "leftover_known_app_removed" => "Data left by an app that is no longer installed. If you reinstall it, its old settings and saved data are gone.",
         "leftover_unregistered_program" => "Programs that no installed app claims. If you still use one of them as a portable tool, it is gone.",
-        "may_hold_personal_data" => "It may hold your own documents, pictures or other personal files, so DiskCleaner only shows it. Look inside before deciding.",
-        "may_hold_installed_games" => "Apps like this keep installed games or other data you may want, so DiskCleaner only shows it.",
-        "outside_app_folders" => "It sits among your own files or at the top of a drive, so DiskCleaner only shows it. Look inside before deciding.",
-        "low_confidence" => "The evidence is weak, so DiskCleaner only shows it and does not suggest removing it.",
+        "may_hold_personal_data" => "It may hold your own documents, pictures or other personal files, so Rhizome only shows it. Look inside before deciding.",
+        "may_hold_installed_games" => "Apps like this keep installed games or other data you may want, so Rhizome only shows it.",
+        "outside_app_folders" => "It sits among your own files or at the top of a drive, so Rhizome only shows it. Look inside before deciding.",
+        "low_confidence" => "The evidence is weak, so Rhizome only shows it and does not suggest removing it.",
         "download_leftovers" => "Files of a download or update that did not finish. If one is still running, it starts over; nothing else is lost.",
         "re_downloadable" => "Content the app downloaded and can download again (needs internet and time). Nothing of yours is lost.",
         "windows_update_cache" => "Update files Windows keeps to share with other PCs. Windows clears them itself after a while; nothing breaks.",
@@ -302,7 +302,7 @@ fn deleting(
     let reason_text = verdict.zip(ins.mark(i).and_then(|(m, _)| if_deleted(&m.reason)));
     if let Some(v) = verdict {
         if v.source == "refused" {
-            return format!("DiskCleaner refuses this: {}. Do not delete it.", v.detail);
+            return format!("Rhizome refuses this: {}. Do not delete it.", v.detail);
         }
     }
     if let Some((v, text)) = reason_text {
@@ -327,9 +327,9 @@ fn deleting(
         return format!("Looks like {p}. If it is your work, deleting it loses that work unless it is backed up or pushed somewhere else.");
     }
     if in_user_folder(ins, i) {
-        return "Your own files. Nothing on the system depends on them as far as the scan shows, but DiskCleaner cannot know whether you still need them: once deleted (after the holding period) they are gone.".to_owned();
+        return "Your own files. Nothing on the system depends on them as far as the scan shows, but Rhizome cannot know whether you still need them: once deleted (after the holding period) they are gone.".to_owned();
     }
-    "Unknown: no app claims it and no rule describes it. DiskCleaner treats unknown things as Don't touch; look inside first.".to_owned()
+    "Unknown: no app claims it and no rule describes it. Rhizome treats unknown things as Don't touch; look inside first.".to_owned()
 }
 
 fn moving(ins: &Inspector, i: u32, owner: Option<&OwnerAnswer>, project: Option<&str>) -> String {
