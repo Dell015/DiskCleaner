@@ -1,7 +1,8 @@
 // Side column (findings, apps), the details drawer, and the key. Text-only DOM, no HTML strings.
 
 import { biggestPlace, gamesOf, launcherOf } from "../core/apps";
-import { askText, explain } from "../core/explain";
+import { askText, canDelete, explain } from "../core/explain";
+import { ago } from "../core/inventory";
 import { FLAG, KIND, type Mark, type RiskId } from "../core/format";
 import type { Tree } from "../core/tree";
 import { count, date, human } from "../core/util";
@@ -29,7 +30,13 @@ export interface PanelActions {
   pick?: PickHandlers;
   /** An app's icon as a picture address, when it is ready (desktop app only). */
   appIcon?(owner: number): string | undefined;
+  /** Every detail (on), or the simple facts first (off; the default). */
+  detailsOn?(): boolean;
+  setDetails?(on: boolean): void;
+  /** "Now" for "used 3 days ago" (a saved scan is judged as of when it was made). */
+  now?(): number;
 }
+
 
 export type FindingFilter = "offered" | "shown" | "refused";
 
@@ -135,10 +142,43 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
   }
   el.append(h("header", { class: "d-head" }, shapeIcon(look, 22), h("div", {}, h("h2", {}, name), crumbs), close));
 
+  const detailed = act.detailsOn?.() ?? true;
+  const owner = tree.owner[i];
+  const mi = tree.mark[i];
+  const x = i !== 0 && i !== rootNode ? explain(tree, i) : null;
+  el.append(h("div", { class: "big" }, human(tree.agg[i])));
+
+  // The simple facts first: where, when last used, what it is, and whether it can go.
+  const now = act.now?.() ?? Date.now() / 1000;
+  const used = owner >= 0 ? tree.owners[owner].last_used : undefined;
+  const simple = h("dl", { class: "simple" },
+    h("dt", {}, "Where"), h("dd", { class: "path" }, i === 0 ? `${tree.childCount[0]} scanned location(s)` : tree.path(i)),
+    used ? h("dt", {}, "Last used") : h("dt", {}, isDir ? "Last changed" : "Changed"),
+    used ? h("dd", {}, `${ago(used, now)} (${tree.owners[owner].name})`) : h("dd", {}, ago(isDir ? tree.newest[i] : tree.mtime[i], now)),
+    owner >= 0 ? h("dt", {}, "Belongs to") : null, owner >= 0 ? h("dd", {}, tree.owners[owner].name) : null,
+    x ? h("dt", {}, "What it is") : null, x ? h("dd", {}, x.what) : null);
+  el.append(simple);
+  if (i !== 0 && i !== rootNode) {
+    const m = mi >= 0 ? tree.marks[mi] : null;
+    const ans = canDelete(m?.risk ?? null, Boolean(m?.offered));
+    el.append(h("section", { class: `candelete c-${ans.tone}`, attrs: { "aria-label": "Can I delete it?" } },
+      h("b", {}, "Can I delete it?"), h("p", {}, ans.text),
+      x?.how ? h("p", { class: "quiet" }, `To free the space: ${x.how}`) : null));
+  }
+  const actionsEl = detailActions(tree, i, isDir, rootNode, act);
+  el.append(actionsEl);
+
+  // Everything else, one switch away.
+  const sw = h("input", { attrs: { type: "checkbox", role: "switch" } });
+  sw.checked = detailed;
+  sw.addEventListener("change", () => act.setDetails?.(sw.checked));
+  if (act.setDetails) el.append(h("label", { class: "detail-switch" }, sw, h("span", {}, "Show details"), h("span", { class: "quiet" }, "share, kind, notes, rules and evidence")));
+  if (!detailed) return;
+
   const total = tree.agg[0] || 1;
   const bar = h("div", { class: "share" }, h("span", {}));
   (bar.firstElementChild as HTMLElement).style.width = `${Math.max(0.5, (tree.agg[i] / total) * 100)}%`;
-  el.append(h("div", { class: "big" }, human(tree.agg[i])), bar, h("div", { class: "quiet" }, `${share(tree.agg[i] / total)} of everything scanned`));
+  el.append(bar, h("div", { class: "quiet" }, `${share(tree.agg[i] / total)} of everything scanned`));
 
   const f = tree.flags[i];
   const notes = [
@@ -150,7 +190,6 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
     f & FLAG.hidden ? "hidden" : "",
     f & FLAG.compressed ? "compressed by Windows" : "",
   ].filter(Boolean);
-  const owner = tree.owner[i];
   const facts = h("dl", { class: "facts" },
     h("dt", {}, "Path"), h("dd", { class: "path" }, i === 0 ? `${tree.childCount[0]} scanned location(s)` : tree.path(i)),
     h("dt", {}, "Kind"), h("dd", {}, SHAPE_NAMES[look.shape].split(" (")[0] + (!isDir && tree.cat[i] >= 0 ? `, ${CATEGORY_LABELS[tree.cat[i]]?.toLowerCase() ?? "other"}` : "")),
@@ -162,8 +201,7 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
   el.append(facts);
 
   // What is this? What it is for, what deleting it does, and the right way to free the space.
-  if (i !== 0 && i !== rootNode) {
-    const x = explain(tree, i);
+  if (x) {
     const box = h("section", { class: `whatis from-${x.from}`, attrs: { "aria-label": "What is this?" } },
       h("h3", {}, "What is this?"),
       h("p", {}, x.what),
@@ -201,7 +239,6 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
   }
 
   // What the checks say: its own mark, or the riskier one from a folder above.
-  const mi = tree.mark[i];
   if (mi >= 0) {
     const m = tree.marks[mi];
     const here = tree.markHere[i] === mi;
@@ -217,21 +254,6 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
     el.append(h("section", { class: "verdict v-none" }, h("div", { class: "v-top" }, h("b", {}, "No verdict")), h("p", { class: "quiet" }, "No rule or leftover check says anything about this. Unknown means hands off.")));
   }
 
-  const actions = h("div", { class: "actions" });
-  const inMap = act.inMap?.() ?? true;
-  if (isDir && tree.childCount[i] > 0) {
-    actions.append(h("button", { class: "primary", onclick: () => act.toggle(i) }, act.isOpen(i) ? "Close folder" : "Open folder"));
-    // On the map, a folder can become the centre. In the lists the same button opens the map there.
-    if (inMap && i !== rootNode) actions.append(h("button", { onclick: () => act.focusHere(i) }, "Focus here"));
-  }
-  if (!inMap && act.showOnMap && i !== 0) actions.append(h("button", { onclick: () => act.showOnMap?.(i), title: isDir ? "Open the map with this folder in the middle" : "Open the map at this file" }, "Show on map"));
-  if (act.isPinned(i)) actions.append(h("button", { onclick: () => act.unpin(i) }, "Unpin"));
-  const copy = h("button", {}, "Copy path");
-  copy.addEventListener("click", () => {
-    void navigator.clipboard?.writeText(tree.path(i)).then(() => (copy.textContent = "Copied"), () => (copy.textContent = "Could not copy"));
-  });
-  actions.append(copy);
-  el.append(actions);
 
   if (isDir && tree.childCount[i] > 0) {
     const { top } = tree.topChildren(i, 12);
@@ -248,6 +270,25 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
     }
     el.append(h("h3", {}, "Biggest inside"), ol);
   }
+}
+
+/** The buttons under an entry's details. */
+function detailActions(tree: Tree, i: number, isDir: boolean, rootNode: number, act: PanelActions): HTMLElement {
+  const actions = h("div", { class: "actions" });
+  const inMap = act.inMap?.() ?? true;
+  if (isDir && tree.childCount[i] > 0) {
+    actions.append(h("button", { class: "primary", onclick: () => act.toggle(i) }, act.isOpen(i) ? "Close folder" : "Open folder"));
+    // On the map, a folder can become the centre. In the lists the same button opens the map there.
+    if (inMap && i !== rootNode) actions.append(h("button", { onclick: () => act.focusHere(i) }, "Focus here"));
+  }
+  if (!inMap && act.showOnMap && i !== 0) actions.append(h("button", { onclick: () => act.showOnMap?.(i), title: isDir ? "Open the map with this folder in the middle" : "Open the map at this file" }, "Show on map"));
+  if (act.isPinned(i)) actions.append(h("button", { onclick: () => act.unpin(i) }, "Unpin"));
+  const copy = h("button", {}, "Copy path");
+  copy.addEventListener("click", () => {
+    void navigator.clipboard?.writeText(tree.path(i)).then(() => (copy.textContent = "Copied"), () => (copy.textContent = "Could not copy"));
+  });
+  actions.append(copy);
+  return actions;
 }
 
 /** Space per app; a folder counts once for the app that owns it. */

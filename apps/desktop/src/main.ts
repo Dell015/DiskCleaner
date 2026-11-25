@@ -18,6 +18,11 @@ import { aiStatus, appIcons, cancelDupes, cancelScan, confirmDrive, findDupes, i
 import { applyDupEvent, emptyDups, pathFinder, simulateDups, type DupEvent, type DupState } from "./core/dupes";
 import { makeDemo } from "./core/demo";
 import { checkView } from "./core/format";
+import { HomeView } from "./panels/home";
+import { GROUP_TEXT, yourFiles, type Group, type GroupId } from "./core/yours";
+import { appCards, type AppCard } from "./core/apps";
+import { FreeView } from "./panels/free";
+import { ago } from "./core/inventory";
 import { byId, clear, h } from "./panels/dom";
 import { CATEGORY_LABELS, RISK_LABELS, renderApps, renderDetails, renderFindings, renderKey, type FindingFilter, type PanelActions } from "./panels/panels";
 import { type ColorMode } from "./graph/encode";
@@ -72,11 +77,15 @@ type Theme = "dark" | "light" | "system";
 // ---------- settings (kept in this browser only) ----------
 
 /** "overview" is everything at a glance (the default), "files" the simple list, "map" the node graph. */
-type ViewMode = "overview" | "apps" | "files" | "map";
-const VIEW_MODES: ViewMode[] = ["overview", "apps", "files", "map"];
-interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean; retention: number; /** Kinds the person chose for apps, by app name. */ appKinds: Record<string, AppKind> }
+type ViewMode = "home" | "free" | "overview" | "apps" | "files" | "map";
+const VIEW_MODES: ViewMode[] = ["home", "free", "overview", "apps", "files", "map"];
+/** Views without the side column (it opens when something is picked for details). */
+const CALM_VIEWS: ViewMode[] = ["home", "free", "apps"];
+/** The design the settings were last saved under (2: the calm redesign, D140). */
+const LOOK_VERSION = 2;
+interface Settings { style: StyleId; theme: Theme; quality: Quality; chosen: boolean; view: ViewMode; units: SizeUnits; lastUsed: boolean; keepReport: boolean; retention: number; /** Kinds the person chose for apps, by app name. */ appKinds: Record<string, AppKind>; /** Show every detail in the details panel (off: the simple facts only). */ details: boolean; lookVersion: number }
 function loadSettings(): Settings {
-  const base: Settings = { style: "deep", theme: "dark", quality: { ...PRESETS.high }, chosen: false, view: "overview", units: "windows", lastUsed: true, keepReport: true, retention: 30, appKinds: {} };
+  const base: Settings = { style: "calm", theme: "light", quality: { ...PRESETS.high }, chosen: false, view: "home", units: "windows", lastUsed: true, keepReport: true, retention: 30, appKinds: {}, details: false, lookVersion: LOOK_VERSION };
   if (prefersReducedMotion()) base.quality.motion = "reduced";
   try {
     const raw = JSON.parse(localStorage.getItem("dc-settings") ?? "null") as Partial<Settings> | null;
@@ -92,6 +101,14 @@ function loadSettings(): Settings {
       if (typeof raw.retention === "number" && [7, 14, 30, 60].includes(raw.retention)) base.retention = raw.retention;
       if (raw.appKinds && typeof raw.appKinds === "object") {
         for (const [name, k] of Object.entries(raw.appKinds)) if (typeof name === "string" && APP_KINDS.includes(k)) base.appKinds[name] = k;
+      }
+      if (typeof raw.details === "boolean") base.details = raw.details;
+      // Settings from before the calm redesign: move to the new look and home once. The old
+      // looks stay in Settings.
+      if (raw.lookVersion !== LOOK_VERSION) {
+        base.style = "calm";
+        base.theme = "light";
+        base.view = "home";
       }
     }
   } catch {
@@ -272,6 +289,82 @@ const appsView = new AppsView(byId("appsView"), {
     else delete settings.appKinds[name];
     saveSettings();
   },
+});
+/** An app's icon, or its first letter on a quiet tile. */
+function appIconEl(owner: number, name: string): HTMLElement {
+  const url = appIconFor(owner);
+  if (url) return h("img", { class: "ap-icon", attrs: { src: url, alt: "", width: "24", height: "24", draggable: "false" } });
+  return h("span", { class: "ap-icon letter", attrs: { "aria-hidden": "true" } }, (name.trim()[0] ?? "?").toUpperCase());
+}
+
+/** Open the Library at an app, a group of files, or one of its sections. */
+function openLibrary(how: { owner?: number; group?: GroupId; section?: "all" | "files" }): void {
+  if (how.owner !== undefined) appsView.openApp(how.owner);
+  else if (how.group !== undefined) appsView.openGroup(how.group);
+  else appsView.setSection(how.section ?? "all");
+  if (settings.view === "apps") renderAppsView(true);
+  else setViewMode("apps");
+}
+
+/** Removed items still waiting, as last read (null: removing is not available here). */
+let removedNow: { count: number; bytes: number } | null = null;
+let removedAsked = false;
+function noteRemoved(list: CleanupInfo[]): void {
+  const held = list.flatMap((c) => c.items.filter((i) => i.state === "held"));
+  const next = { count: held.length, bytes: held.reduce((a, i) => a + i.bytes, 0) };
+  const changed = !removedNow || removedNow.count !== next.count || removedNow.bytes !== next.bytes;
+  removedNow = next;
+  if (changed && settings.view === "home") renderHome(true);
+}
+
+const home = new HomeView(byId("home"), {
+  kinds: () => settings.appKinds,
+  freeUp: (step) => {
+    free.go(step);
+    if (settings.view === "free") renderFree(true);
+    else setViewMode("free");
+  },
+  biggest: () => {
+    state.folder = listRoot();
+    state.selected = null;
+    if (settings.view !== "files") setViewMode("files");
+    goFolder(listRoot());
+  },
+  apps: () => openLibrary({ section: "all" }),
+  files: () => openLibrary({ section: "files" }),
+  openApp: (owner) => openLibrary({ owner }),
+  openGroup: (group) => openLibrary({ group }),
+  appIcon: appIconEl,
+  removed: () => removedNow,
+  showRemoved: () => {
+    app.classList.add("show-side");
+    app.classList.remove("no-side");
+    closeDrawer();
+    setTab("removed");
+  },
+  overview: () => setViewMode("overview"),
+  retention: () => settings.retention,
+});
+const free = new FreeView(byId("free"), {
+  kinds: () => settings.appKinds,
+  pick: picking,
+  setPicked: (nodes, on) => {
+    for (const i of nodes) {
+      if (on && picking.why(i) === "") picks.set(i, false);
+      else if (!on) picks.delete(i);
+    }
+    pickbar();
+  },
+  review: () => openReview(),
+  picked: () => {
+    const t = state.tree;
+    const nodes = pickedNodes();
+    return { count: nodes.length, bytes: t ? nodes.reduce((a, i) => a + t.agg[i], 0) : 0 };
+  },
+  openApp: (owner) => openLibrary({ owner }),
+  appIcon: appIconEl,
+  home: () => setViewMode("home"),
+  retention: () => settings.retention,
 });
 (window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder(), findDups: (w: number) => startDups(w) };
 // Development builds only: the smoke test calls the real removal path without clicking.
@@ -848,6 +941,7 @@ function openDrawer(): void {
   const d = byId("drawer");
   d.classList.add("open");
   d.setAttribute("aria-hidden", "false");
+  app.classList.add("drawer-on");
   if (window.innerWidth < 900) app.classList.remove("no-side");
 }
 
@@ -855,6 +949,7 @@ function closeDrawer(): void {
   const d = byId("drawer");
   d.classList.remove("open");
   d.setAttribute("aria-hidden", "true");
+  app.classList.remove("drawer-on");
 }
 
 function renderDrawer(): void {
@@ -995,8 +1090,8 @@ function goFolder(i: number, pick: number | null = null): void {
   const tree = state.tree;
   if (!tree || i < 0 || i >= tree.n) return;
   hideMenu();
-  // From the Overview, opening something shows it in the list.
-  if (settings.view === "overview") {
+  // From the Overview, Home or the Library, opening something shows it in the list.
+  if (settings.view !== "files" && settings.view !== "map") {
     settings.view = "files";
     saveSettings();
     applyViewMode();
@@ -1037,9 +1132,37 @@ function renderAppsView(force = false): void {
   appsView.show(tree, scanNow(), force);
 }
 
-/** Draw whichever flat view is showing (Overview, Apps or Files). */
+/** "scanned today", "scanned 3 days ago" (a saved file: when it was made). */
+function scannedText(): string {
+  if (state.live) return state.live.active ? "scanning now" : "scanned just now";
+  const made = state.data?.created;
+  return made ? `scanned ${ago(made, Date.now() / 1000)}` : "a saved scan";
+}
+
+/** Draw Home (the calm first screen). */
+function renderHome(force = false): void {
+  const tree = state.tree;
+  if (settings.view !== "home" || !tree || tree.n === 0) return;
+  home.show(tree, scanNow(), scannedText(), force);
+  // How much is waiting in the holding folder (read once; the Removed tab keeps it current).
+  if (!removedAsked && cleaningOn) {
+    removedAsked = true;
+    void listCleanups().then(noteRemoved).catch(() => undefined);
+  }
+}
+
+/** Draw the guided "Free up space". */
+function renderFree(force = false): void {
+  const tree = state.tree;
+  if (settings.view !== "free" || !tree || tree.n === 0) return;
+  free.show(tree, scanNow(), force);
+}
+
+/** Draw whichever flat view is showing (Home, Free up space, Overview, Apps or Files). */
 function renderFlat(): void {
-  if (settings.view === "files") renderList();
+  if (settings.view === "home") renderHome();
+  else if (settings.view === "free") renderFree();
+  else if (settings.view === "files") renderList();
   else if (settings.view === "overview") renderOverview();
   else if (settings.view === "apps") renderAppsView();
 }
@@ -1056,8 +1179,15 @@ function applyViewMode(): void {
   byId("explorer").hidden = !files;
   byId("overview").hidden = settings.view !== "overview";
   byId("appsView").hidden = settings.view !== "apps";
+  byId("home").hidden = settings.view !== "home";
+  byId("free").hidden = settings.view !== "free";
+  // Home, Free up space and the Library are calm: the side panel shows only when asked for.
+  app.classList.toggle("calm", CALM_VIEWS.includes(settings.view));
+  app.classList.remove("show-side");
+  if (CALM_VIEWS.includes(settings.view)) closeDrawer();
   document.querySelectorAll<HTMLButtonElement>("#viewSeg button").forEach((b) => {
-    const on = b.dataset.view === settings.view;
+    // Free up space is reached from Home, so Home stays lit there.
+    const on = b.dataset.view === (settings.view === "free" ? "home" : settings.view);
     b.classList.toggle("on", on);
     b.setAttribute("aria-pressed", String(on));
   });
@@ -1082,6 +1212,13 @@ function setViewMode(m: ViewMode): void {
   }
   if (m === "apps") {
     renderAppsView(true);
+    crumbs();
+    return;
+  }
+  if (m === "home" || m === "free") {
+    closeDrawer();
+    if (m === "home") renderHome(true);
+    else renderFree(true);
     crumbs();
     return;
   }
@@ -1170,6 +1307,13 @@ async function loadIcons(): Promise<void> {
 
 const actions: PanelActions = {
   appIcon: appIconFor,
+  detailsOn: () => settings.details,
+  setDetails: (on) => {
+    settings.details = on;
+    saveSettings();
+    renderDrawer();
+  },
+  now: () => scanNow(),
   reveal,
   toggle: toggleNode,
   focusHere: (i) => focusOn(i),
@@ -1621,6 +1765,7 @@ async function renderRemoved(): Promise<void> {
     const drives = missing.map((m) => m.slice(0, 2)).join(", ");
     el.append(h("p", { class: "warn" }, `Removed items kept on ${drives} are not shown: is that drive connected? They come back here when it is.`));
   }
+  noteRemoved(list);
   const waiting = list.filter((c) => heldBytes(c) > 0 || c.items.some((i) => i.state === "held"));
   const done = list.filter((c) => !waiting.includes(c));
   const total = waiting.reduce((a, c) => a + heldBytes(c), 0);
@@ -2305,7 +2450,13 @@ function runSearch(): void {
   }
   const hits = search(tree, q, 30);
   box.hidden = false;
-  if (hits.length === 0) {
+  // Apps and kinds of your files first (found by name, without AI), then folders and files.
+  const extra = searchLibrary(tree, q);
+  for (const x of extra) {
+    box.append(h("button", { class: "lib", attrs: { role: "option" }, onclick: () => { box.hidden = true; x.open(); } },
+      h("span", { class: "title" }, x.title), h("span", { class: "size" }, human(x.bytes)), h("span", { class: "path" }, x.sub)));
+  }
+  if (hits.length === 0 && extra.length === 0) {
     box.append(h("div", { class: "none" }, "Nothing found"));
     return;
   }
@@ -2314,6 +2465,26 @@ function runSearch(): void {
       h("span", { class: "title" }, tree.names[hit.node]), h("span", { class: "size" }, human(tree.agg[hit.node])), h("span", { class: "path" }, hit.path)));
   }
 }
+let libMemo: { tree: Tree; version: number; cards: AppCard[]; groups: Group[] } | null = null;
+
+/** Apps and groups of your own files whose names match `q` (at most 6). */
+function searchLibrary(tree: Tree, q: string): { title: string; sub: string; bytes: number; open: () => void }[] {
+  if (!libMemo || libMemo.tree !== tree || libMemo.version !== tree.version) libMemo = { tree, version: tree.version, cards: appCards(tree), groups: yourFiles(tree) };
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (text: string): boolean => words.every((w) => text.includes(w));
+  const out: { title: string; sub: string; bytes: number; open: () => void }[] = [];
+  for (const c of libMemo.cards) {
+    const o = tree.owners[c.owner];
+    if (c.bytes > 0 && hit(`${o.name} ${o.publisher ?? ""} ${o.launcher ?? ""}`.toLowerCase())) out.push({ title: o.name, sub: `App${o.launcher ? `, installed by ${o.launcher}` : ""} · open its page`, bytes: c.bytes, open: () => openLibrary({ owner: c.owner }) });
+  }
+  for (const g of libMemo.groups) {
+    const t = GROUP_TEXT[g.id];
+    const kinds = g.kinds.map((k) => k.label).join(" ");
+    if (hit(`${t.title} ${t.about} ${kinds}`.toLowerCase())) out.push({ title: `Your ${t.title.toLowerCase()}`, sub: `${count(g.files)} files · ${g.kinds.slice(0, 3).map((k) => k.label.toLowerCase()).join(", ")}`, bytes: g.bytes, open: () => openLibrary({ group: g.id }) });
+  }
+  return out.sort((a, b) => b.bytes - a.bytes).slice(0, 6);
+}
+
 function pick(node: number): void {
   byId("hits").hidden = true;
   reveal(node);
@@ -2368,7 +2539,10 @@ function bind(): void {
     byId("pause").textContent = state.replay.paused ? "Resume" : "Pause";
   });
   byId("skip").addEventListener("click", finishReplay);
-  byId("panelToggle").addEventListener("click", () => app.classList.toggle("no-side"));
+  byId("panelToggle").addEventListener("click", () => {
+    if (app.classList.contains("calm")) app.classList.toggle("show-side");
+    else app.classList.toggle("no-side");
+  });
   document.querySelectorAll<HTMLButtonElement>("#viewSeg button").forEach((b) =>
     b.addEventListener("click", () => setViewMode((b.dataset.view ?? "files") as ViewMode)));
   byId("selClear").addEventListener("click", () => {

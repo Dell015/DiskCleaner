@@ -267,3 +267,11 @@ export function askText(tree: Tree, i: number): string {
   const lines = clues(tree, i);
   return `On my Windows PC, what is "${path}" (${human(tree.agg[i])}) for, and is it safe to delete? What is the right way to free its space?\n${lines.join("\n")}`;
 }
+
+/** "Can I delete it?" in plain words, from the checks' verdict (unknown means no). */
+export function canDelete(risk: "safe" | "probably_safe" | "dont_touch" | null, offered: boolean): { tone: string; text: string } {
+  if (risk === "safe" && offered) return { tone: "safe", text: "Yes. It is made again by itself or never needed again. Remove it with Rhizome so you can put it back." };
+  if (risk === "probably_safe" && offered) return { tone: "probably_safe", text: "Probably. Look at it first; remove it with Rhizome so you can put it back." };
+  if (risk === "dont_touch") return { tone: "dont_touch", text: "No. Deleting it by hand could break an app or Windows." };
+  return { tone: "none", text: "Leave it: nothing says it is safe to delete. Unknown means hands off." };
+}

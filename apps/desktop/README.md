@@ -2,8 +2,10 @@
 
 The disk as a map: every folder is a node sized by the space it takes. It grows like a scan,
 you can drag it and zoom from the whole disk down to single files, and findings are coloured by
-risk with their evidence. Beside the map: Overview, the Library (apps by kind, your files by
-type), Files, and the details panel ("What is this?"). The page itself never deletes, moves or
+risk with their evidence. It opens on Home (how full the drive is, four tasks, the biggest
+things, what can be freed safely), with the guided Free up space, the Library (apps by kind,
+your files by type), Files, the map, and a details panel that starts simple ("What is this?",
+"Can I delete it?") with a Show details switch (D140). The page itself never deletes, moves or
 sends anything: removing and uninstalling go through the desktop app's Rust side, only for what
 you picked and confirmed, and removed things wait 30 days in a holding folder (D119, D133, D135).
 Opened in a plain browser (the demo), nothing on any disk can change.

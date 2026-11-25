@@ -372,8 +372,53 @@ const check = (ok, what) => {
     const whatTemp = await page.evaluate(() => { const t = window.__dc.state.tree; for (let i = 1; i < t.n; i++) if (/\\AppData\\Local\\Temp$/i.test(t.path(i))) return i; return -1; });
     await page.evaluate((i) => window.__dc.reveal(i), whatTemp);
     await page.waitForTimeout(400);
+    // Simple first: where, what it is, and whether it can go; the rest behind "Show details".
+    check(await page.locator("#drawer .candelete").isVisible() && (await page.locator("#drawer .simple").innerText()).includes("What it is") && (await page.locator("#drawer .whatis").count()) === 0, "the details start simple: where, what it is, can I delete it");
+    await page.click("#drawer .detail-switch");
+    await page.waitForTimeout(200);
+    check((await page.evaluate(() => window.__dc.settings.details)) === true, "Show details is remembered");
     const whatText = await page.locator("#drawer .whatis").innerText();
     check(whatText.includes("Temporary files apps make") && whatText.includes("If you delete it") && whatText.includes("To free the space"), "the details say what a folder is for, what deleting does, and how to free it");
+
+    await page.click("#drawer .detail-switch");
+    await page.waitForTimeout(150);
+    check((await page.locator("#drawer .whatis").count()) === 0, "Show details can be switched off again");
+
+    // ---------- Home and Free up space (D140) ----------
+    await page.goto(base + "?demo=40000");
+    await page.evaluate(() => localStorage.removeItem("dc-settings"));
+    await page.goto(base + "?demo=40000&cleaning");
+    await page.waitForFunction(() => document.querySelectorAll("#home .hm-row").length > 3, null, { timeout: 60000 });
+    check(await page.evaluate(() => window.__dc.settings.view === "home" && document.documentElement.classList.contains("look-calm")), "a first start opens on Home in the calm look");
+    check((await page.locator("#home .hm-task").count()) === 4 && !(await page.locator("#side").isVisible()), "Home shows four tasks and no side panel");
+    check((await page.locator("#home .hm-bar > span").count()) === 4, "Home shows how full the drive is");
+    await shot("60-home");
+    await page.click("#home .hm-row >> nth=0");
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => window.__dc.settings.view === "apps") && (await page.locator("#appsView .ap-back").count()) > 0, "a biggest thing opens its own page");
+    await page.click("#viewSeg button[data-view='home']");
+    await page.waitForTimeout(200);
+    await page.click("#home .hm-task.primary");
+    await page.waitForTimeout(300);
+    check((await page.locator("#free .fr-steps li").count()) === 3 && (await page.locator("#free .fr-row").count()) > 0, "Free up space starts with caches and leftovers");
+    await page.click("#free button:has-text('Tick all safe')");
+    await page.waitForTimeout(200);
+    check((await page.locator("#free .fr-row input.pick:checked").count()) > 0 && await page.locator("#free button.primary:has-text('Review and remove')").isEnabled(), "Tick all safe ticks them and offers the review");
+    await shot("61-free");
+    await page.click("#free button.primary:has-text('Review and remove')");
+    await page.waitForTimeout(300);
+    check(await page.locator("#review").isVisible(), "the review opens before anything is removed");
+    await page.click("#reviewCancel");
+    await page.waitForTimeout(150);
+    await page.click("#free button:has-text('Untick all')");
+    await page.click("#free .fr-steps li >> nth=1");
+    await page.waitForTimeout(200);
+    check((await page.locator("#free .fr-steps button.on .fr-n").innerText()) === "2", "steps can be picked");
+    await page.click("#viewSeg button[data-view='home']");
+    await page.fill("#q", "steam");
+    await page.waitForTimeout(400);
+    check((await page.locator("#hits button.lib").count()) > 0, "search finds apps by name, without AI");
+    await page.fill("#q", "");
 
     // ---------- Library (apps by kind, your files) ----------
     await page.goto(base + "?demo=40000&view=apps");

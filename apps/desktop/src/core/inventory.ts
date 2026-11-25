@@ -375,6 +375,7 @@ export function ago(secs: number | undefined, now: number): string {
   if (d < 30) return `${Math.floor(d)} days ago`;
   if (d < 365) {
     const m = Math.floor(d / 30);
+    if (m >= 12) return "a year ago";
     return m <= 1 ? "a month ago" : `${m} months ago`;
   }
   const y = Math.floor(d / 365);

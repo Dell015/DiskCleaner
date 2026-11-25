@@ -82,7 +82,7 @@ function launcherHow(launcher: string, game: string): string {
 
 type Sort = "size" | "used" | "name";
 /** What the Library shows: everything, one kind of app, or your files. */
-type Section = "all" | AppKind | "files";
+export type Section = "all" | AppKind | "files";
 
 const ROLES: PlaceRole[] = ["program", "data", "saves", "temp"];
 
@@ -128,6 +128,14 @@ export class AppsView {
     else page.append(...this.grid(tree));
     this.el.append(page);
     this.el.scrollTop = keepScroll;
+  }
+
+  /** The Library at one of its sections (all apps, a kind, or your files). */
+  setSection(s: Section): void {
+    this.section = s;
+    this.owner = -1;
+    this.group = null;
+    this.el.scrollTop = 0;
   }
 
   /** Open an app's page (or the grid with -1). */

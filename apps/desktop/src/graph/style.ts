@@ -3,7 +3,7 @@
 
 import type { RiskId } from "../core/format";
 
-export type StyleId = "deep" | "instrument" | "mycelium";
+export type StyleId = "calm" | "deep" | "instrument" | "mycelium";
 
 export interface Palette {
   /** Graph background, centre and edge of the vignette. */
@@ -42,6 +42,8 @@ export interface Style {
   edgeAlpha: number;
   glow: number;
   vignette: number;
+  /** The page's text font, when it differs from the default. */
+  font?: string;
   dark: Palette;
   light: Palette;
 }
@@ -61,6 +63,22 @@ const LIGHT_BASE: Omit<Palette, "accent" | "folder" | "file" | "edge" | "glow"> 
 };
 
 export const STYLES: Record<StyleId, Style> = {
+  calm: {
+    id: "calm",
+    name: "Calm",
+    summary: "Plain and quiet. Warm paper, one green accent, Windows' own font, bigger text.",
+    curved: true, curvature: 0.2, edgeAlpha: 0.6, glow: 0, vignette: 0,
+    font: '"Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif',
+    dark: {
+      bg: "#161714", bgEdge: "#121310", panel: "#1d1e1b", panel2: "#262722", line: "#34362f", text: "#ecebe5", text2: "#a6a49a",
+      edge: "#3a3c35", accent: "#5fbf92", folder: "#a9b3a8", file: "#7d847b", link: "#b49ae6", cloud: "#7cc6f2", group: "#3a3d36",
+      risk: RISK_DARK, cats: CATS_DARK, apps: APPS_DARK, windows: "#8f978e", noOwner: "#454840", glow: "#cfe9db",
+    },
+    light: {
+      ...LIGHT_BASE, bg: "#f6f5f1", bgEdge: "#f6f5f1", panel: "#ffffff", panel2: "#f0eee8", line: "#e4e2dc", text: "#1d1d1b", text2: "#5f5d57",
+      edge: "#d6d3ca", accent: "#1f6b4a", folder: "#6c7a72", file: "#9a9e97", group: "#d9d6ce", glow: "#bfe0cf",
+    },
+  },
   deep: {
     id: "deep",
     name: "Deep field",
@@ -133,4 +151,9 @@ export function applyCss(p: Palette, style: Style): void {
   set("--safe", p.risk.safe); set("--probably", p.risk.probably_safe); set("--dont", p.risk.dont_touch);
   set("--folder", p.folder); set("--file", p.file);
   set("--vignette", String(style.vignette));
+  if (style.font) set("--sans", style.font);
+  else r.removeProperty("--sans");
+  // Looks can also change spacing and shapes (see style.css: html.look-calm).
+  for (const c of [...document.documentElement.classList]) if (c.startsWith("look-")) document.documentElement.classList.remove(c);
+  document.documentElement.classList.add(`look-${style.id}`);
 }

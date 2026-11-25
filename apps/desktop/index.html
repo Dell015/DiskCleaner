@@ -14,13 +14,13 @@
     <span class="mark" aria-hidden="true"></span>
     <nav id="crumbs" aria-label="Where you are"></nav>
     <div class="seg viewseg" id="viewSeg" role="group" aria-label="How to look">
-      <button data-view="overview" title="Everything at a glance: apps, downloads, big and old files">Overview</button>
+      <button data-view="home" title="How full the drive is, what to do, and the biggest things">Home</button>
       <button data-view="apps" title="Your apps by kind (games, launchers, developer tools, ...) and your own files by type (videos, pictures, documents, code projects, ...)">Library</button>
       <button data-view="files" title="A simple list of folders and files, biggest first">Files</button>
       <button data-view="map" title="The node map: every folder as a node, sized by its space">Map</button>
     </div>
     <div class="search">
-      <input id="q" type="search" placeholder="Search names or paths" autocomplete="off" spellcheck="false" aria-label="Search names or paths">
+      <input id="q" type="search" placeholder="Search apps, folders and files" autocomplete="off" spellcheck="false" aria-label="Search apps, folders and files (works without AI)" title="Searches names, paths, apps and kinds of files on this computer. Works without AI.">
       <kbd>/</kbd>
       <div id="hits" role="listbox" hidden></div>
     </div>
@@ -38,7 +38,9 @@
     <div id="graph"></div>
     <section id="explorer" aria-label="Files" hidden></section>
     <section id="overview" aria-label="Overview" hidden></section>
-    <section id="appsView" aria-label="Apps" hidden></section>
+    <section id="appsView" aria-label="Library" hidden></section>
+    <section id="home" aria-label="Home" hidden></section>
+    <section id="free" aria-label="Free up space" hidden></section>
     <div id="selbar" role="status" hidden>
       <span id="selText"></span>
       <button id="selAll" hidden>Show everything</button>
