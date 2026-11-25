@@ -1,8 +1,12 @@
-# DiskCleaner graph view
+# Rhizome - Disk Space Manager: the desktop app
 
-The disk as a graph: every folder is a node sized by the space it takes. It grows like a scan,
+The disk as a map: every folder is a node sized by the space it takes. It grows like a scan,
 you can drag it and zoom from the whole disk down to single files, and findings are coloured by
-risk with their evidence. **Read-only:** the page cannot delete, move or send anything.
+risk with their evidence. Beside the map: Overview, the Library (apps by kind, your files by
+type), Files, and the details panel ("What is this?"). The page itself never deletes, moves or
+sends anything: removing and uninstalling go through the desktop app's Rust side, only for what
+you picked and confirmed, and removed things wait 30 days in a holding folder (D119, D133, D135).
+Opened in a plain browser (the demo), nothing on any disk can change.
 
 ## Run the desktop app (live scanning)
 

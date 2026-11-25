@@ -30,7 +30,7 @@ use clap::{ArgGroup, Parser, Subcommand};
 #[command(
     name = "dc",
     version,
-    about = "DiskCleaner: see what uses your disk space (read-only)"
+    about = "Rhizome - Disk Space Manager, command line: see what uses your disk space (read-only)"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -300,7 +300,7 @@ fn run() -> Result<ExitCode> {
         Command::Mcp { data } => {
             let dir = data
                 .or_else(dc_api::datadir::default_dir)
-                .context("cannot find DiskCleaner's data folder; pass --data")?;
+                .context("cannot find Rhizome's data folder; pass --data")?;
             dc_api::datadir::serve_stdio(dir)?;
             Ok(ExitCode::SUCCESS)
         }
