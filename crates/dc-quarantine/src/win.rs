@@ -580,3 +580,28 @@ pub fn drive_letters() -> Vec<char> {
         .map(|k| char::from(b'A' + k))
         .collect()
 }
+
+/// May this folder be moved (renamed) by this user? Opens it asking for the right to delete it
+/// (sharing everything, so other programs are not disturbed) and closes it at once; access
+/// denied means only an administrator may move it (for example in Program Files).
+pub fn may_move(path: &Path) -> io::Result<()> {
+    let name = wide(path);
+    // SAFETY: `name` is NUL-terminated and outlives the call; the item itself is opened (a link
+    // is not followed); no template handle. Nothing is read or changed.
+    let h = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            DELETE | FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            ptr::null_mut(),
+        )
+    };
+    if h == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    drop(Handle(h));
+    Ok(())
+}

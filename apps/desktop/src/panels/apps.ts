@@ -7,6 +7,7 @@
 
 import { appCards, clearables, gamesOf, launcherOf, layoutNetwork, placeRole, ROLE_TEXT, type AppCard, type PlaceRole } from "../core/apps";
 import { appKind, APP_KINDS, KIND_TEXT, type AppKind, webAppOf } from "../core/kinds";
+import { viewableIn, viewKind, type ViewKind } from "../core/view";
 import { GROUP_TEXT, GROUPS, yourFiles, type Group, type GroupId } from "../core/yours";
 import { uninstallSteps } from "../core/uninstall";
 import { appNetwork } from "./appnet";
@@ -40,6 +41,8 @@ export interface AppsHandlers {
   stillThere?(paths: string[]): Promise<boolean[]>;
   /** Size [bytes, files] of each folder now, or null when it is gone (no full scan). */
   folderSizes?(paths: string[]): Promise<([number, number] | null)[]>;
+  /** Open the preview window on these files, at `at` (D143). */
+  preview?(nodes: number[], at: number): void;
   /** Can apps be moved to another drive from here (B11)? */
   canMove?(): boolean;
   /** Open the "Move to another drive" window for this app. */
@@ -389,9 +392,16 @@ export class AppsView {
       : "Your own files: nothing here is offered for removing. Click a folder or file to look at it in Files."));
     for (const k of g.kinds) {
       const s = h("section", { class: "ap-sec" }, h("h3", {}, `${k.label}: ${human(k.bytes)}`, h("span", { class: "quiet" }, ` · ${count(k.files)} files`)));
-      const row = (node: number, label: string, size: number, note: string): HTMLElement =>
-        h("li", {}, h("button", { class: "ap-row", title: tree.path(node), onclick: () => this.on.open(node) },
-          h("span", { class: "verdict keep" }, note), h("span", { class: "nm" }, label), h("span", { class: "sz" }, human(size)), h("span", { class: "path" }, tree.path(node))));
+      const only = VIEW_OF[id];
+      const play = (nodes: number[], at: number, folder: boolean): HTMLElement | null => {
+        if (!this.on.preview || !nodes.length) return null;
+        const k = viewKind(tree.names[nodes[at]]);
+        const word = k === "video" || k === "music" ? "Play" : "View";
+        return h("button", { class: "ap-play", title: folder ? `${word} what is in this folder` : `${word} it here`, onclick: () => this.on.preview?.(nodes, at) }, `▶ ${folder ? `${word} all` : word}`);
+      };
+      const row = (node: number, label: string, size: number, note: string, viewer: HTMLElement | null = null): HTMLElement =>
+        h("li", { class: viewer ? "ap-viewrow" : "" }, h("button", { class: "ap-row", title: tree.path(node), onclick: () => this.on.open(node) },
+          h("span", { class: "verdict keep" }, note), h("span", { class: "nm" }, label), h("span", { class: "sz" }, human(size)), h("span", { class: "path" }, tree.path(node))), viewer);
       if (id === "projects") {
         const ul = h("ul", { class: "ap-list" });
         for (const n of k.biggest) ul.append(row(n, tree.names[n], tree.agg[n], "Project"));
@@ -399,12 +409,17 @@ export class AppsView {
       } else {
         if (k.folders.length) {
           const ul = h("ul", { class: "ap-list" });
-          for (const f of k.folders) ul.append(row(f.node, tree.names[f.node].replace(/[\\/]+$/, "") || tree.path(f.node), f.bytes, `${count(f.files)} files`));
+          for (const f of k.folders) {
+            const inside = only ? viewableIn(tree, f.node, only, 300) : [];
+            ul.append(row(f.node, tree.names[f.node].replace(/[\\/]+$/, "") || tree.path(f.node), f.bytes, `${count(f.files)} files`, play(inside, 0, true)));
+          }
           s.append(h("div", { class: "quiet" }, "Folders holding the most"), ul);
         }
         if (k.biggest.length > 1) {
           const ul = h("ul", { class: "ap-list" });
-          for (const n of k.biggest.slice(0, 8)) ul.append(row(n, tree.names[n], tree.agg[n], "File"));
+          const shown = k.biggest.slice(0, 8);
+          const viewable = shown.filter((n) => viewKind(tree.names[n]) !== null);
+          for (const n of shown) ul.append(row(n, tree.names[n], tree.agg[n], "File", viewKind(tree.names[n]) ? play(viewable, viewable.indexOf(n), false) : null));
           s.append(h("div", { class: "quiet" }, "Biggest files"), ul);
         }
       }
@@ -751,3 +766,12 @@ function shortWhere(path: string): string {
   if (i >= 0) return parts.slice(i, i + 3).join("\\");
   return parts.slice(-2).join("\\") || "no folder recorded";
 }
+
+/** Which files each group of your own files can show in the preview window. */
+const VIEW_OF: Partial<Record<GroupId, ViewKind[]>> = {
+  videos: ["video"],
+  pictures: ["picture"],
+  music: ["music"],
+  documents: ["pdf", "text"],
+  downloads: ["video", "picture", "music", "pdf", "text"],
+};

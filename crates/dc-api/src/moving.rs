@@ -259,6 +259,15 @@ fn checked(
     if let Some(why) = protected(folder) {
         return never(why);
     }
+    // Apps that put each version in a new folder (Roblox `version-1a2b...`, Squirrel `app-1.2.3`)
+    // replace this folder at their next update: a move would not last, and the updater would
+    // delete the old one through the link.
+    if versioned_folder(folder) {
+        return never(format!(
+            "{} puts every update in a new folder next to this one and deletes the old one, so a move would be undone at its next update",
+            app.name
+        ));
+    }
     // The latest scan must know the folder, with no file with two names inside.
     let Some(node) = ins.find(folder) else {
         return never("the latest scan did not see this folder; scan again");
@@ -344,6 +353,21 @@ pub fn dest_refusal(dest: &str) -> Option<String> {
     None
 }
 
+/// Is this a folder an app makes anew at each update (`version-<hex>`, `app-<version>`)?
+#[must_use]
+pub fn versioned_folder(folder: &str) -> bool {
+    let leaf = key(folder).rsplit('\\').next().unwrap_or("").to_owned();
+    let hexish = |t: &str| t.len() >= 8 && t.chars().all(|c| c.is_ascii_hexdigit());
+    let versionish = |t: &str| {
+        !t.is_empty()
+            && t.split('.')
+                .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+            && t.contains('.')
+    };
+    leaf.strip_prefix("version-").is_some_and(hexish)
+        || leaf.strip_prefix("app-").is_some_and(versionish)
+}
+
 /// The default new place: `<drive>:\Games\<name>` for games, `<drive>:\Apps\<name>` for others,
 /// with characters Windows does not allow in names replaced.
 #[must_use]
@@ -354,6 +378,12 @@ pub fn default_destination(drive: char, app: &str, folder: &str, game: bool) -> 
         .next()
         .filter(|l| !l.is_empty() && !l.ends_with(':'))
         .unwrap_or(app);
+    let first = app.split_whitespace().next().unwrap_or("").to_lowercase();
+    let leaf = if !first.is_empty() && leaf.to_lowercase().contains(&first) {
+        leaf
+    } else {
+        app
+    };
     let clean: String = leaf
         .chars()
         .map(|c| {
@@ -448,8 +478,13 @@ mod tests {
             r"E:\Games\Genshin Impact game"
         );
         assert_eq!(
-            default_destination('D', "X", "C:/odd/na?me", false),
+            default_destination('D', "Na", "C:/odd/na?me", false),
             r"D:\Apps\na_me"
+        );
+        // A folder named after a version, not the app: the app's name is used.
+        assert_eq!(
+            default_destination('D', "Some Tool", r"C:\Tools\v2-build-77", false),
+            r"D:\Apps\Some Tool"
         );
     }
 
@@ -469,6 +504,19 @@ mod tests {
         ] {
             assert!(dest_refusal(bad).is_some(), "{bad}");
         }
+    }
+
+    #[test]
+    fn folders_made_anew_at_each_update_are_recognised() {
+        assert!(versioned_folder(
+            r"C:\Users\me\AppData\Local\Roblox\Versions\version-2c6fd5e09aaf4cfa"
+        ));
+        assert!(versioned_folder(
+            r"C:\Users\me\AppData\Local\Discord\app-1.0.9187"
+        ));
+        assert!(!versioned_folder(r"C:\Users\me\AppData\Local\Discord"));
+        assert!(!versioned_folder(r"C:\Games\version-two"));
+        assert!(!versioned_folder(r"C:\Program Files\App-Studio"));
     }
 
     #[test]

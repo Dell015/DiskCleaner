@@ -22,6 +22,8 @@ import { HomeView } from "./panels/home";
 import { GROUP_TEXT, yourFiles, type Group, type GroupId } from "./core/yours";
 import { appCards, biggestPlace, type AppCard } from "./core/apps";
 import { MoveWindow } from "./panels/move";
+import { Viewer } from "./panels/viewer";
+import { viewableSiblings } from "./core/view";
 import { listMoves, movingAvailable, usePretendMoving, type MoveInfo } from "./platform";
 import { appKind } from "./core/kinds";
 import { FreeView } from "./panels/free";
@@ -289,6 +291,9 @@ const appsView = new AppsView(byId("appsView"), {
   canMove: () => movingOn,
   moveApp: (owner) => openMove(owner),
   moveNote: (name) => moveNote(name),
+  preview: (nodes, at) => {
+    if (state.tree) viewer.open(state.tree, nodes, at);
+  },
   kinds: () => settings.appKinds,
   setKind: (name, kind) => {
     if (kind) settings.appKinds[name] = kind;
@@ -1377,8 +1382,19 @@ async function loadIcons(): Promise<void> {
   renderAppsView(true);
 }
 
+const viewer = new Viewer((node) => {
+  if (settings.view !== "files" && settings.view !== "map") setViewMode("files");
+  reveal(node);
+});
+
 const actions: PanelActions = {
   appIcon: appIconFor,
+  preview: (i) => {
+    const t = state.tree;
+    if (!t) return;
+    const { list, at } = viewableSiblings(t, i);
+    viewer.open(t, list, at);
+  },
   detailsOn: () => settings.details,
   setDetails: (on) => {
     settings.details = on;

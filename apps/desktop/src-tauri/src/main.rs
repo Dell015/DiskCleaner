@@ -30,6 +30,7 @@ use tauri::ipc::Channel;
 use tauri::State;
 
 mod moving;
+mod viewer;
 
 /// The disk jobs that are running: a scan and a duplicate search (one of each at a time; a new
 /// scan stops a duplicate search, so the disk is read by one job at a time).
@@ -953,6 +954,8 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Running::default())
         .manage(LastScan::default())
+        .manage(viewer::Viewable::default())
+        .register_uri_scheme_protocol(viewer::SCHEME, viewer::serve)
         .setup(|app| {
             smoke(app);
             Ok(())
@@ -989,6 +992,7 @@ fn main() {
             moving::move_confirm,
             moving::move_back,
             moving::move_recover,
+            viewer::view_open,
             smoke_report
         ])
         .run(tauri::generate_context!());

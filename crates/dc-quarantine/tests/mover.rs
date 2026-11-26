@@ -68,6 +68,8 @@ struct T {
     filesystem: Option<&'static str>,
     free: Option<u64>,
     removable: bool,
+    /// Only an administrator may move the folder (Program Files).
+    admin_only: bool,
 }
 
 fn count(m: &Mutex<usize>) -> usize {
@@ -148,6 +150,15 @@ impl MoveOps for T {
             return Err(io::Error::new(io::ErrorKind::ResourceBusy, "in use"));
         }
         RealOps.open_alone(file)
+    }
+    fn may_move(&self, _path: &Path) -> io::Result<()> {
+        if self.admin_only {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "access denied",
+            ));
+        }
+        Ok(())
     }
     fn volume(&self, _path: &Path) -> io::Result<Volume> {
         Ok(Volume {
@@ -379,6 +390,30 @@ fn every_refusal_leaves_everything_as_it_was() {
             }),
         ),
         (
+            "a folder open in another program",
+            Box::new(|w| {
+                (
+                    req(w, true),
+                    T {
+                        busy: Some("bin"),
+                        ..ops(w)
+                    },
+                )
+            }),
+        ),
+        (
+            "only an administrator may move it",
+            Box::new(|w| {
+                (
+                    req(w, true),
+                    T {
+                        admin_only: true,
+                        ..ops(w)
+                    },
+                )
+            }),
+        ),
+        (
             "not NTFS",
             Box::new(|w| {
                 (
@@ -511,7 +546,7 @@ fn when_the_original_cannot_move_aside_the_copy_is_deleted() {
     let places = Drives(w.root.clone());
     let m = mover(&w, &places, &ops);
     let err = m.start(&req(&w, true), |_, _, _| {}).unwrap_err();
-    assert!(err.contains("Close Tool"), "{err}");
+    assert!(err.contains("close Tool"), "{err}");
     assert_eq!(snapshot(&w.app), before);
     assert!(!w.dest.exists());
 }

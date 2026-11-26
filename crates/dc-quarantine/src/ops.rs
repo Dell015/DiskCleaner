@@ -128,6 +128,12 @@ pub trait MoveOps: Ops {
     /// Can this file be opened by Rhizome alone right now? `Err` with "in use" (a sharing
     /// violation) when a program has it open. Read access only; nothing is changed.
     fn open_alone(&self, file: &Path) -> io::Result<()>;
+    /// May this user move (rename) the folder `path`? `Err` (access denied) when only an
+    /// administrator may. Nothing is changed.
+    fn may_move(&self, path: &Path) -> io::Result<()> {
+        let _ = path;
+        Ok(())
+    }
     /// The drive holding `path`.
     fn volume(&self, path: &Path) -> io::Result<Volume>;
     /// Which drive `path` is on (two paths with the same answer are on the same drive); `None`
@@ -209,6 +215,18 @@ impl MoveOps for RealOps {
         #[cfg(not(windows))]
         {
             File::open(file).map(|_| ())
+        }
+    }
+
+    fn may_move(&self, path: &Path) -> io::Result<()> {
+        #[cfg(windows)]
+        {
+            crate::win::may_move(path)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = path;
+            Ok(())
         }
     }
 

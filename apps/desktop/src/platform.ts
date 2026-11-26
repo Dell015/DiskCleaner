@@ -371,3 +371,13 @@ export async function moveRecover(id: string): Promise<string> {
   if (pretendMover) return "nothing needed finishing";
   return invoke<string>("move_recover", { id });
 }
+
+// ---------- Looking at your own files (D143) ----------
+
+export interface ViewOpened { url: string; kind: "video" | "picture" | "music" | "pdf" | "text"; mime: string; size: number }
+
+/** Ask the desktop app to open a file of the latest scan for viewing (read-only). */
+export async function viewOpen(path: string): Promise<ViewOpened> {
+  if (!isDesktop()) throw new Error("Previews of your own files work in the desktop app (this page cannot read files).");
+  return invoke<ViewOpened>("view_open", { path });
+}

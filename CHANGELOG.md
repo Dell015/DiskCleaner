@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+### Looking at your files (D143, D144)
+- A preview window inside Rhizome: videos and music play, pictures and PDFs show, text shows its start, with Previous/Next and Show in Files. From a file's details (Play / View) and from Your files in the Library (Play all for a folder). Read-only; only files the latest scan saw; links and cloud-only files are not opened.
+- Same-named apps are told apart: websites installed as apps by a browser say "web app in Brave" (the second, tiny "Spotify"); other duplicates show their publisher or place.
+
 ### Phase B11 - Moving an app to another drive (D141; off until tested)
 - `tools/check-all.ps1` runs every check on Windows in one command (prints ALL CHECKS PASSED).
 - GOG Galaxy and Ubisoft Connect games are found from their launchers' records (D142); Ubisoft games can be moved and found again with "Locate installed game"; uninstall steps for both. Free up space step 3 has a Move button per game when moving is on.

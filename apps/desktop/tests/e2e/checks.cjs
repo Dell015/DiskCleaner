@@ -475,6 +475,23 @@ const check = (ok, what) => {
       localStorage.setItem("dc-settings", JSON.stringify(saved));
     });
 
+    // ---------- Preview window (D143) ----------
+    await page.goto(base + "?demo=40000&view=files");
+    await page.waitForSelector("#explorer .x-row");
+    const shown = await page.evaluate(() => {
+      const t = window.__dc.state.tree;
+      for (let i = 0; i < t.n; i++) if (/\.(mp4|jpg|png|mp3|pdf)$/i.test(t.names[i])) return i;
+      return -1;
+    });
+    check(shown >= 0, "the demo has a file the preview window can show");
+    await page.evaluate((i) => window.__dc.reveal(i), shown);
+    await page.waitForTimeout(300);
+    check(await page.locator("#drawer .actions button:has-text('Play'), #drawer .actions button:has-text('View')").count() === 1, "a video, picture, song or PDF has Play or View in its details");
+    await page.click("#drawer .actions button:has-text('Play'), #drawer .actions button:has-text('View')");
+    await page.waitForSelector("dialog.vw[open] .vw-msg");
+    check((await page.locator("dialog.vw .vw-msg").innerText()).includes("desktop app"), "in a browser the preview says it needs the desktop app (the page cannot read files)");
+    await page.click("dialog.vw .vw-x");
+
     // ---------- Library (apps by kind, your files) ----------
     await page.goto(base + "?demo=40000&view=apps");
     await page.waitForFunction(() => document.querySelectorAll("#appsView .ap-card").length > 3, null, { timeout: 60000 });

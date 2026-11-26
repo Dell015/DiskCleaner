@@ -540,6 +540,34 @@ impl<'a> Mover<'a> {
         if !facts.is_dir {
             return Err("it is not a folder".into());
         }
+        // Only an administrator may move some folders (Program Files): say so before copying.
+        if let Err(e) = self.ops.may_move(src) {
+            return Err(if e.kind() == io::ErrorKind::PermissionDenied {
+                "only an administrator may move this folder (apps in Program Files are like this); Rhizome never runs as administrator, so it cannot move it".to_owned()
+            } else {
+                format!("its folder cannot be moved ({})", plain(&e))
+            });
+        }
+        // An open folder (an Explorer window, a program's working folder) also stops the move:
+        // the folder and every folder inside must be free too.
+        let folders = entries(src)?
+            .into_iter()
+            .filter_map(|(rel, is_dir)| is_dir.then_some(rel));
+        for rel in std::iter::once(PathBuf::new()).chain(folders) {
+            if let Err(err) = self.ops.open_alone(&src.join(&rel)) {
+                if in_use(&err) {
+                    let what = if rel.as_os_str().is_empty() {
+                        "its folder".to_owned()
+                    } else {
+                        format!("the folder {}", rel.display())
+                    };
+                    return Err(format!(
+                        "{what} is open in another program. Close {} (also in the taskbar's hidden icons) and any Explorer or terminal window showing it, then try again",
+                        req.app
+                    ));
+                }
+            }
+        }
         // A program that is running keeps its files open: nothing may be in use.
         for rel in check::files_inside(src) {
             let ext = rel
@@ -918,7 +946,7 @@ impl<'a> Mover<'a> {
         if let Err(e) = self.ops.rename(&req.source, &held) {
             let why = if in_use(&e) || e.kind() == io::ErrorKind::PermissionDenied {
                 format!(
-                    "the original could not be moved aside ({}). Close {} and try again; if it is in Program Files, moving needs administrator rights, which Rhizome does not have",
+                    "the original could not be moved aside ({}). Something opened it after the check: close {} (also in the taskbar's hidden icons) and any Explorer or terminal window showing its folder, then try again",
                     plain(&e),
                     req.app
                 )

@@ -3,6 +3,7 @@
 import { biggestPlace, gamesOf, launcherOf } from "../core/apps";
 import { askText, canDelete, explain } from "../core/explain";
 import { ago } from "../core/inventory";
+import { viewKind } from "../core/view";
 import { FLAG, KIND, type Mark, type RiskId } from "../core/format";
 import type { Tree } from "../core/tree";
 import { count, date, human } from "../core/util";
@@ -33,6 +34,8 @@ export interface PanelActions {
   /** Every detail (on), or the simple facts first (off; the default). */
   detailsOn?(): boolean;
   setDetails?(on: boolean): void;
+  /** Open the preview window at this file (videos, pictures, music, PDFs, text; D143). */
+  preview?(i: number): void;
   /** "Now" for "used 3 days ago" (a saved scan is judged as of when it was made). */
   now?(): number;
 }
@@ -281,6 +284,8 @@ function detailActions(tree: Tree, i: number, isDir: boolean, rootNode: number, 
     // On the map, a folder can become the centre. In the lists the same button opens the map there.
     if (inMap && i !== rootNode) actions.append(h("button", { onclick: () => act.focusHere(i) }, "Focus here"));
   }
+  const vk = !isDir ? viewKind(tree.names[i]) : null;
+  if (vk && act.preview) actions.append(h("button", { class: "primary", onclick: () => act.preview?.(i) }, vk === "video" || vk === "music" ? "Play" : "View"));
   if (!inMap && act.showOnMap && i !== 0) actions.append(h("button", { onclick: () => act.showOnMap?.(i), title: isDir ? "Open the map with this folder in the middle" : "Open the map at this file" }, "Show on map"));
   if (act.isPinned(i)) actions.append(h("button", { onclick: () => act.unpin(i) }, "Unpin"));
   const copy = h("button", {}, "Copy path");

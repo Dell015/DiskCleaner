@@ -75,6 +75,9 @@ the page:
   drive has a holding folder (used to delete copies).
 - The latest scan is less than an hour old (desktop command), as for removing.
 - One disk job at a time: the same lock file as removing (`cleaning.lock`).
+- (D145) This user may move the folder (`may_move`: access denied means administrator only), and
+  neither the folder nor any folder inside is open in another program; apps whose folder is a
+  version folder (`version-<hex>`, `app-<version>`) are never moved.
 
 ## 5. Deleting copies (R21)
 
