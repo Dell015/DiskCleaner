@@ -6,7 +6,7 @@
 // screen, and the kind a person chooses for an app (remembered on this PC).
 
 import { appCards, clearables, gamesOf, launcherOf, layoutNetwork, placeRole, ROLE_TEXT, type AppCard, type PlaceRole } from "../core/apps";
-import { appKind, APP_KINDS, KIND_TEXT, type AppKind } from "../core/kinds";
+import { appKind, APP_KINDS, KIND_TEXT, type AppKind, webAppOf } from "../core/kinds";
 import { GROUP_TEXT, GROUPS, yourFiles, type Group, type GroupId } from "../core/yours";
 import { uninstallSteps } from "../core/uninstall";
 import { appNetwork } from "./appnet";
@@ -298,6 +298,8 @@ export class AppsView {
     const grid = h("ul", { class: "ap-grid" });
     const all = this.cards(tree);
     const bytesOf = new Map(all.map((c) => [c.owner, c.bytes]));
+    const sameName = new Map<string, number>();
+    for (const c of all) sameName.set(tree.owners[c.owner].name, (sameName.get(tree.owners[c.owner].name) ?? 0) + 1);
     for (const c of cards) {
       const o = tree.owners[c.owner];
       const size = c.bytes > 0 ? human(c.bytes) : o.stated_bytes ? `~${human(o.stated_bytes)}` : "";
@@ -309,6 +311,10 @@ export class AppsView {
         const games = gamesOf(tree, c.owner);
         if (games.length) sub = `+ ${count(games.length)} game${games.length === 1 ? "" : "s"}, ${human(games.reduce((a, g) => a + (bytesOf.get(g) ?? 0), 0))} · ${sub}`;
       } else if (o.launcher && c.bytes > 0) sub = `via ${o.launcher} · used ${ago(o.last_used, this.now)}`;
+      // A website installed as an app, or another app with the same name: say which one it is.
+      const web = webAppOf(o.publisher, o.folder);
+      if (web) sub = `web app in ${web} · ${sub}`;
+      else if ((sameName.get(o.name) ?? 0) > 1) sub = `${o.publisher ? `by ${o.publisher}` : shortWhere(o.folder ?? (c.places[0] !== undefined ? tree.path(c.places[0]) : ""))} · ${sub}`;
       const btn = h("button", {
         class: "ap-card",
         title: `${o.publisher ? `${o.name}, by ${o.publisher}` : o.name}\nRight-click to change its kind`,
@@ -410,8 +416,9 @@ export class AppsView {
   private detail(tree: Tree, owner: number): HTMLElement[] {
     const o = tree.owners[owner];
     const card = this.cards(tree).find((c) => c.owner === owner) ?? { owner, bytes: 0, places: [], system: false };
+    const web = webAppOf(o.publisher, o.folder);
     const facts = [
-      o.publisher && `by ${o.publisher}`,
+      web ? `a website installed as an app by ${web}` : o.publisher && `by ${o.publisher}`,
       o.launcher && `installed with ${o.launcher}`,
       o.version && `version ${o.version}`,
       o.installed && `installed ${o.installed}`,
@@ -735,4 +742,12 @@ export class AppsView {
     this.last = null;
     this.show(tree, this.now, true);
   }
+}
+
+/** "C:\\Users\\me\\AppData\\Roaming\\Spotify" → "AppData\\Roaming\\Spotify": enough to tell two apps apart. */
+function shortWhere(path: string): string {
+  const parts = path.replace(/\//g, "\\").split("\\").filter(Boolean);
+  const i = parts.findIndex((p) => /^appdata$/i.test(p));
+  if (i >= 0) return parts.slice(i, i + 3).join("\\");
+  return parts.slice(-2).join("\\") || "no folder recorded";
 }

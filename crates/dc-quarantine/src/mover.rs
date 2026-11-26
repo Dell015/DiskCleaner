@@ -404,8 +404,10 @@ pub(crate) fn parse_mount_point(buf: &[u8]) -> Option<String> {
     let start = 16usize.checked_add(off)?;
     let bytes = buf.get(start..start.checked_add(len)?)?;
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect();
     let name = String::from_utf16(&units).ok()?;
     let path = name.strip_prefix(r"\??\")?;

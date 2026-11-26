@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTree } from "../../src/core/build";
 import { checkView } from "../../src/core/format";
 import { makeDemo } from "../../src/core/demo";
-import { appKind, guessKind } from "../../src/core/kinds";
+import { appKind, guessKind, webAppOf as webApp } from "../../src/core/kinds";
 import { sortFile, yourFiles } from "../../src/core/yours";
 
 describe("kinds of apps", () => {
@@ -154,5 +154,15 @@ describe("uninstalling in order", () => {
     const some = 5;
     expect(findPath(t, t.path(some).toUpperCase())).toBe(some);
     expect(findPath(t, "C:\\no such folder")).toBe(-1);
+  });
+});
+
+describe("web apps (a website installed as an app)", () => {
+  it("are told apart from the real app", () => {
+    expect(webApp("BraveSoftware\\Brave-Browser", "C:\\Users\\me\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Web Applications\\_crx_pjib")).toBe("Brave");
+    expect(webApp("Google\\Chrome", "C:\\Users\\me\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Web Applications\\_crx_abc")).toBe("Chrome");
+    expect(webApp("Microsoft\\Edge", undefined)).toBe("Edge");
+    expect(webApp("Spotify AB", "C:\\Users\\me\\AppData\\Roaming\\Spotify")).toBeNull();
+    expect(webApp("Microsoft Corporation", "C:\\Program Files\\Microsoft OneDrive")).toBeNull();
   });
 });

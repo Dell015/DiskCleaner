@@ -70,6 +70,22 @@ export function appKind(tree: Tree, owner: number, overrides?: Record<string, Ap
   return guessKind(o.name, o.publisher, o.folder, o.launcher);
 }
 
+/**
+ * A website installed as an app by a browser (Brave, Chrome or Edge "Install app"), or null.
+ * Windows lists these like apps, under the website's name (so "Spotify" can appear twice: the
+ * real app and the web app). They take almost no space: the browser keeps their data.
+ */
+export function webAppOf(publisher?: string, folder?: string): string | null {
+  const f = (folder ?? "").replace(/\//g, "\\");
+  const p = publisher ?? "";
+  if (!/\\Web Applications\\_crx_/i.test(f) && !/^(BraveSoftware|Google|Microsoft)\\(Brave-Browser|Chrome|Edge)/i.test(p)) return null;
+  const both = `${f} ${p}`;
+  if (/Brave/i.test(both)) return "Brave";
+  if (/\bEdge\b/i.test(both)) return "Edge";
+  if (/Chrome/i.test(both)) return "Chrome";
+  return "a browser";
+}
+
 /** The kind from what Windows knows (no person's choice). Exported for tests. */
 export function guessKind(name: string, publisher?: string, folder?: string, launcher?: string): AppKind {
   const pub = publisher ?? "";
