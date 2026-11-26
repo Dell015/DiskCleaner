@@ -119,16 +119,21 @@ pub fn extract(file: &str, index: i32, size: u32) -> Option<Icon> {
     }
     let (width, height, mut px) = pixels(color.0)?;
     // Old icons have no alpha; their mask says what is transparent (white = see-through).
-    if px.chunks_exact(4).all(|p| p[3] == 0) {
+    if px.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
         let (mw, mh, m) = pixels(mask.0)?;
         if mw != width || mh < height {
             return None;
         }
-        for (p, q) in px.chunks_exact_mut(4).zip(m.chunks_exact(4)) {
+        for (p, q) in px
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(m.as_chunks::<4>().0)
+        {
             p[3] = if q[0] == 0 { 255 } else { 0 };
         }
     }
-    for p in px.chunks_exact_mut(4) {
+    for p in px.as_chunks_mut::<4>().0 {
         p.swap(0, 2); // BGRA to RGBA
     }
     drop(icon);

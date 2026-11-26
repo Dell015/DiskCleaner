@@ -412,8 +412,10 @@ fn every_refusal_leaves_everything_as_it_was() {
         (
             "a link inside",
             Box::new(|w| {
-                #[cfg(unix)]
-                std::os::unix::fs::symlink(w.root.join("d"), w.app.join("link")).unwrap();
+                // A junction on Windows, a symbolic link elsewhere (Rhizome's own maker).
+                RealOps
+                    .make_link(&w.app.join("link"), &w.root.join("d"))
+                    .unwrap();
                 (req(w, true), ops(w))
             }),
         ),
@@ -620,7 +622,8 @@ fn it_works_is_refused_when_the_link_was_changed() {
     let m = mover(&w, &places, &ops);
     let info = m.start(&req(&w, true), |_, _, _| {}).unwrap();
     // Someone replaced the link.
-    fs::remove_file(&w.app).unwrap();
+    // (A junction is a folder entry on Windows: removed as a link, never its target.)
+    RealOps.remove_link(&w.app).unwrap();
     fs::create_dir_all(&w.app).unwrap();
     assert!(m.confirm(&info.id).is_err());
     assert!(info.held.exists(), "the original is kept");

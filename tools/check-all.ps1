@@ -18,7 +18,9 @@ Step "lint"              { cargo clippy --workspace --all-targets -- -D warnings
 Step "lint with moving"  { cargo clippy --workspace --all-targets --features dc-desktop/moving -- -D warnings }
 Step "tests"             { cargo test --workspace }
 Step "removal tests"     { cargo test -p dc-quarantine --features destructive-actions }
-Step "dependencies"      { cargo deny check }
+cargo deny --version *> $null
+if ($LASTEXITCODE -eq 0) { Step "dependencies" { cargo deny check } }
+else { Write-Host "`n=== dependencies: skipped (cargo-deny is not installed; install it with: cargo install cargo-deny --locked)" -ForegroundColor Yellow }
 Step "rules"             { cargo run -q -p dc-cli -- rules --check rules/junk/builtin.toml }
 Step "desktop build"     { cargo build -p dc-desktop --features moving }
 
