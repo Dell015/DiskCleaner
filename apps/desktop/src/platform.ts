@@ -265,3 +265,109 @@ export async function folderSizes(paths: string[]): Promise<([number, number] | 
   if (pretend) return paths.map(() => [123_456, 3]);
   return invoke<([number, number] | null)[]>("folder_sizes", { paths });
 }
+
+// ---------- Moving an app to another drive (B11, D141) ----------
+
+export type MoveHow =
+  | { how: "move"; link: boolean; folder: string; warnings: string[]; steps: string[] }
+  | { how: "guide"; by: string; steps: string[] }
+  | { how: "never"; why: string };
+export interface MoveTarget { drive: string; filesystem: string; free: number; total: number; removable: boolean; dest: string; why: string }
+export interface MoveOptions { how: MoveHow; targets: MoveTarget[] }
+export interface MoveAsk { name: string; publisher?: string; folder: string; dest?: string; game?: boolean }
+export interface MoveChecked { ok: boolean; why: string; bytes: number; files: number; free: number; removable: boolean }
+export type MoveStateId = "moving" | "waiting" | "done" | "moving_back" | "moved_back" | "failed";
+export interface MoveInfo {
+  id: string; app: string; source: string; dest: string; link: boolean; bytes: number; files: number; created: number; held: string;
+  state: MoveStateId; step?: string; why?: string; notes: string[];
+}
+
+/** A pretend mover for the browser checks: nothing on a disk. */
+class PretendMover {
+  moves: MoveInfo[] = [];
+  launcher: (name: string) => string | undefined = () => undefined;
+}
+let pretendMover: PretendMover | null = null;
+
+/** Browser checks only: pretend to move apps (`launcher` says which apps a launcher installed). */
+export function usePretendMoving(launcher: (name: string) => string | undefined): void {
+  pretendMover = new PretendMover();
+  pretendMover.launcher = launcher;
+}
+
+export async function movingAvailable(): Promise<boolean> {
+  if (pretendMover) return true;
+  if (!isDesktop()) return false;
+  return invoke<boolean>("moving_available");
+}
+
+export async function moveOptions(ask: MoveAsk): Promise<MoveOptions> {
+  if (pretendMover) {
+    const l = pretendMover.launcher(ask.name);
+    const leaf = ask.folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? ask.name;
+    const base = ask.game ? "Games" : "Apps";
+    const how: MoveHow = l === "steam"
+      ? { how: "guide", by: "Steam", steps: ["Open Steam and go to your Library.", `Right-click ${ask.name}, then Properties.`, "Open Installed Files, then Move install folder."] }
+      : { how: "move", link: !l, folder: ask.folder, warnings: [l ? `${ask.name}'s launcher must be told the new place after the move (the steps are shown).` : `Rhizome has not seen ${ask.name} moved before. Most apps keep working through the link; a few updaters do not. If it does not start, press Move it back.`], steps: l ? ["Open the launcher and pick the game.", "Use Locate game and pick the new folder.", "Start it. If it runs, come back and press It works."] : [] };
+    return { how, targets: [
+      { drive: "D", filesystem: "NTFS", free: 600e9, total: 1000e9, removable: false, dest: `D:\\${base}\\${leaf}`, why: "" },
+      { drive: "E", filesystem: "exFAT", free: 60e9, total: 64e9, removable: true, dest: `E:\\${base}\\${leaf}`, why: "formatted exFAT; apps can only go to an NTFS drive" },
+    ] };
+  }
+  return invoke<MoveOptions>("move_options", { ask });
+}
+
+export async function moveCheck(ask: MoveAsk): Promise<MoveChecked> {
+  if (pretendMover) {
+    const taken = pretendMover.moves.some((m) => m.dest.toLowerCase() === (ask.dest ?? "").toLowerCase() && m.state !== "moved_back" && m.state !== "failed");
+    return taken ? { ok: false, why: `${ask.dest} already exists; pick another place`, bytes: 0, files: 0, free: 0, removable: false } : { ok: true, why: "", bytes: 1.2e9, files: 840, free: 600e9, removable: false };
+  }
+  return invoke<MoveChecked>("move_check", { ask });
+}
+
+export async function moveStart(ask: MoveAsk, onProgress: (step: string, done: number, total: number) => void): Promise<MoveInfo> {
+  if (pretendMover) {
+    const total = 1.2e9;
+    for (const step of ["copy", "check"]) for (let k = 0; k <= 4; k++) { onProgress(step, (total * k) / 4, total); await new Promise((r) => setTimeout(r, 40)); }
+    const info: MoveInfo = { id: `m${pretendMover.moves.length + 1}`, app: ask.name, source: ask.folder, dest: ask.dest ?? "", link: !pretendMover.launcher(ask.name), bytes: total, files: 840, created: Date.now() / 1000, held: "(pretend)", state: "waiting", notes: [] };
+    pretendMover.moves.unshift(info);
+    return { ...info };
+  }
+  const ch = new Channel<[string, number, number]>();
+  ch.onmessage = ([s, d, t]) => onProgress(s, d, t);
+  return invoke<MoveInfo>("move_start", { ask, onProgress: ch });
+}
+
+export async function listMoves(): Promise<MoveInfo[]> {
+  if (pretendMover) return pretendMover.moves.map((m) => ({ ...m }));
+  if (!isDesktop()) return [];
+  return invoke<MoveInfo[]>("list_moves");
+}
+
+export async function moveConfirm(id: string): Promise<MoveInfo> {
+  if (pretendMover) {
+    const m = pretendMover.moves.find((x) => x.id === id);
+    if (!m || m.state !== "waiting") throw new Error("this move is not waiting for a check");
+    m.state = "done";
+    return { ...m };
+  }
+  return invoke<MoveInfo>("move_confirm", { id });
+}
+
+export async function moveBack(id: string, onProgress: (step: string, done: number, total: number) => void): Promise<MoveInfo> {
+  if (pretendMover) {
+    const m = pretendMover.moves.find((x) => x.id === id);
+    if (!m || (m.state !== "waiting" && m.state !== "done")) throw new Error("this move cannot be moved back now");
+    if (m.state === "done") for (let k = 0; k <= 4; k++) { onProgress("copy", (m.bytes * k) / 4, m.bytes); await new Promise((r) => setTimeout(r, 30)); }
+    m.state = "moved_back";
+    return { ...m };
+  }
+  const ch = new Channel<[string, number, number]>();
+  ch.onmessage = ([s, d, t]) => onProgress(s, d, t);
+  return invoke<MoveInfo>("move_back", { id, onProgress: ch });
+}
+
+export async function moveRecover(id: string): Promise<string> {
+  if (pretendMover) return "nothing needed finishing";
+  return invoke<string>("move_recover", { id });
+}

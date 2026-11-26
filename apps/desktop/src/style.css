@@ -725,3 +725,43 @@ html.look-calm .mark { border-color: var(--accent); }
 .detail-switch .quiet { flex-basis: 100%; margin: 0; padding-left: 44px; }
 .fr-head { display: grid; gap: 6px; justify-items: start; }
 .tools button { white-space: nowrap; }
+
+/* ---------- Moving an app to another drive (B11) ---------- */
+dialog.mv { width: min(620px, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); box-shadow: var(--float-shadow); }
+dialog.mv::backdrop { background: rgba(0, 0, 0, 0.35); }
+.mv-body { display: grid; gap: 12px; padding: 18px 20px 20px; overflow: auto; max-height: 88vh; }
+.mv-body header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mv-body h2 { margin: 0; font-size: var(--t4); }
+.mv-body h3 { margin: 4px 0 0; font-size: var(--t2); }
+.mv-body p { margin: 0; }
+.mv-x { border: 0; font-size: 20px; padding: 0 6px; }
+.mv-drives { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.mv-drive { display: grid; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 10px; background: var(--panel); }
+.mv-drive span { font-size: var(--t1); color: var(--text-2); }
+.mv-drive.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.mv-drive[disabled] { opacity: 0.55; cursor: not-allowed; }
+.mv-label { display: grid; gap: 4px; font-size: var(--t1); color: var(--text-2); }
+.mv-dest { font: inherit; font-family: var(--mono); padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.mv-check { display: grid; gap: 6px; min-height: 1.4em; }
+.mv-warn { margin: 0; padding-left: 18px; color: var(--probably); display: grid; gap: 4px; }
+.mv-how summary { cursor: pointer; color: var(--text-2); }
+.mv-how ol, .mv-steps { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.mv-buttons { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.mv-bar { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.mv-bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width var(--quick) linear; }
+.mv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.mv-list > li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.mv-list > li > div:first-child { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.mv-state { font-size: var(--t1); color: var(--text-2); }
+.mv-state.s-waiting, .mv-state.s-moving, .mv-state.s-moving_back { color: var(--probably); }
+.mv-state.s-done { color: var(--safe); }
+.mv-acts { display: flex; gap: 8px; }
+.ap-movenote { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.ap-movenote.s-waiting, .ap-movenote.s-moving, .ap-movenote.s-moving_back { border-color: color-mix(in srgb, var(--probably) 55%, var(--line)); }
+.ap-movenote span { flex: 1 1 260px; }
+.hm-move { display: grid; gap: 8px; padding: 14px 16px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--probably) 55%, var(--line)); background: var(--panel); }
+.hm-move p { margin: 0; }
+.hm-move .hm-lt { margin: 0; }
+.hm-move button { justify-self: start; }
+.fr-movable { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.fr-move { margin-right: 12px; }

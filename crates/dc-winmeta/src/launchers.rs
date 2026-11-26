@@ -11,7 +11,7 @@ use crate::model::{AppFlags, InstalledApp, RegistrySource};
 /// A game a launcher says it installed, and where.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LauncherGame {
-    /// "steam", "epic", "riot" or "hoyoplay".
+    /// "steam", "epic", "riot", "hoyoplay", "gog" or "ubisoft".
     pub launcher: String,
     /// The launcher's id for it (Steam app id, Epic app name, Riot product, HoYoPlay game id).
     pub id: String,
@@ -29,6 +29,8 @@ pub fn launcher_name(id: &str) -> &'static str {
         "epic" => "Epic Games",
         "riot" => "Riot Client",
         "hoyoplay" => "HoYoPlay",
+        "gog" => "GOG Galaxy",
+        "ubisoft" => "Ubisoft Connect",
         _ => "a game launcher",
     }
 }
@@ -139,6 +141,17 @@ pub fn riot_name(product: &str) -> String {
     }
 }
 
+/// The last part of a folder path (a game's name when its record has none).
+#[must_use]
+pub fn folder_name(folder: &str) -> Option<String> {
+    folder
+        .trim_end_matches(['\\', '/'])
+        .rsplit(['\\', '/'])
+        .next()
+        .filter(|n| !n.is_empty() && !n.ends_with(':'))
+        .map(str::to_owned)
+}
+
 /// Lower-case letters and digits only, for comparing names.
 fn plain(text: &str) -> String {
     text.chars()
@@ -159,6 +172,9 @@ fn same_game(app: &InstalledApp, game: &LauncherGame) -> bool {
     let by_record = match game.launcher.as_str() {
         "steam" => key == format!("steam app {id}"),
         "hoyoplay" => uninstall.contains(&format!("--uninstall_game={id}")) || key.starts_with(&id),
+        // GOG's installers register `<id>_is1`; Ubisoft's `Uplay Install <id>`.
+        "gog" => key == format!("{id}_is1"),
+        "ubisoft" => key == format!("uplay install {id}"),
         "riot" => {
             let product = id.split('.').next().unwrap_or_default();
             key.contains(&id) || uninstall.contains(&format!("--uninstall-product={product}"))
@@ -260,6 +276,33 @@ mod tests {
             None
         );
         assert_eq!(steam_manifest(r#""appid" "1""#), None);
+    }
+
+    #[test]
+    fn gog_and_ubisoft_records_join_their_uninstall_entries() {
+        let gog = LauncherGame {
+            launcher: "gog".into(),
+            id: "1207658924".into(),
+            name: Some("Unreal Gold".into()),
+            folder: r"D:\GOG Games\Unreal Gold".into(),
+        };
+        let ubi = LauncherGame {
+            launcher: "ubisoft".into(),
+            id: "635".into(),
+            name: folder_name(r"C:/Program Files (x86)/Ubisoft/Games/Far Cry 5/"),
+            folder: r"C:\Program Files (x86)\Ubisoft\Games\Far Cry 5".into(),
+        };
+        assert_eq!(ubi.name.as_deref(), Some("Far Cry 5"));
+        let mut apps = vec![
+            registered("1207658924_is1", "Unreal Gold", None),
+            registered("Uplay Install 635", "Far Cry 5", None),
+        ];
+        merge_launcher_games(&mut apps, &[gog, ubi]);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0].launcher.as_deref(), Some("gog"));
+        assert_eq!(apps[1].launcher.as_deref(), Some("ubisoft"));
+        assert_eq!(launcher_name("ubisoft"), "Ubisoft Connect");
+        assert_eq!(folder_name("D:\\"), None);
     }
 
     #[test]

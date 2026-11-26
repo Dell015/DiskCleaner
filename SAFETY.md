@@ -26,6 +26,15 @@ DiskCleaner inspects entire disks and advises on deletion, so safety rules come 
     never silently and never through a shell (`cmd.exe`, PowerShell and script hosts are refused).
     When the recorded command is doubtful it opens Windows' Installed apps page instead. Windows
     parts and runtimes other apps need are never offered. Only in the desktop app.
+11. **Moving an app to another drive copies first and deletes last** (B11, D141). The app is
+    copied to the other drive and every byte is compared before the original is touched; the
+    original is then moved (a rename on its own drive) into the holding folder, and a junction
+    is left at the old place. The original is deleted only when the person says the app works,
+    and only inside the holding folder; a copy that is not needed is moved into its own drive's
+    holding folder and deleted there. "Move back" is offered at any time. Each step is written
+    to a journal first, so a crash is finished or undone safely. Never moved: Windows, protected
+    places, drivers, Microsoft Store apps, Office, Visual Studio, folders with links or hard
+    links, apps that are in use. Off unless the desktop app is built with `--features moving`.
 
 ## Reporting a problem
 Please open a private security advisory on the repository rather than a public issue for anything

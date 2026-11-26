@@ -61,7 +61,7 @@ fn chain(ins: &Inspector, i: u32) -> Vec<u32> {
 
 /// The compiled-in protected list, checked on the text of a path only (the removal engine checks
 /// it again on the disk). The engine refuses everything on it, so it is Never here too.
-fn protected(path: &str) -> Option<String> {
+pub(crate) fn protected(path: &str) -> Option<String> {
     static LIST: OnceLock<ProtectedList> = OnceLock::new();
     let verdict = LIST
         .get_or_init(ProtectedList::builtin)
@@ -75,7 +75,7 @@ fn protected(path: &str) -> Option<String> {
 }
 
 /// Is `i`, or anything inside it, a file with more than one name?
-fn holds_hard_link(ins: &Inspector, i: u32) -> bool {
+pub(crate) fn holds_hard_link(ins: &Inspector, i: u32) -> bool {
     let mut stack = vec![i];
     while let Some(at) = stack.pop() {
         if ins.flags(at) & crate::view::flag::HARDLINK != 0 {

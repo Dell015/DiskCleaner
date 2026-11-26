@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use super::registry::{read_hoyoplay_games, steam_path};
+use super::registry::{read_gog_games, read_hoyoplay_games, read_ubisoft_games, steam_path};
 use crate::launchers::{
     epic_item, riot_name, riot_settings, steam_libraries, steam_manifest, LauncherGame,
 };
@@ -119,6 +119,22 @@ pub fn read_launcher_games(program_data: Option<String>) -> SourceReport<Vec<Lau
             launcher: "hoyoplay".into(),
             id,
             name: None,
+            folder,
+        });
+    }
+    for (id, name, folder) in read_gog_games() {
+        items.push(LauncherGame {
+            launcher: "gog".into(),
+            id,
+            name,
+            folder,
+        });
+    }
+    for (id, folder) in read_ubisoft_games() {
+        items.push(LauncherGame {
+            launcher: "ubisoft".into(),
+            name: crate::launchers::folder_name(&folder),
+            id,
             folder,
         });
     }

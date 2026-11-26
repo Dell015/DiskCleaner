@@ -40,6 +40,12 @@ export interface AppsHandlers {
   stillThere?(paths: string[]): Promise<boolean[]>;
   /** Size [bytes, files] of each folder now, or null when it is gone (no full scan). */
   folderSizes?(paths: string[]): Promise<([number, number] | null)[]>;
+  /** Can apps be moved to another drive from here (B11)? */
+  canMove?(): boolean;
+  /** Open the "Move to another drive" window for this app. */
+  moveApp?(owner: number): void;
+  /** A note about this app's earlier move (waiting for a check, moved), or null. */
+  moveNote?(name: string): HTMLElement | null;
   /** Remove folders an uninstalled app left behind (checked again by the removal rules). */
   removeLeftBehind?(app: string, paths: string[]): Promise<{ held: [string, number][]; skipped: [string, string][] }>;
 }
@@ -75,6 +81,8 @@ function launcherHow(launcher: string, game: string): string {
   if (l.includes("riot")) return `Open Riot Client, open Settings (top right), pick ${game} on the left, then click Uninstall.`;
   if (l.includes("steam")) return `In Steam's Library, right-click ${game}, then Manage → Uninstall.`;
   if (l.includes("epic")) return `In Epic Games Launcher's Library, click the ⋯ under ${game}, then Uninstall.`;
+  if (l.includes("gog")) return `In GOG Galaxy, open ${game}, click the settings icon next to Play, then Manage installation → Uninstall.`;
+  if (l.includes("ubisoft")) return `In Ubisoft Connect, open Games, right-click ${game}, then Uninstall.`;
   if (l.includes("hoyoplay")) return `In HoYoPlay, pick ${game}, open the menu next to Start Game, then Uninstall game.`;
   return `Uninstall ${game} from inside ${launcher}.`;
 }
@@ -424,8 +432,12 @@ export class AppsView {
     const actions = h("div", { class: "ap-actions" },
       h("button", { class: "primary", attrs: card.places.length === 0 ? { disabled: "" } : {}, onclick: () => this.on.showOnMap(owner) }, "Show on the map"),
       h("label", { class: "ap-kindlab" }, "Kind ", select),
-      this.on.kinds()[o.name] ? h("button", { onclick: () => { this.on.setKind(o.name, null); this.redraw(tree); } }, "Let Rhizome decide") : null);
-    const out: HTMLElement[] = [back, head, actions];
+      this.on.kinds()[o.name] ? h("button", { onclick: () => { this.on.setKind(o.name, null); this.redraw(tree); } }, "Let Rhizome decide") : null,
+      this.on.canMove?.() && o.kind === "app" && (o.folder || card.places.length) && kind !== "system"
+        ? h("button", { class: "ap-move", title: "Copy it to another drive, check every byte, and leave a link so it keeps working", onclick: () => this.on.moveApp?.(owner) }, "Move to another drive")
+        : null);
+    const note = this.on.moveNote?.(o.name) ?? null;
+    const out: HTMLElement[] = note ? [back, head, actions, note] : [back, head, actions];
     const un = this.uninstallSection(tree, owner, kind);
     if (un) out.push(un);
 

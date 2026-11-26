@@ -12,6 +12,9 @@
 //! - No `unwrap`, `expect` or `panic!` outside tests.
 //! - Uninstalling an app only ever starts that app's own recorded uninstaller, with its own
 //!   window, after the person confirms (`uninstall`, D133); never through a shell.
+//! - Moving an app to another drive (`mover`, B11, D141): copy, compare every byte, hold the
+//!   original, leave a junction; the original is deleted only after the person says it works,
+//!   and only inside a holding folder.
 //! - `unsafe` only in `win.rs` (Windows calls for checked moves and protected holding folders,
 //!   D119), each block with a `// SAFETY:` note.
 
@@ -24,6 +27,8 @@ mod check;
 mod engine;
 #[cfg(feature = "destructive-actions")]
 mod journal;
+#[cfg(feature = "destructive-actions")]
+pub mod mover;
 #[cfg(feature = "destructive-actions")]
 mod ops;
 #[cfg(feature = "destructive-actions")]
@@ -38,6 +43,8 @@ pub use engine::{Cleanup, Engine, Group, HeldItem, Item, Outcome, Restored, Skip
 #[cfg(feature = "destructive-actions")]
 pub use journal::Record;
 #[cfg(feature = "destructive-actions")]
-pub use ops::{Ops, RealOps};
+pub use mover::{MoveInfo, MoveRequest, MoveState, Mover, Plan};
+#[cfg(feature = "destructive-actions")]
+pub use ops::{drive_letters, MoveOps, Ops, RealOps, Volume};
 #[cfg(feature = "destructive-actions")]
 pub use places::{Guard, Places, ProtectedGuard, WindowsPlaces};

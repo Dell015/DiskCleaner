@@ -80,3 +80,38 @@ pub fn volume_usage(path: &std::path::Path) -> Option<(u64, u64)> {
         None
     }
 }
+
+/// Installed apps as Windows lists them right now, for moving (B11): name, publisher, install
+/// folder, launcher folders and launcher. Read-only; empty on other systems.
+#[must_use]
+pub fn apps_now() -> Vec<crate::moving::AppNow> {
+    installed_apps(false, false)
+        .map(|s| {
+            s.apps
+                .into_iter()
+                .filter(|a| !a.name.is_empty())
+                .map(|a| crate::moving::AppNow {
+                    name: a.name,
+                    publisher: a.publisher,
+                    folder: a.install_folder,
+                    launcher_folders: a.launcher_folders,
+                    launcher: a.launcher,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Programs that run in the background (Windows services and start-with-Windows entries), as
+/// (label, command). Read-only; empty on other systems.
+#[must_use]
+pub fn background_programs() -> Vec<(String, String)> {
+    #[cfg(windows)]
+    {
+        dc_winmeta::background_programs()
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
+}

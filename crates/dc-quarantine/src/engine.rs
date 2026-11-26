@@ -156,7 +156,7 @@ pub struct Engine<'a> {
     ops: &'a dyn Ops,
 }
 
-fn now() -> (i64, u32) {
+pub(crate) fn now() -> (i64, u32) {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or((0, 0), |d| {
@@ -164,7 +164,7 @@ fn now() -> (i64, u32) {
         })
 }
 
-fn plain(e: &io::Error) -> String {
+pub(crate) fn plain(e: &io::Error) -> String {
     match e.raw_os_error() {
         // Windows: access denied, sharing violation, lock violation.
         Some(5) if cfg!(windows) => {
@@ -377,7 +377,7 @@ const HOLDING_MOVED: &str =
     "its holding folder is a link or is not where it should be; nothing was moved";
 
 /// Is `path` a real folder (not a link) whose real location is the path itself?
-fn is_real_dir(path: &Path) -> bool {
+pub(crate) fn is_real_dir(path: &Path) -> bool {
     std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir() && !check::is_link(&m))
         && std::fs::canonicalize(path).is_ok_and(|real| same_key(&real) == same_key(path))
 }
@@ -399,12 +399,27 @@ impl<'a> Engine<'a> {
         }
     }
 
-    fn roots_file(&self) -> PathBuf {
+    /// Rhizome's data folder.
+    pub(crate) fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
+    /// Where held items go.
+    pub(crate) fn places(&self) -> &dyn Places {
+        self.places
+    }
+
+    /// The protected list.
+    pub(crate) fn guard(&self) -> &dyn Guard {
+        self.guard
+    }
+
+    pub(crate) fn roots_file(&self) -> PathBuf {
         self.data_dir.join("holding-roots.txt")
     }
 
     /// Only one removal, restore or emptying at a time, also across two DiskCleaner windows.
-    fn lock(&self) -> Result<File, String> {
+    pub(crate) fn lock(&self) -> Result<File, String> {
         self.ops
             .create_dir_all(&self.data_dir)
             .map_err(|e| format!("Rhizome's data folder cannot be used: {}", plain(&e)))?;
@@ -429,7 +444,7 @@ impl<'a> Engine<'a> {
         seen
     }
 
-    fn log(&self, action: &str, path: &Path, bytes: u64, why: &str) {
+    pub(crate) fn log(&self, action: &str, path: &Path, bytes: u64, why: &str) {
         let _ = self.ops.create_dir_all(&self.data_dir);
         let line =
             json!({ "time": now().0, "action": action, "path": path, "bytes": bytes, "why": why });
@@ -439,7 +454,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Is `path` (or something inside it) a holding folder or DiskCleaner's data folder?
-    fn touches_our_folders(&self, path: &Path, root: Option<&Path>) -> bool {
+    pub(crate) fn touches_our_folders(&self, path: &Path, root: Option<&Path>) -> bool {
         let mut ours: Vec<PathBuf> = self.roots();
         ours.push(self.data_dir.clone());
         if let Some(r) = root {
@@ -451,7 +466,7 @@ impl<'a> Engine<'a> {
     /// Make `dir` (and missing folders above it) only after checking that the nearest folder
     /// that exists is where it says it is: nothing is ever made inside a link's target. `why`
     /// is the reason given when the folder is not where it says.
-    fn safe_dir(&self, dir: &Path, why: &str) -> Result<(), String> {
+    pub(crate) fn safe_dir(&self, dir: &Path, why: &str) -> Result<(), String> {
         let mut probe = dir.to_path_buf();
         loop {
             match std::fs::symlink_metadata(&probe) {

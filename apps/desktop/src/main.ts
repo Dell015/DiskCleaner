@@ -20,7 +20,10 @@ import { makeDemo } from "./core/demo";
 import { checkView } from "./core/format";
 import { HomeView } from "./panels/home";
 import { GROUP_TEXT, yourFiles, type Group, type GroupId } from "./core/yours";
-import { appCards, type AppCard } from "./core/apps";
+import { appCards, biggestPlace, type AppCard } from "./core/apps";
+import { MoveWindow } from "./panels/move";
+import { listMoves, movingAvailable, usePretendMoving, type MoveInfo } from "./platform";
+import { appKind } from "./core/kinds";
 import { FreeView } from "./panels/free";
 import { ago } from "./core/inventory";
 import { byId, clear, h } from "./panels/dom";
@@ -283,6 +286,9 @@ const appsView = new AppsView(byId("appsView"), {
   stillThere: (paths) => pathsExist(paths),
   folderSizes: (paths) => folderSizes(paths),
   removeLeftBehind: (app, paths) => removeLeftBehind(app, paths),
+  canMove: () => movingOn,
+  moveApp: (owner) => openMove(owner),
+  moveNote: (name) => moveNote(name),
   kinds: () => settings.appKinds,
   setKind: (name, kind) => {
     if (kind) settings.appKinds[name] = kind;
@@ -317,6 +323,67 @@ function noteRemoved(list: CleanupInfo[]): void {
   if (changed && settings.view === "home") renderHome(true);
 }
 
+// ---------- Moving apps to another drive (B11, D141) ----------
+let movingOn = false;
+let movesNow: MoveInfo[] = [];
+const mover = new MoveWindow(() => void refreshMoves());
+
+/** Read the moves again and redraw what shows them. */
+async function refreshMoves(): Promise<void> {
+  if (!movingOn) return;
+  try {
+    movesNow = await listMoves();
+  } catch {
+    movesNow = [];
+  }
+  if (settings.view === "home") renderHome(true);
+  if (settings.view === "apps") renderAppsView(true);
+}
+
+/** Open the move window for an app of the scan. */
+function openMove(owner: number): void {
+  const tree = state.tree;
+  if (!tree) return;
+  const o = tree.owners[owner];
+  const place = biggestPlace(tree, owner);
+  const folder = o.folder ?? (place >= 0 ? tree.path(place) : "");
+  if (!folder) {
+    toast(`Windows has no folder recorded for ${o.name}.`);
+    return;
+  }
+  void mover.open({ name: o.name, publisher: o.publisher, folder, game: appKind(tree, owner, settings.appKinds) === "game" });
+}
+
+/** On an app's page: its latest move, if it needs or allows something. */
+function moveNote(name: string): HTMLElement | null {
+  const m = movesNow.find((x) => x.app === name && x.state !== "failed" && x.state !== "moved_back");
+  if (!m) return null;
+  const acts: HTMLElement[] = [];
+  if (m.state === "waiting") acts.push(h("button", { class: "primary", onclick: () => mover.waiting(m) }, "Check it now"));
+  if (m.state === "done") acts.push(h("button", { onclick: () => void mover.back(m) }, "Move it back"));
+  if (m.state === "moving" || m.state === "moving_back") acts.push(h("button", { class: "primary", onclick: () => void mover.list() }, "Finish safely"));
+  const text = m.state === "waiting" ? `Moved to ${m.dest}. Open it and check it works, then press It works.` : m.state === "done" ? `Moved to ${m.dest}.` : "Rhizome stopped while moving it. Finish it safely before anything else.";
+  return h("div", { class: `ap-movenote s-${m.state}` }, h("span", {}, text), ...acts);
+}
+
+async function setupMoving(): Promise<void> {
+  if (!isDesktop() && params.has("moving")) {
+    usePretendMoving((name) => {
+      const t = state.tree;
+      const o = t?.owners.find((x) => x.name === name);
+      return o?.launcher?.toLowerCase().replace(/[^a-z]/g, "") || undefined;
+    });
+  }
+  try {
+    movingOn = await movingAvailable();
+  } catch {
+    movingOn = false;
+  }
+  if (!movingOn) return;
+  await refreshMoves();
+  renderFlat();
+}
+
 const home = new HomeView(byId("home"), {
   kinds: () => settings.appKinds,
   freeUp: (step) => {
@@ -344,6 +411,9 @@ const home = new HomeView(byId("home"), {
   },
   overview: () => setViewMode("overview"),
   retention: () => settings.retention,
+  moves: () => (movingOn ? movesNow : []),
+  checkMove: (m) => (m.state === "waiting" ? mover.waiting(m) : void mover.list()),
+  openMoves: () => void mover.list(),
 });
 const free = new FreeView(byId("free"), {
   kinds: () => settings.appKinds,
@@ -365,6 +435,8 @@ const free = new FreeView(byId("free"), {
   appIcon: appIconEl,
   home: () => setViewMode("home"),
   retention: () => settings.retention,
+  canMove: () => movingOn,
+  moveApp: (owner) => openMove(owner),
 });
 (window as unknown as { __dc: unknown }).__dc = { state, view, settings, refresh: () => refresh(false), reveal: (n: number) => reveal(n), scanFolder: (p?: string) => scanFolder(p), setViewMode: (m: ViewMode) => setViewMode(m), goFolder: (i: number) => goFolder(i), curFolder: () => curFolder(), findDups: (w: number) => startDups(w) };
 // Development builds only: the smoke test calls the real removal path without clicking.
@@ -2663,7 +2735,7 @@ bindSettings();
 bindScan();
 applyViewMode();
 bindRemoving();
-void setupCleaning();
+void setupCleaning().then(() => setupMoving());
 document.documentElement.dataset.theme = isDark() ? "dark" : "light";
 // Labels are drawn on a canvas: redraw once the fonts have arrived.
 void document.fonts?.ready.then(() => view.relook());

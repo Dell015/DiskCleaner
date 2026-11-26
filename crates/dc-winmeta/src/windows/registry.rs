@@ -273,6 +273,79 @@ fn binary_values(key: &Key) -> Result<Vec<(String, Vec<u8>)>, u32> {
     Ok(out)
 }
 
+/// The names of the values of `key` (data not read).
+fn value_names(key: &Key) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut name = vec![0u16; VALUE_NAME_UNITS];
+    let mut index = 0u32;
+    while index < MAX_VALUES {
+        let mut name_len = u32::try_from(VALUE_NAME_UNITS).unwrap_or(16_384);
+        // SAFETY: `name` is writable for `name_len` UTF-16 units (its exact length); the
+        // reserved, type and data pointers are null (only the name is asked for); `key.0` is a
+        // valid open key. The call only reads the registry.
+        let status = unsafe {
+            RegEnumValueW(
+                key.0,
+                index,
+                name.as_mut_ptr(),
+                &mut name_len,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        match status {
+            ERROR_SUCCESS => {
+                let units = usize::try_from(name_len).unwrap_or(0).min(name.len());
+                out.push(String::from_utf16_lossy(&name[..units]));
+            }
+            // The end, or a key that cannot be read further: stop.
+            _ => break,
+        }
+        index += 1;
+    }
+    out
+}
+
+/// Windows services: where every service's program is.
+const SERVICES: &str = r"SYSTEM\CurrentControlSet\Services";
+/// Programs that start with Windows (per user and for everyone).
+const RUN: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+
+/// Programs that run in the background: every Windows service (`service: <name>`, its
+/// `ImagePath`) and every start-with-Windows entry (`startup: <name>`, its command). Read-only;
+/// missing keys are normal.
+pub fn read_background() -> Vec<(String, String)> {
+    use windows_sys::Win32::System::Registry::{
+        HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, KEY_WOW64_64KEY,
+    };
+    let mut out = Vec::new();
+    if let Ok(base) = open(HKEY_LOCAL_MACHINE, SERVICES, 0) {
+        for name in subkey_names(&base).unwrap_or_default() {
+            if let Ok(key) = open(HKEY_LOCAL_MACHINE, &format!(r"{SERVICES}\{name}"), 0) {
+                if let Some(image) = read_string(&key, "ImagePath") {
+                    out.push((format!("service: {name}"), image));
+                }
+            }
+        }
+    }
+    for (root, view) in [
+        (HKEY_CURRENT_USER, 0),
+        (HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY),
+        (HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY),
+    ] {
+        if let Ok(key) = open(root, RUN, view) {
+            for name in value_names(&key) {
+                if let Some(cmd) = read_string(&key, &name) {
+                    out.push((format!("startup: {name}"), cmd));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Read Windows' record of started programs for the current user (still encoded; decoded by
 /// [`crate::usage::resolve_usage`]). A missing key is normal; other failures become problems.
 pub fn read_user_assist() -> SourceReport<Vec<RawUsage>> {
@@ -347,6 +420,58 @@ pub fn read_hoyoplay_games() -> Vec<(String, String)> {
                     out.push((id, folder.replace('/', "\\")));
                 }
             }
+        }
+    }
+    out
+}
+
+/// GOG Galaxy's records (32-bit view of the machine key): every subkey of
+/// `SOFTWARE\GOG.com\Games` is a game (its id), with `path` (folder) and `gameName`.
+/// Returns (id, name, folder). Missing keys are normal. Value names to be confirmed on a PC
+/// with GOG games (N94).
+pub fn read_gog_games() -> Vec<(String, Option<String>, String)> {
+    use windows_sys::Win32::System::Registry::{HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY};
+    const GOG: &str = r"SOFTWARE\GOG.com\Games";
+    let mut out = Vec::new();
+    let Ok(base) = open(HKEY_LOCAL_MACHINE, GOG, KEY_WOW64_32KEY) else {
+        return out;
+    };
+    for id in subkey_names(&base)
+        .unwrap_or_default()
+        .into_iter()
+        .take(5000)
+    {
+        let Ok(key) = open(HKEY_LOCAL_MACHINE, &format!(r"{GOG}\{id}"), KEY_WOW64_32KEY) else {
+            continue;
+        };
+        if let Some(folder) = read_string(&key, "path") {
+            out.push((id, read_string(&key, "gameName"), folder.replace('/', "\\")));
+        }
+    }
+    out
+}
+
+/// Ubisoft Connect's records (32-bit view of the machine key): every subkey of
+/// `SOFTWARE\Ubisoft\Launcher\Installs` is a game (its id) with `InstallDir`. Returns (id,
+/// folder). Missing keys are normal.
+pub fn read_ubisoft_games() -> Vec<(String, String)> {
+    use windows_sys::Win32::System::Registry::{HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY};
+    const UBI: &str = r"SOFTWARE\Ubisoft\Launcher\Installs";
+    let mut out = Vec::new();
+    let Ok(base) = open(HKEY_LOCAL_MACHINE, UBI, KEY_WOW64_32KEY) else {
+        return out;
+    };
+    for id in subkey_names(&base)
+        .unwrap_or_default()
+        .into_iter()
+        .take(5000)
+    {
+        let Ok(key) = open(HKEY_LOCAL_MACHINE, &format!(r"{UBI}\{id}"), KEY_WOW64_32KEY) else {
+            continue;
+        };
+        if let Some(folder) = read_string(&key, "InstallDir") {
+            let folder = folder.replace('/', "\\");
+            out.push((id, folder.trim_end_matches('\\').to_owned()));
         }
     }
     out

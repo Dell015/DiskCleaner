@@ -10,6 +10,8 @@ import type { Tree } from "../core/tree";
 import { count, human } from "../core/util";
 import { GROUP_TEXT, yourFiles, type GroupId } from "../core/yours";
 import { clear, h } from "./dom";
+import type { MoveInfo } from "../platform";
+import { needsAttention } from "./move";
 
 export interface HomeHandlers {
   /** Kinds the person chose for apps. */
@@ -32,6 +34,12 @@ export interface HomeHandlers {
   overview(): void;
   /** How many days removed items can be put back. */
   retention(): number;
+  /** Apps moved to another drive (B11); empty when moving is off. */
+  moves?(): MoveInfo[];
+  /** Open a move that needs the person (check it, or finish it). */
+  checkMove?(m: MoveInfo): void;
+  /** The list of moved apps. */
+  openMoves?(): void;
 }
 
 /** Not used in this long counts as "not used lately". */
@@ -149,6 +157,14 @@ export class HomeView {
       list);
 
     const right = h("aside", { class: "hm-side" });
+    // Moved apps waiting for the person's check (or stopped in the middle): first, always.
+    const moves = this.on.moves?.() ?? [];
+    for (const m of moves.filter(needsAttention)) {
+      right.append(h("div", { class: "hm-move" },
+        h("p", { class: "hm-lt" }, m.state === "waiting" ? "Waiting for your check" : "A move did not finish"),
+        h("p", {}, m.state === "waiting" ? `${m.app} was moved to ${m.dest}. Does it work?` : `Rhizome stopped while moving ${m.app}. Finish it safely.`),
+        h("button", { class: "primary", onclick: () => this.on.checkMove?.(m) }, m.state === "waiting" ? "Check it" : "Finish safely")));
+    }
     right.append(h("div", { class: "hm-free" },
       h("p", {}, "Can be freed safely"),
       h("b", {}, human(f.freeable)),
@@ -165,6 +181,7 @@ export class HomeView {
     if (look.childElementCount > 1) right.append(look);
     const rm = this.on.removed();
     if (rm && rm.count > 0) right.append(h("button", { class: "hm-lrow hm-removed", onclick: () => this.on.showRemoved() }, h("span", {}, `Removed, can still be put back`), h("b", {}, `${count(rm.count)} · ${human(rm.bytes)}`)));
+    if (moves.length) right.append(h("button", { class: "hm-lrow hm-removed", onclick: () => this.on.openMoves?.() }, h("span", {}, "Moved apps"), h("b", {}, count(moves.filter((m) => m.state === "done" || m.state === "waiting").length))));
     right.append(h("p", { class: "quiet hm-tip" }, "Click anything to see what it is, where it is and when you last used it. More detail is one switch away."),
       h("button", { class: "textlink", onclick: () => this.on.overview() }, "All the numbers (detailed overview)"));
 

@@ -26,6 +26,10 @@ export interface FreeHandlers {
   appIcon(owner: number, name: string): HTMLElement;
   home(): void;
   retention(): number;
+  /** Can apps be moved to another drive here (B11)? */
+  canMove?(): boolean;
+  /** Open the move window for an app. */
+  moveApp?(owner: number): void;
 }
 
 const STEPS = ["Caches and leftovers", "Apps you don't use", "Big games"];
@@ -63,7 +67,7 @@ export class FreeView {
       steps);
     if (this.step === 1) page.append(...this.cleanup(tree, f.freeable));
     else if (this.step === 2) page.append(...this.appList(tree, now, f.unused, "These apps have not been started in over six months (as Windows records it). Open one to see what it keeps and to uninstall it with its own uninstaller.", "No app is known to be unused for six months. (Rhizome only knows for apps Windows records starts of.)"));
-    else page.append(...this.appList(tree, now, f.games, "Games are big and you may still play them: moving one to another drive frees C: without losing it. Moving apps comes in the next update; for now, open a game to see where it is, or uninstall it from its launcher.", "No games found in this scan."));
+    else page.append(...this.appList(tree, now, f.games, this.on.canMove?.() ? "Games are big and you may still play them: moving one to another drive frees space without losing it. Press Move next to a game (Rhizome copies it, checks every byte, and you test it before the old copy goes)." : "Games are big and you may still play them: moving one to another drive frees space without losing it. Moving is not switched on in this build yet; for now, open a game to see where it is, or uninstall it from its launcher.", "No games found in this scan.", true));
     const next = this.step < 3 ? h("button", { class: "primary", onclick: () => this.goAndShow(tree, now, this.step + 1) }, `Next: ${STEPS[this.step]}`) : h("button", { class: "primary", onclick: () => this.on.home() }, "Done");
     page.append(h("div", { class: "fr-nav" }, this.step > 1 ? h("button", { onclick: () => this.goAndShow(tree, now, this.step - 1) }, "Back") : h("span", {}), next));
     this.el.append(page);
@@ -111,17 +115,19 @@ export class FreeView {
   }
 
   /** Steps 2 and 3: apps, each opening its page. */
-  private appList(tree: Tree, now: number, cards: AppCard[], intro: string, none: string): HTMLElement[] {
+  private appList(tree: Tree, now: number, cards: AppCard[], intro: string, none: string, move = false): HTMLElement[] {
     if (!cards.length) return [h("p", { class: "lead" }, none)];
     const ul = h("ul", { class: "hm-list" });
     for (const c of [...cards].sort((a, b) => b.bytes - a.bytes)) {
       const o = tree.owners[c.owner];
-      ul.append(h("li", {}, h("button", { class: "hm-row", onclick: () => this.on.openApp(c.owner) },
+      const row = h("button", { class: "hm-row", onclick: () => this.on.openApp(c.owner) },
         this.on.appIcon(c.owner, o.name),
         h("span", { class: "hm-what" }, h("b", {}, o.name), h("span", {}, o.launcher ? `Installed by ${o.launcher}` : o.publisher ?? "")),
         h("span", { class: "hm-used" }, o.last_used ? `Used ${ago(o.last_used, now)}` : "Last use not known"),
         h("span", { class: "hm-size" }, human(c.bytes)),
-        h("span", { class: "hm-go", attrs: { "aria-hidden": "true" } }, "›"))));
+        h("span", { class: "hm-go", attrs: { "aria-hidden": "true" } }, "›"));
+      const canMove = move && this.on.canMove?.() && this.on.moveApp;
+      ul.append(h("li", { class: canMove ? "fr-movable" : "" }, row, canMove ? h("button", { class: "fr-move", onclick: () => this.on.moveApp?.(c.owner) }, "Move…") : null));
     }
     return [h("p", { class: "lead" }, intro), ul];
   }

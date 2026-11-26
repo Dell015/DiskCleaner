@@ -29,6 +29,8 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::State;
 
+mod moving;
+
 /// The disk jobs that are running: a scan and a duplicate search (one of each at a time; a new
 /// scan stops a duplicate search, so the disk is read by one job at a time).
 #[derive(Default)]
@@ -49,7 +51,7 @@ struct LastScan {
 
 /// Removing is decided from the latest scan; older than this, the disk may have changed too much
 /// (an app installed again, files moved), so a new scan is needed first.
-#[cfg_attr(not(feature = "cleaning"), allow(dead_code))]
+#[cfg_attr(not(any(feature = "cleaning", feature = "moving")), allow(dead_code))]
 const SCAN_FRESH_FOR: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 /// The newest scan's number: a scan thread keeps its result only if no newer scan started.
@@ -979,6 +981,14 @@ fn main() {
             cleaning::empty_expired,
             cleaning::expired_cleanups,
             cleaning::missing_holding,
+            moving::moving_available,
+            moving::move_options,
+            moving::move_check,
+            moving::move_start,
+            moving::list_moves,
+            moving::move_confirm,
+            moving::move_back,
+            moving::move_recover,
             smoke_report
         ])
         .run(tauri::generate_context!());

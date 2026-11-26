@@ -420,6 +420,61 @@ const check = (ok, what) => {
     check((await page.locator("#hits button.lib").count()) > 0, "search finds apps by name, without AI");
     await page.fill("#q", "");
 
+    // ---------- Moving an app to another drive (B11, pretend mover) ----------
+    await page.goto(base + "?demo=40000&view=apps&cleaning&moving");
+    await page.waitForFunction(() => document.querySelectorAll("#appsView .ap-card").length > 3, null, { timeout: 60000 });
+    await page.click("#appsView .ap-card:has(.nm:text-is('Visual Studio Code'))");
+    await page.waitForTimeout(200);
+    check(await page.locator("#appsView .ap-move").isVisible(), "an app's page offers Move to another drive");
+    await page.click("#appsView .ap-move");
+    await page.waitForSelector("dialog.mv .mv-drive.on");
+    check((await page.locator("dialog.mv .mv-drive[disabled]").count()) === 1 && (await page.locator("dialog.mv .mv-drive[disabled]").innerText()).includes("exFAT"), "drives that are not NTFS are shown but cannot be picked");
+    await page.waitForSelector("dialog.mv button.primary:not([disabled])");
+    check((await page.locator("dialog.mv .mv-dest").inputValue()).startsWith("D:\\Apps\\"), "the default new place is D:\\Apps\\<name>");
+    check((await page.locator("dialog.mv .mv-warn li").count()) >= 1, "warnings are shown before moving");
+    await shot("70-move-choose");
+    await page.click("dialog.mv button.primary");
+    await page.waitForSelector("dialog.mv h2:has-text('Does it work?')", { timeout: 10000 });
+    check(await page.locator("dialog.mv button:has-text('It works')").isVisible() && await page.locator("dialog.mv button:has-text('Move it back')").isVisible(), "after the move it asks: It works or Move it back");
+    await shot("71-move-check");
+    await page.click("dialog.mv button:has-text('Later')");
+    await page.waitForTimeout(200);
+    check((await page.locator("#appsView .ap-movenote.s-waiting").count()) === 1, "the app's page says it waits for a check");
+    await page.click("#viewSeg button[data-view='home']");
+    await page.waitForTimeout(300);
+    check((await page.locator("#home .hm-move").count()) === 1, "Home reminds about the check");
+    await page.click("#home .hm-move button");
+    await page.click("dialog.mv button:has-text('It works')");
+    await page.waitForSelector("dialog.mv h2:has-text('is moved')");
+    check(true, "It works deletes the old copy");
+    await page.click("dialog.mv button:has-text('Done')");
+    await page.waitForTimeout(200);
+    check((await page.locator("#home .hm-move").count()) === 0, "the reminder goes after It works");
+    await page.click("#home .hm-removed:has-text('Moved apps')");
+    await page.waitForSelector("dialog.mv .mv-list li");
+    await page.click("dialog.mv .mv-list button:has-text('Move it back')");
+    await page.waitForSelector("dialog.mv h2:has-text('is back')");
+    check(true, "a moved app can be moved back later");
+    await page.click("dialog.mv button:has-text('Done')");
+    // Free up space step 3 offers a Move button per game (an app moved to Games by the person).
+    await page.evaluate(() => { window.__dc.settings.appKinds["Visual Studio Code"] = "game"; });
+    await page.click("#viewSeg button[data-view='home']");
+    await page.click("#home .hm-task.primary");
+    await page.click("#free .fr-steps li >> nth=2");
+    await page.waitForTimeout(200);
+    check((await page.locator("#free .fr-move").count()) >= 1, "Free up space step 3 has a Move button per game");
+    await page.click("#free .fr-move >> nth=0");
+    await page.waitForSelector("dialog.mv .mv-dest");
+    check((await page.locator("dialog.mv .mv-dest").inputValue()).startsWith("D:\\Games\\"), "a game's default new place is D:\\Games\\<name>");
+    await page.click("dialog.mv button:has-text('Cancel')");
+    await page.evaluate(() => {
+      delete window.__dc.settings.appKinds["Visual Studio Code"];
+      // Views save the settings: take the test's kind out of the saved copy too.
+      const saved = JSON.parse(localStorage.getItem("dc-settings") || "{}");
+      if (saved.appKinds) delete saved.appKinds["Visual Studio Code"];
+      localStorage.setItem("dc-settings", JSON.stringify(saved));
+    });
+
     // ---------- Library (apps by kind, your files) ----------
     await page.goto(base + "?demo=40000&view=apps");
     await page.waitForFunction(() => document.querySelectorAll("#appsView .ap-card").length > 3, null, { timeout: 60000 });

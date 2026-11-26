@@ -261,6 +261,20 @@ Each phase has its own requirements and design in `docs/phases/`.
 - Threat model doc (`docs/threat-model.md`): helper IPC, prompt injection, malicious rule packs, path tricks, supply chain
 - Performance pass: profile scan/classify/store on a 5M-node synthetic tree and write results to `docs/perf.md`
 
+### Phase B11: Moving an app to another drive (`dc-quarantine::mover`, desktop feature `moving`)
+Why: the owner's request (2026-11-15, a new SSD): free the system drive without reinstalling.
+Plan `docs/phases/b11-move-apps/plan.md`, requirements and design in the same folder, D141.
+**Tasks**
+- Engine: check, copy, compare every byte, hold the original, junction, "It works", Move back,
+  journal and crash recovery; launcher games without a junction; tests with injected failures
+  and crashes (built 2026-11-26).
+- Screens: the move window, app page button and note, Home reminder and "Moved apps", Free up
+  space step 3 (built 2026-11-26).
+- Later: an elevated helper for apps in Program Files (needs the owner's okay: new elevated
+  capability); a list of apps known to move well; Epic/EA/GOG workarounds; Battle.net records.
+**Acceptance (you):** the test plan in `design.md` section 10 on your PC, then the `moving`
+switch is turned on by default.
+
 ### Phase R1: Releases people can trust (signing, release builds, store listing)
 Why: a new, unsigned Windows program gets antivirus false alarms (it happened to the owner's own
 build: N90) and SmartScreen's "Windows protected your PC" warning, and most people stop there (D137).

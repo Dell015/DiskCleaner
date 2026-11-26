@@ -26,6 +26,7 @@ pub mod icon;
 pub mod inspect;
 pub mod live;
 pub mod mcp;
+pub mod moving;
 pub mod report;
 pub mod system;
 pub mod view;

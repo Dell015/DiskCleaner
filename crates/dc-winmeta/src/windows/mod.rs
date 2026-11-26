@@ -93,3 +93,10 @@ impl SystemInfoSource for WindowsSource {
         launchers::read_launcher_games(self.env_var("PROGRAMDATA"))
     }
 }
+
+/// Programs that run in the background (Windows services and start-with-Windows entries), as
+/// (label, command). Read-only.
+#[must_use]
+pub fn background_programs() -> Vec<(String, String)> {
+    registry::read_background()
+}

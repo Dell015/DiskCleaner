@@ -22,7 +22,15 @@ npm run tauri dev     # first build takes several minutes; then a window opens
 
 Click **Scan folder** (or one of the suggested folders), and watch the graph grow while the disk is
 read. Findings and app owners appear when the scan is done. **Stop** keeps what was read.
-Nothing is changed or deleted.
+Scanning changes nothing; removing and uninstalling happen only after you pick and confirm.
+
+Moving apps to another drive (B11, D141) is not in normal builds yet. To try it:
+
+```powershell
+npm run tauri dev -- -- --features moving
+```
+
+A build with nothing that changes files: `npm run tauri dev -- -- --no-default-features`.
 
 ## Run it in a browser (view files and the demo)
 
@@ -70,9 +78,11 @@ apps/desktop/
                       apps (cards, places, roles), kinds (what kind each app is), yours (your files
                       by type), uninstall (the order to uninstall in), explain ("What is this?")
     graph/            drawing: sigma layers, layout, node design system (encode.ts), looks, graphics settings
-    panels/           side column, details drawer, key, Library (apps.ts, appnet.ts), small DOM helpers
+    panels/           Home (home.ts), Free up space (free.ts), the move window (move.ts), side column,
+                      details drawer, key, Library (apps.ts, appnet.ts), small DOM helpers
+    platform.ts       the desktop app's commands, and the pretend engines the browser checks use
     style.css
   tests/
-    unit/             vitest: format, tree, level of detail, search, demo, apps, library, cleanup, explain
+    unit/             vitest: format, tree, level of detail, search, demo, apps, library, cleanup, explain, home
     e2e/              browser checks and timing (Playwright)
 ```

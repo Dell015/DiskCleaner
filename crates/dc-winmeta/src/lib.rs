@@ -34,8 +34,8 @@ pub use apps::{build_snapshot, build_snapshot_with, listed_apps, BuildOptions, L
 pub use icon::{extract_icon, parse_icon_location, Icon};
 pub use label::app_labels;
 pub use launchers::{
-    epic_item, launcher_name, merge_launcher_games, riot_name, riot_settings, steam_libraries,
-    steam_manifest, LauncherGame,
+    epic_item, folder_name, launcher_name, merge_launcher_games, riot_name, riot_settings,
+    steam_libraries, steam_manifest, LauncherGame,
 };
 pub use lnk::{collect_shortcuts, parse_lnk, ParsedLink};
 pub use model::{
@@ -55,4 +55,4 @@ pub use usage::{
 #[cfg(windows)]
 pub use probe::{volume_space, WindowsProbe};
 #[cfg(windows)]
-pub use windows::WindowsSource;
+pub use windows::{background_programs, WindowsSource};

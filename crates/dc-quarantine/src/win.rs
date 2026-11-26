@@ -9,6 +9,9 @@
 //! - [`hide_and_protect`]: a new holding folder is hidden and only its owner, SYSTEM and
 //!   administrators may use it (a drive-root folder would otherwise inherit "Authenticated
 //!   Users: Modify" and other local users could plant links in it).
+//! - Moving an app (B11, D141): [`make_junction`] (a new folder made into a junction to the
+//!   app's new place), [`read_junction`] (where one points), [`open_alone`] (is a file in use?),
+//!   [`volume`] (file system, free space, removable or network), [`drive_letters`].
 
 use std::ffi::OsString;
 use std::io;
@@ -333,4 +336,247 @@ pub fn shell_open(target: &Path, args: Option<&str>) -> io::Result<()> {
         return Err(e);
     }
     Ok(())
+}
+
+// ---------- Moving an app (B11) ----------
+
+/// The `\??\D:\x` form a junction stores, from `D:\x` or `\\?\D:\x`.
+fn nt_target(target: &Path) -> io::Result<String> {
+    let text = target.to_string_lossy();
+    let plain = text
+        .strip_prefix(r"\\?\")
+        .unwrap_or(&text)
+        .replace('/', "\\");
+    let mut chars = plain.chars();
+    let ok = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.next() == Some(':')
+        && chars.next() == Some('\\');
+    if !ok {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a link can only point to a full path on a drive with a letter",
+        ));
+    }
+    Ok(plain)
+}
+
+/// Make a junction at `link` (a new, empty folder) pointing to the folder `target`.
+pub fn make_junction(link: &Path, target: &Path) -> io::Result<()> {
+    use windows_sys::Win32::Foundation::GENERIC_WRITE;
+    use windows_sys::Win32::Storage::FileSystem::{CreateDirectoryW, RemoveDirectoryW};
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+
+    let print = nt_target(target)?;
+    let data = crate::mover::mount_point_buffer(&print)?;
+    let name = wide(link);
+    // SAFETY: `name` is a NUL-terminated UTF-16 string that outlives the call; no security
+    // attributes (null). Fails when anything already exists at `link`.
+    if unsafe { CreateDirectoryW(name.as_ptr(), ptr::null()) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let set = || -> io::Result<()> {
+        // SAFETY: as above; the new folder itself is opened (not followed), for writing its
+        // reparse data; no template handle.
+        let h = unsafe {
+            CreateFileW(
+                name.as_ptr(),
+                GENERIC_WRITE,
+                0,
+                ptr::null(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                ptr::null_mut(),
+            )
+        };
+        if h == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        let h = Handle(h);
+        let len = u32::try_from(data.len()).map_err(|_| io::Error::other("link too long"))?;
+        let mut returned = 0u32;
+        // SAFETY: `data` is a complete REPARSE_DATA_BUFFER of `len` bytes that outlives the
+        // call; no output buffer; `returned` is writable; no overlapped I/O (null).
+        let ok = unsafe {
+            DeviceIoControl(
+                h.0,
+                FSCTL_SET_REPARSE_POINT,
+                data.as_ptr().cast(),
+                len,
+                ptr::null_mut(),
+                0,
+                &mut returned,
+                ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    };
+    if let Err(e) = set() {
+        // Take away the empty folder just made (RemoveDirectoryW refuses a folder that is not
+        // empty, so nothing else can go).
+        // SAFETY: `name` is NUL-terminated and outlives the call.
+        unsafe {
+            RemoveDirectoryW(name.as_ptr());
+        }
+        return Err(e);
+    }
+    Ok(())
+}
+
+const FSCTL_SET_REPARSE_POINT: u32 = 0x0009_00A4;
+const FSCTL_GET_REPARSE_POINT: u32 = 0x0009_00A8;
+/// MAXIMUM_REPARSE_DATA_BUFFER_SIZE.
+const REPARSE_MAX: usize = 16 * 1024;
+
+/// Where the junction at `link` points (`D:\x`); `Ok(None)` when `link` is not a reparse point;
+/// an error for any other kind of link (symbolic links, cloud files, ...).
+pub fn read_junction(link: &Path) -> io::Result<Option<PathBuf>> {
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+
+    let name = wide(link);
+    // SAFETY: `name` is NUL-terminated and outlives the call; the item itself is opened (not
+    // followed) only to read its attributes and reparse data; no template handle.
+    let h = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            ptr::null_mut(),
+        )
+    };
+    if h == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    let h = Handle(h);
+    if attributes(&h)? & FILE_ATTRIBUTE_REPARSE_POINT == 0 {
+        return Ok(None);
+    }
+    let mut buf = vec![0u8; REPARSE_MAX];
+    let mut returned = 0u32;
+    let size = u32::try_from(buf.len()).map_err(|_| io::Error::other("buffer"))?;
+    // SAFETY: no input buffer; `buf` is writable for `size` bytes; `returned` is writable; no
+    // overlapped I/O.
+    let ok = unsafe {
+        DeviceIoControl(
+            h.0,
+            FSCTL_GET_REPARSE_POINT,
+            ptr::null(),
+            0,
+            buf.as_mut_ptr().cast(),
+            size,
+            &mut returned,
+            ptr::null_mut(),
+        )
+    };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    buf.truncate(usize::try_from(returned).unwrap_or(0).min(REPARSE_MAX));
+    crate::mover::parse_mount_point(&buf)
+        .map(|t| Some(PathBuf::from(t)))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "it is a different kind of link than the one Rhizome makes",
+            )
+        })
+}
+
+/// Open `file` for reading with no sharing: fails with a sharing violation while any program
+/// has it open. Nothing is read or changed; the handle is closed at once.
+pub fn open_alone(file: &Path) -> io::Result<()> {
+    use windows_sys::Win32::Foundation::GENERIC_READ;
+    let name = wide(file);
+    // SAFETY: `name` is NUL-terminated and outlives the call; share mode 0 asks for the file
+    // alone; the item itself is opened (a link is not followed); no template handle.
+    let h = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            GENERIC_READ,
+            0,
+            ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            ptr::null_mut(),
+        )
+    };
+    if h == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    drop(Handle(h));
+    Ok(())
+}
+
+/// The drive holding `path`: file system, free space, removable or network.
+pub fn volume(path: &Path) -> io::Result<crate::ops::Volume> {
+    use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetVolumeInformationW};
+    const DRIVE_REMOVABLE: u32 = 2;
+    const DRIVE_REMOTE: u32 = 4;
+    let letter = crate::places::drive_of(path).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "it is not on a drive with a letter",
+        )
+    })?;
+    let root: Vec<u16> = format!("{letter}:\\")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut fs_name = [0u16; 64];
+    let fs_len = u32::try_from(fs_name.len()).unwrap_or(64);
+    // SAFETY: `root` is NUL-terminated; only the file system name is asked for, into
+    // `fs_name` (writable for `fs_len` units); every other output is null.
+    let ok = unsafe {
+        GetVolumeInformationW(
+            root.as_ptr(),
+            ptr::null_mut(),
+            0,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            fs_name.as_mut_ptr(),
+            fs_len,
+        )
+    };
+    let filesystem = if ok == 0 {
+        String::new()
+    } else {
+        let end = fs_name
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(fs_name.len());
+        String::from_utf16_lossy(&fs_name[..end])
+    };
+    let (mut avail, mut total, mut free_all) = (0u64, 0u64, 0u64);
+    // SAFETY: `root` is NUL-terminated; the three outputs are writable u64 values.
+    let ok = unsafe { GetDiskFreeSpaceExW(root.as_ptr(), &mut avail, &mut total, &mut free_all) };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: `root` is NUL-terminated.
+    let kind = unsafe { GetDriveTypeW(root.as_ptr()) };
+    Ok(crate::ops::Volume {
+        filesystem,
+        free: avail,
+        total,
+        removable: kind == DRIVE_REMOVABLE,
+        network: kind == DRIVE_REMOTE,
+    })
+}
+
+/// The drive letters Windows has right now (a bit mask read once; no drive is touched, so an
+/// empty card reader or DVD drive is not asked for a disk).
+pub fn drive_letters() -> Vec<char> {
+    use windows_sys::Win32::Storage::FileSystem::GetLogicalDrives;
+    // SAFETY: a plain call without arguments; it returns a bit mask (0 on failure).
+    let mask = unsafe { GetLogicalDrives() };
+    (0u8..26)
+        .filter(|k| mask & (1 << k) != 0)
+        .map(|k| char::from(b'A' + k))
+        .collect()
 }

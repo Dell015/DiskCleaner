@@ -6,7 +6,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Operations that change the disk.
 pub trait Ops: Sync {
@@ -92,6 +92,182 @@ impl Ops for RealOps {
             let _ = path;
             Ok(())
         }
+    }
+}
+
+/// What a drive is, for moving an app onto it (B11).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Volume {
+    /// File system name ("NTFS", "exFAT", "FAT32", ...); empty when unknown.
+    pub filesystem: String,
+    /// Bytes free for this user.
+    pub free: u64,
+    /// Bytes in all.
+    pub total: u64,
+    /// A USB stick or other removable drive.
+    pub removable: bool,
+    /// A mapped network drive.
+    pub network: bool,
+}
+
+/// The extra operations moving an app needs (B11, `mover`). Kept apart from [`Ops`] so removing
+/// cannot reach them.
+pub trait MoveOps: Ops {
+    /// Copy one file's bytes (and, where the system does it, its attributes and times) to a
+    /// new file `to`. Never replaces: `to` must not exist.
+    fn copy_file(&self, from: &Path, to: &Path) -> io::Result<()>;
+    /// Make a new folder (one level; it must not exist).
+    fn create_dir(&self, path: &Path) -> io::Result<()>;
+    /// Make a link at `link` (which must not exist) to the folder `target`: a junction on
+    /// Windows, a symbolic link elsewhere (tests only).
+    fn make_link(&self, link: &Path, target: &Path) -> io::Result<()>;
+    /// Where the link at `link` points; `Ok(None)` when `link` is not a link at all.
+    fn read_link(&self, link: &Path) -> io::Result<Option<PathBuf>>;
+    /// Remove the link at `link` (never what it points to). Callers check its target first.
+    fn remove_link(&self, link: &Path) -> io::Result<()>;
+    /// Can this file be opened by Rhizome alone right now? `Err` with "in use" (a sharing
+    /// violation) when a program has it open. Read access only; nothing is changed.
+    fn open_alone(&self, file: &Path) -> io::Result<()>;
+    /// The drive holding `path`.
+    fn volume(&self, path: &Path) -> io::Result<Volume>;
+    /// Which drive `path` is on (two paths with the same answer are on the same drive); `None`
+    /// when it cannot be told. Windows: the drive letter.
+    fn drive(&self, path: &Path) -> Option<String>;
+}
+
+impl MoveOps for RealOps {
+    fn copy_file(&self, from: &Path, to: &Path) -> io::Result<()> {
+        if fs::symlink_metadata(to).is_ok() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "something is already there",
+            ));
+        }
+        // Windows: CopyFileExW (copies attributes and times too).
+        fs::copy(from, to).map(|_| ())
+    }
+
+    fn create_dir(&self, path: &Path) -> io::Result<()> {
+        fs::create_dir(path)
+    }
+
+    fn make_link(&self, link: &Path, target: &Path) -> io::Result<()> {
+        #[cfg(windows)]
+        {
+            crate::win::make_junction(link, target)
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link)
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            let _ = (link, target);
+            Err(io::Error::other("links are not supported here"))
+        }
+    }
+
+    fn read_link(&self, link: &Path) -> io::Result<Option<PathBuf>> {
+        #[cfg(windows)]
+        {
+            crate::win::read_junction(link)
+        }
+        #[cfg(not(windows))]
+        {
+            let meta = fs::symlink_metadata(link)?;
+            if !meta.file_type().is_symlink() {
+                return Ok(None);
+            }
+            fs::read_link(link).map(Some)
+        }
+    }
+
+    fn remove_link(&self, link: &Path) -> io::Result<()> {
+        let meta = fs::symlink_metadata(link)?;
+        if !crate::check::is_link(&meta) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "it is not a link (nothing was removed)",
+            ));
+        }
+        #[cfg(windows)]
+        {
+            // A junction is a folder entry: RemoveDirectoryW removes the link, never its target.
+            fs::remove_dir(link)
+        }
+        #[cfg(not(windows))]
+        {
+            fs::remove_file(link)
+        }
+    }
+
+    fn open_alone(&self, file: &Path) -> io::Result<()> {
+        #[cfg(windows)]
+        {
+            crate::win::open_alone(file)
+        }
+        #[cfg(not(windows))]
+        {
+            File::open(file).map(|_| ())
+        }
+    }
+
+    fn drive(&self, path: &Path) -> Option<String> {
+        #[cfg(windows)]
+        {
+            crate::places::drive_of(path).map(String::from)
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            // The nearest folder that exists, and its device.
+            let mut p = path.to_path_buf();
+            loop {
+                if let Ok(m) = fs::symlink_metadata(&p) {
+                    return Some(m.dev().to_string());
+                }
+                if !p.pop() {
+                    return None;
+                }
+            }
+        }
+        #[cfg(not(any(windows, unix)))]
+        {
+            let _ = path;
+            None
+        }
+    }
+
+    fn volume(&self, path: &Path) -> io::Result<Volume> {
+        #[cfg(windows)]
+        {
+            crate::win::volume(path)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = path;
+            // Tests only: an NTFS-like drive with plenty of room.
+            Ok(Volume {
+                filesystem: "NTFS".to_owned(),
+                free: u64::MAX / 4,
+                total: u64::MAX / 2,
+                removable: false,
+                network: false,
+            })
+        }
+    }
+}
+
+/// The drive letters there are right now (Windows; elsewhere none).
+#[must_use]
+pub fn drive_letters() -> Vec<char> {
+    #[cfg(windows)]
+    {
+        crate::win::drive_letters()
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
     }
 }
 

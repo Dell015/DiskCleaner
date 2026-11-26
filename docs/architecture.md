@@ -14,8 +14,8 @@ Rust Cargo workspace plus the desktop app (`apps/desktop`), which talks to the b
 | `dc-leftovers` | Leftovers of uninstalled apps |
 | `dc-store` | SQLite persistence, snapshots, diffs |
 | `dc-advisor` | Metadata-only AI layer, escalate-only (safety-critical) |
-| `dc-quarantine` | Quarantine/restore, feature-gated (safety-critical) |
-| `dc-api` | What the app needs: live scans with events, the shared checks, the view format |
+| `dc-quarantine` | Removing (holding folder, restore, empty), uninstalling through an app's own uninstaller, moving an app to another drive (`mover`); feature-gated (safety-critical) |
+| `dc-api` | What the app needs: live scans with events, the shared checks, the view format, what may be removed (`cleanup`) or moved (`moving`), the AI connection (`mcp`) |
 | `dc-cli` | Binary `dc` |
 | `tools/fixture-gen` | Deterministic dummy-data generator for tests |
 
@@ -34,7 +34,8 @@ DiskCleaner/
   rules/              rule packs (data): junk/ cleanup rules, apps/ well-known apps
   apps/desktop/       graph view (Vite + TypeScript + sigma.js); src-tauri/ is the desktop window (crate dc-desktop)
   tools/fixture-gen/  dummy-data generator for tests
-  docs/               architecture, decisions, notes, per-phase plans
+  tools/check-all.ps1 every check in one command, on Windows
+  docs/               architecture, decisions, notes, per-phase plans, review/ (start a review here)
   data/               your own scans and view files (ignored by git)
   fixtures/           generated test trees (ignored by git)
   .github/workflows/  CI
