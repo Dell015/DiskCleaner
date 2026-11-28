@@ -45,11 +45,11 @@ export interface HomeHandlers {
 /** Not used in this long counts as "not used lately". */
 export const UNUSED_SECS = 182 * 86_400;
 
-const BAR: { id: Bucket; label: string; color: string }[] = [
+const BAR: { id: Bucket; label: string; color: string; about?: string }[] = [
   { id: "apps", label: "Apps", color: "var(--accent)" },
   { id: "yours", label: "Your files", color: "#e08a3c" },
   { id: "windows", label: "Windows", color: "#5b6b8c" },
-  { id: "other", label: "Other", color: "var(--line)" },
+  { id: "other", label: "Other", color: "var(--line)", about: "Space no app claims, outside your own folders: tools unpacked by hand, old copies, game libraries outside Program Files." },
 ];
 
 interface Thing {
@@ -125,7 +125,7 @@ export class HomeView {
       bar.append(part);
       const dot = h("span", { class: "dot" });
       dot.style.background = b.color;
-      legend.append(h("span", {}, dot, `${b.label} `, h("b", {}, human(f.buckets[b.id]))));
+      legend.append(h("span", b.about ? { attrs: { title: b.about } } : {}, dot, `${b.label} `, h("b", {}, human(f.buckets[b.id]))));
     }
     page.append(h("section", { class: "hm-head" },
       h("p", { class: "quiet" }, `${names.join(", ") || "Scan"} · ${scanned}`),
@@ -153,7 +153,7 @@ export class HomeView {
         h("span", { class: "hm-go", attrs: { "aria-hidden": "true" } }, "›"))));
     }
     const left = h("section", { class: "hm-main" },
-      h("div", { class: "hm-h2" }, h("h2", {}, "Biggest things"), h("button", { class: "textlink", onclick: () => this.on.biggest() }, "See everything")),
+      h("div", { class: "hm-h2" }, h("h2", {}, "Biggest things")),
       list);
 
     const right = h("aside", { class: "hm-side" });
@@ -174,16 +174,11 @@ export class HomeView {
     const lookRow = (label: string, value: string, onclick: () => void): HTMLElement => h("button", { class: "hm-lrow", onclick }, h("span", {}, label), h("b", {}, value));
     if (f.unused.length) look.append(lookRow("Apps not used in 6+ months", `${count(f.unused.length)} · ${human(f.unusedBytes)}`, () => this.on.freeUp(2)));
     if (f.games.length) look.append(lookRow("Games you could move to another drive", human(f.gamesBytes), () => this.on.freeUp(3)));
-    const archives = yourFiles(tree).find((g) => g.id === "archives");
-    if (archives) look.append(lookRow(GROUP_TEXT.archives.title, human(archives.bytes), () => this.on.openGroup("archives")));
-    const downloads = yourFiles(tree).find((g) => g.id === "downloads");
-    if (downloads) look.append(lookRow(GROUP_TEXT.downloads.title, human(downloads.bytes), () => this.on.openGroup("downloads")));
     if (look.childElementCount > 1) right.append(look);
     const rm = this.on.removed();
     if (rm && rm.count > 0) right.append(h("button", { class: "hm-lrow hm-removed", onclick: () => this.on.showRemoved() }, h("span", {}, `Removed, can still be put back`), h("b", {}, `${count(rm.count)} · ${human(rm.bytes)}`)));
     if (moves.length) right.append(h("button", { class: "hm-lrow hm-removed", onclick: () => this.on.openMoves?.() }, h("span", {}, "Moved apps"), h("b", {}, count(moves.filter((m) => m.state === "done" || m.state === "waiting").length))));
-    right.append(h("p", { class: "quiet hm-tip" }, "Click anything to see what it is, where it is and when you last used it. More detail is one switch away."),
-      h("button", { class: "textlink", onclick: () => this.on.overview() }, "All the numbers (detailed overview)"));
+    right.append(h("button", { class: "textlink", onclick: () => this.on.overview() }, "All the numbers"));
 
     page.append(h("div", { class: "hm-cols" }, left, right));
     this.el.append(page);
@@ -216,7 +211,7 @@ export class HomeView {
         name: g.id === "projects" ? "Your code projects" : `Your ${t.title.toLowerCase()}`,
         sub: `${count(g.files)} files · ${g.kinds.slice(0, 2).map((k) => k.label.toLowerCase()).join(", ")}`,
         bytes: g.bytes,
-        used: "Your own files",
+        used: "",
         usedTone: "",
         icon: h("span", { class: "ap-icon letter", attrs: { "aria-hidden": "true" } }, t.mark),
         open: () => this.on.openGroup(g.id),

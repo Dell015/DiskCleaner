@@ -15,9 +15,9 @@
     <nav id="crumbs" aria-label="Where you are"></nav>
     <div class="seg viewseg" id="viewSeg" role="group" aria-label="How to look">
       <button data-view="home" title="How full the drive is, what to do, and the biggest things">Home</button>
-      <button data-view="apps" title="Your apps by kind (games, launchers, developer tools, ...) and your own files by type (videos, pictures, documents, code projects, ...)">Library</button>
-      <button data-view="files" title="A simple list of folders and files, biggest first">Files</button>
-      <button data-view="map" title="The node map: every folder as a node, sized by its space">Map</button>
+      <button data-view="apps" title="Your apps and your own files (videos, pictures, documents...)">Library</button>
+      <button data-view="files" title="Every folder and file, biggest first">Files</button>
+      <button data-view="map" title="Every folder drawn as a circle, sized by its space">Map</button>
     </div>
     <div class="search">
       <input id="q" type="search" placeholder="Search apps, folders and files" autocomplete="off" spellcheck="false" aria-label="Search apps, folders and files (works without AI)" title="Searches names, paths, apps and kinds of files on this computer. Works without AI.">
@@ -25,12 +25,17 @@
       <div id="hits" role="listbox" hidden></div>
     </div>
     <div class="tools">
-      <button id="scanBtn" class="primary" title="Pick a folder and watch it fill in" hidden>Scan folder</button>
-      <button id="saveBtn" title="Save this scan as a file you can open again later" hidden>Save scan</button>
-      <button id="open" title="Open a saved scan, or a file made by dc view-data">Open file</button>
-      <button id="demo" title="Load a made-up disk">Demo</button>
+      <button id="scanBtn" class="primary" title="Look at a drive or folder again" hidden>Scan</button>
       <button id="settingsBtn" aria-haspopup="dialog">Settings</button>
-      <button id="panelToggle" class="narrow-only">Findings</button>
+      <details class="more" id="moreMenu">
+        <summary aria-label="More">More</summary>
+        <div class="more-menu" role="menu">
+          <button id="panelToggle" role="menuitem" title="The full list of what can go, and what was removed">Clean-up list</button>
+          <button id="saveBtn" role="menuitem" title="Save this scan as a file you can open again later" hidden>Save this scan</button>
+          <button id="open" role="menuitem" title="Open a scan you saved before">Open a saved scan</button>
+          <button id="demo" role="menuitem" title="Look around with a made-up computer">Try the demo</button>
+        </div>
+      </details>
       <input id="file" type="file" accept=".json,application/json" hidden>
     </div>
   </header>
@@ -100,7 +105,7 @@
   </main>
   <aside id="side">
     <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="findings" class="on" aria-selected="true">Findings</button>
+      <button role="tab" data-tab="findings" class="on" aria-selected="true">Clean-up</button>
       <button role="tab" data-tab="apps" aria-selected="false">Apps</button>
       <button role="tab" data-tab="unread" aria-selected="false" id="unreadTab" hidden>Not read</button>
       <button role="tab" data-tab="removed" aria-selected="false" id="removedTab" hidden>Removed</button>
@@ -141,28 +146,8 @@
   <dialog id="settings" aria-label="Settings">
     <form method="dialog" id="settingsForm">
       <header><h2>Settings</h2><button value="close" aria-label="Close">×</button></header>
-      <fieldset><legend>Look</legend><div id="styles" class="choices"></div></fieldset>
-      <fieldset><legend>Theme</legend>
-        <div class="seg" id="themes"><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="light">Light</button><button type="button" data-theme="system">System</button></div>
-      </fieldset>
-      <fieldset><legend>Sizes</legend>
-        <div class="seg" id="units" role="group" aria-label="How sizes are written">
-          <button type="button" data-units="windows" title="Counted in 1024s, written GB and MB, the same numbers File Explorer shows">Like Windows (GB)</button>
-          <button type="button" data-units="binary" title="Counted in 1024s, written GiB and MiB, the precise names">Precise (GiB)</button>
-          <button type="button" data-units="decimal" title="Counted in 1000s, written GB and MB, the way drives are sold">Like drive boxes (GB)</button>
-        </div>
-        <p class="quiet" id="unitsNote"></p>
-      </fieldset>
-      <fieldset><legend>Graphics</legend>
-        <div class="seg" id="presets"></div>
-        <p class="quiet" id="presetNote"></p>
-        <label class="opt"><input type="checkbox" id="q-glow"> Glow on the biggest folders and the selection</label>
-        <label class="opt"><input type="checkbox" id="q-blur"> Blur what is unrelated to the selection</label>
-        <label class="opt"><input type="checkbox" id="q-curved"> Curved links</label>
-        <label class="opt"><input type="checkbox" id="q-pulses"> Light pulses while scanning</label>
-        <label class="opt">Motion <select id="q-motion"><option value="full">Full</option><option value="reduced">Reduced</option><option value="off">Off</option></select></label>
-        <label class="opt">Detail <input type="range" id="q-budget" min="300" max="5000" step="100"> <output id="q-budget-out"></output></label>
-        <label class="opt">Names <input type="range" id="q-labels" min="0.2" max="1" step="0.05"></label>
+      <fieldset><legend>Light or dark</legend>
+        <div class="seg" id="themes"><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="light">Light</button><button type="button" data-theme="system">Like Windows</button></div>
       </fieldset>
       <fieldset id="removingBox" hidden><legend>Removing</legend>
         <p class="quiet">Removed items wait in a holding folder on the same drive, then are deleted for good after:</p>
@@ -178,7 +163,7 @@
         <label class="opt"><input type="checkbox" id="lastUsed"> Show when apps were last used</label>
         <p class="quiet">Reads Windows' own record of programs you started from the Start menu, the taskbar or Explorer. Read-only; it never leaves this computer. Applies to the next scan.</p>
         <label class="opt"><input type="checkbox" id="keepReport"> Keep a report of my latest scan</label>
-        <p class="quiet">A summary page (sizes, owners, verdicts; never what is inside your files) kept in Rhizome's own folder, for you and, if you allow it below, your AI assistant.</p>
+        <p class="quiet">A summary page (sizes, which app owns what, what can go; never what is inside your files) kept in Rhizome's own folder, for you and, if you allow it below, your AI assistant.</p>
       </fieldset>
       <fieldset id="aiBox"><legend>AI assistant</legend>
         <p class="quiet">Ask your own AI about your disk: "is this safe to delete?", "what breaks if I move this?", "which apps don't I use?". It reads the latest scan report; it can never delete or move anything. No account or API key needed in Rhizome.</p>
@@ -204,10 +189,33 @@
         </div>
         <p class="quiet" id="aiBrowser" hidden>Available in the desktop app.</p>
       </fieldset>
+      <details class="adv">
+        <summary>More settings (the map's look, size units, graphics)</summary>
+      <fieldset><legend>Style</legend><div id="styles" class="choices"></div></fieldset>
+      <fieldset><legend>Sizes</legend>
+        <div class="seg" id="units" role="group" aria-label="How sizes are written">
+          <button type="button" data-units="windows" title="Counted in 1024s, written GB and MB, the same numbers File Explorer shows">Like Windows (GB)</button>
+          <button type="button" data-units="binary" title="Counted in 1024s, written GiB and MiB, the precise names">Precise (GiB)</button>
+          <button type="button" data-units="decimal" title="Counted in 1000s, written GB and MB, the way drives are sold">Like drive boxes (GB)</button>
+        </div>
+        <p class="quiet" id="unitsNote"></p>
+      </fieldset>
+      <fieldset><legend>Graphics</legend>
+        <div class="seg" id="presets"></div>
+        <p class="quiet" id="presetNote"></p>
+        <label class="opt"><input type="checkbox" id="q-glow"> Glow on the biggest folders and the selection</label>
+        <label class="opt"><input type="checkbox" id="q-blur"> Blur what is unrelated to the selection</label>
+        <label class="opt"><input type="checkbox" id="q-curved"> Curved links</label>
+        <label class="opt"><input type="checkbox" id="q-pulses"> Light pulses while scanning</label>
+        <label class="opt">Motion <select id="q-motion"><option value="full">Full</option><option value="reduced">Reduced</option><option value="off">Off</option></select></label>
+        <label class="opt">Detail <input type="range" id="q-budget" min="300" max="5000" step="100"> <output id="q-budget-out"></output></label>
+        <label class="opt">Names <input type="range" id="q-labels" min="0.2" max="1" step="0.05"></label>
+      </fieldset>
       <fieldset><legend>Picture</legend>
         <button type="button" id="savePic">Save picture of the graph</button>
         <p class="quiet">Press H to hide everything but the graph.</p>
       </fieldset>
+      </details>
     </form>
   </dialog>
 </div>

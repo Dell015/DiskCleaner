@@ -2628,8 +2628,17 @@ function bind(): void {
   });
   byId("skip").addEventListener("click", finishReplay);
   byId("panelToggle").addEventListener("click", () => {
-    if (app.classList.contains("calm")) app.classList.toggle("show-side");
-    else app.classList.toggle("no-side");
+    // Open the side panel at the clean-up list (calm views hide it until asked).
+    app.classList.add("show-side");
+    app.classList.remove("no-side");
+    closeDrawer();
+    setTab("findings");
+  });
+  // The More menu closes after a choice, and when clicking anywhere else.
+  const more = byId("moreMenu") as HTMLDetailsElement;
+  more.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { more.open = false; }));
+  document.addEventListener("click", (e) => {
+    if (more.open && !more.contains(e.target as Node)) more.open = false;
   });
   document.querySelectorAll<HTMLButtonElement>("#viewSeg button").forEach((b) =>
     b.addEventListener("click", () => setViewMode((b.dataset.view ?? "files") as ViewMode)));

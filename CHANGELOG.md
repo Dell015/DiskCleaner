@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+### Easier to use (D146)
+- Plainer words everywhere: Clean-up (was Findings), Can go / Look only / Kept, "Can it go?", "What's in here?". Fewer buttons in the top bar (Save, Open, the demo and the clean-up list are under **More**). Home no longer repeats the same items twice. Library names are no longer cut off. Settings shows the everyday choices first; the rest are under "More settings".
+
 ### Looking at your files (D143, D144)
 - A preview window inside Rhizome: videos and music play, pictures and PDFs show, text shows its start, with Previous/Next and Show in Files. From a file's details (Play / View) and from Your files in the Library (Play all for a folder). Read-only; only files the latest scan saw; links and cloud-only files are not opened.
 - Same-named apps are told apart: websites installed as apps by a browser say "web app in Brave" (the second, tiny "Spotify"); other duplicates show their publisher or place.

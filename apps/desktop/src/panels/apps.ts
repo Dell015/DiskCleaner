@@ -307,7 +307,7 @@ export class AppsView {
       const o = tree.owners[c.owner];
       const size = c.bytes > 0 ? human(c.bytes) : o.stated_bytes ? `~${human(o.stated_bytes)}` : "";
       let sub = c.bytes > 0
-        ? `${count(c.places.length)} place${c.places.length === 1 ? "" : "s"} · used ${ago(o.last_used, this.now)}`
+        ? `${c.places.length > 1 ? `${count(c.places.length)} places · ` : ""}${o.last_used ? `used ${ago(o.last_used, this.now)}` : "last use not known"}`
         : o.folder ?? "no folder recorded";
       // A launcher says what it installed; a game says where it came from.
       if (kinds.get(c.owner) === "launcher") {

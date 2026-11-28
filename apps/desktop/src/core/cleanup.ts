@@ -70,7 +70,7 @@ export function eligibility(tree: Tree, i: number): Eligibility {
     if (m.offered) {
       if (m.risk === "safe") return { group: "safe", why: m.title, reason: m.reason };
       if (m.risk === "probably_safe") return { group: "probably_safe", why: m.title, reason: m.reason };
-      return never("its verdict is Don't touch");
+      return never("it is marked Don't touch");
     }
   }
   const o = tree.owner[i];

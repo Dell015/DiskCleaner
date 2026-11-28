@@ -38,6 +38,7 @@ Default: **on** unless it says otherwise. "Desktop" = the Windows app; "browser"
 | "What is this?" (≈95 places) | What it is, if deleted, how to free | `core/explain.ts` | D136, N89 | `tests/unit/explain.test.ts` | Details of `AppData\Local\Temp` |
 | Preview window | Play videos and music, view pictures, PDFs, text (read-only) | `src-tauri/src/viewer.rs`, `panels/viewer.ts`, `core/view.ts` | D143 | `viewer.rs` unit tests; browser check "preview" | Library → Videos → ▶ Play all; a file's details → Play |
 | Same-named apps | "web app in Brave", or publisher/place | `core/kinds.ts` `webAppOf`, `panels/apps.ts` | D144 | `library.test.ts` | Library: the two Spotify cards |
+| Plain words, More menu | Top bar: Scan, Settings, More; Clean-up / Can go / Look only / Kept | `index.html`, `main.ts`, `panels/*.ts` | D146; `docs/qa/2026-11-28-qa.md` | browser check "More menu" | Open More: Clean-up list, Save, Open, Try the demo |
 | Search (no AI) | Names, paths, apps, kinds of your files | `main.ts` `runSearch`, `searchLibrary`; `core/search.ts` | D140 | browser check "search finds apps" | Type `steam`, then `screenshots` |
 | Your AI (MCP), opt-in, **off by default** | Settings → let my AI read my latest scan | `dc-api/src/mcp.rs`, `datadir.rs` | D-series in "Your own AI" (CHANGELOG) | `cargo test -p dc-api mcp` | Settings: off by default; the log shows what was asked |
 | Scan report | Kept in Rhizome's data folder (on by default, Settings) | `dc-api/src/report.rs` | CHANGELOG | `cargo test -p dc-api report` | Settings → Copy the report |
@@ -108,7 +109,7 @@ build container cannot compile for Windows; N91, N93).
 
 | Setting | Default |
 |---|---|
-| Look | Calm, light (Settings has the other looks) |
+| Look | Calm, light (Settings → More settings has the other looks) |
 | First view | Home |
 | Details panel | Simple (Show details off) |
 | Size units | Windows' (GB as Windows counts) |
@@ -126,5 +127,6 @@ build container cannot compile for Windows; N91, N93).
 - B11: compile on Windows; run the test plan (design section 10); then switch `moving` on.
   Program Files apps need an elevated helper (owner's decision).
 - B7 fast scan; the new map concept; more launchers (EA, Battle.net records); confirm GOG and Ubisoft (N94).
+- Make the Files view's side panel calm (D146, open).
 - `docs/review/worklog-2026-11-26.md` lists everything done in the night session of
   2026-11-26, step by step.

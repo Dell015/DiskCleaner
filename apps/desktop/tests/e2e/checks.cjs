@@ -150,6 +150,7 @@ const check = (ok, what) => {
     await page.click(".tabs button[data-tab=apps]");
     check((await page.locator("#tab-apps .rows li").count()) > 3, "apps tab lists apps");
     await page.click("#settingsBtn");
+    await page.evaluate(() => { const d = document.querySelector("#settings details.adv"); if (d) d.open = true; });
     await page.click('#themes button[data-theme="light"]');
     await page.waitForTimeout(400);
     await shot("08a-light");
@@ -210,6 +211,7 @@ const check = (ok, what) => {
     check(sizes.length > 3, `the list shows the folder's contents (${sizes.length} rows)`);
     check(/ (GB|MB)$/.test(sizes[0]), `sizes are written like Windows by default (${sizes[0]})`);
     await page.click("#settingsBtn");
+    await page.evaluate(() => { const d = document.querySelector("#settings details.adv"); if (d) d.open = true; });
     await page.click("#units button[data-units=binary]");
     const precise = await page.textContent("#explorer .x-row .c-size");
     await page.click("#units button[data-units=windows]");
@@ -392,6 +394,10 @@ const check = (ok, what) => {
     check(await page.evaluate(() => window.__dc.settings.view === "home" && document.documentElement.classList.contains("look-calm")), "a first start opens on Home in the calm look");
     check((await page.locator("#home .hm-task").count()) === 4 && !(await page.locator("#side").isVisible()), "Home shows four tasks and no side panel");
     check((await page.locator("#home .hm-bar > span").count()) === 4, "Home shows how full the drive is");
+    check(!(await page.isVisible("#demo")) && !(await page.isVisible("#open")) && await page.isVisible("#moreMenu"), "rarely used buttons wait in the More menu (D146)");
+    await page.click("#moreMenu summary");
+    check(await page.isVisible("#demo") && await page.isVisible("#open") && await page.isVisible("#panelToggle"), "More opens: Clean-up list, Open a saved scan, Try the demo");
+    await page.click("#moreMenu summary");
     await shot("60-home");
     await page.click("#home .hm-row >> nth=0");
     await page.waitForTimeout(300);

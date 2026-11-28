@@ -147,7 +147,7 @@ export class ExplorerView {
     this.head.append(
       up,
       h("div", { class: "x-title" }, h("h2", {}, name), h("span", { class: "path" }, f === 0 || t.path(f).replace(/[\\/]+$/, "") === name ? "" : t.path(f))),
-      h("button", { class: "x-sortbtn", title: "See this folder sorted by type: videos, installers, archives, old files", onclick: () => this.on.sort(f) }, "Sort this folder"),
+      h("button", { class: "x-sortbtn", title: "What kinds of files are in this folder: videos, installers, archives, old files", onclick: () => this.on.sort(f) }, "What's in here?"),
       h("div", { class: "x-sum" }, h("b", {}, human(t.agg[f])), h("span", {}, `${count(t.files[f])} files, ${count(t.childCount[f])} items here`), bar),
     );
   }
@@ -170,7 +170,7 @@ export class ExplorerView {
       } }, label, on ? (this.desc ? " ↓" : " ↑") : "");
       return b;
     };
-    this.cols.append(col("name", "Name", "c-name"), col("size", "Size", "c-size"), h("span", { class: "c-share" }, "Of this folder"), col("items", "Files", "c-items"), col("changed", "Changed", "c-date"), h("span", { class: "c-risk" }, "Verdict"), h("span", { class: "c-owner" }, "Belongs to"));
+    this.cols.append(col("name", "Name", "c-name"), col("size", "Size", "c-size"), h("span", { class: "c-share" }, "Of this folder"), col("items", "Files", "c-items"), col("changed", "Changed", "c-date"), h("span", { class: "c-risk" }, "Can it go?"), h("span", { class: "c-owner" }, "Belongs to"));
   }
 
   private drawRows(): void {

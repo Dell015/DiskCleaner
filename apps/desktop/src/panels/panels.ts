@@ -91,16 +91,16 @@ export function renderFindings(el: HTMLElement, tree: Tree, p: Palette, filter: 
   };
   const sum = (l: { m: Mark }[]): number => l.reduce((a, x) => a + x.m.bytes, 0);
   const tabs = h("div", { class: "subtabs", attrs: { role: "tablist" } });
-  for (const [f, label] of [["offered", "Offered"], ["shown", "Shown only"], ["refused", "Refused"]] as [FindingFilter, string][]) {
+  for (const [f, label] of [["offered", "Can go"], ["shown", "Look only"], ["refused", "Kept"]] as [FindingFilter, string][]) {
     const l = groups[f];
     tabs.append(h("button", { class: filter === f ? "on" : "", onclick: () => setFilter(f), attrs: { role: "tab", "aria-selected": String(filter === f) } },
       h("span", { class: "t" }, label), h("span", { class: "n" }, f === "refused" ? `${count(l.length)} folders` : `${human(sum(l))} in ${count(l.length)}`)));
   }
   el.append(tabs);
   el.append(h("p", { class: "quiet" },
-    filter === "offered" ? "Suggestions with evidence. Look at each one before removing anything; this view never deletes." :
-      filter === "shown" ? "Found, but not offered: the evidence is weak, or it may hold your data or installed games." :
-        "Matched, but refused because of what is inside or where it really is."));
+    filter === "offered" ? "Things apps make again by themselves, with the reasons. Nothing is removed until you tick it and confirm, and you can put it back." :
+      filter === "shown" ? "Found, but not offered: the reasons are weak, or it may hold your files or installed games." :
+        "Looked like clutter, but kept: something inside or where it really is makes it unsafe."));
   const list = groups[filter].slice().sort((a, b) => b.m.bytes - a.m.bytes || a.idx - b.idx);
   if (list.length === 0) {
     el.append(h("p", { class: "quiet" }, "Nothing here."));
@@ -251,10 +251,10 @@ export function renderDetails(el: HTMLElement, tree: Tree, p: Palette, mode: Col
       here ? null : h("div", { class: "quiet" }, "Because it is inside ", h("button", { class: "linkish", onclick: () => act.reveal(m.node) }, tree.path(m.node))),
       evidenceList(m),
       m.detail ? h("p", { class: "quiet" }, m.detail) : null,
-      h("p", { class: "v-note" }, m.offered ? "Offered as a suggestion. Look before you remove anything." : m.source === "refused" ? "Refused, never offered." : "Shown only, never offered."),
+      h("p", { class: "v-note" }, m.offered ? "It can go. Look at it before you remove it." : m.source === "refused" ? "Kept: never offered for removing." : "Look only: never offered for removing."),
     ));
   } else if (i !== rootNode && i !== 0) {
-    el.append(h("section", { class: "verdict v-none" }, h("div", { class: "v-top" }, h("b", {}, "No verdict")), h("p", { class: "quiet" }, "No rule or leftover check says anything about this. Unknown means hands off.")));
+    el.append(h("section", { class: "verdict v-none" }, h("div", { class: "v-top" }, h("b", {}, "Not checked")), h("p", { class: "quiet" }, "No rule or leftover check says anything about this. Unknown means hands off.")));
   }
 
 
